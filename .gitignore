@@ -1,0 +1,12 @@
+*.pyc
+*.png
+*.dill
+*.txt
+*.vtk
+*.json
+*.zip
+*.pdf
+test.py
+*.jpg
+*.gif
+*.dat
