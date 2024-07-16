@@ -20,6 +20,7 @@ sometimes edges cross, like 1-2 in a given network), comment it
 
 from __future__ import annotations
 from typing import TYPE_CHECKING
+from collections import defaultdict
 from scipy.stats import truncnorm
 import networkx as nx
 import numpy as np
@@ -73,7 +74,6 @@ class Graph(nx.graph.Graph):
             flow - flow in edges
         """
         merged_number = inc.plot.sum(axis = 0)
-        np.savetxt('merged_number.txt', merged_number)
         diams = inc.plot @ edges.diams / merged_number
         flow = inc.plot @ edges.flow / merged_number
         nx.set_edge_attributes(self, dict(zip(edges.edge_list, diams)), \
@@ -133,10 +133,8 @@ def set_geometry(sid: SimInputData, graph: Graph) -> None:
     if sid.geo == 'rect':
         graph.in_nodes = np.arange(0, sid.n, 1)
         graph.out_nodes = np.arange(sid.n * (sid.n - 1), sid.nsq, 1)
-        graph.in_vec = np.concatenate((np.ones(sid.n), \
-            np.zeros(sid.n * (sid.n - 1))))
-        graph.out_vec = np.concatenate((np.zeros(sid.n * (sid.n - 1)), \
-            np.ones(sid.n)))
+        graph.in_vec = np.concatenate((np.ones(sid.n), np.zeros(sid.n * (sid.n - 1))))
+        graph.out_vec = np.concatenate((np.zeros(sid.n * (sid.n - 1)), np.ones(sid.n)))
     # own geometry - inlet and outlet nodes are found based on the positions
     # given in config
     elif sid.geo == 'own':
@@ -242,21 +240,21 @@ def build_delaunay_net(sid: SimInputData, inc: Incidence) \
     graph : Graph class object
         network and all its properties
     """
-    points_left = np.linspace([0, 0], [0, sid.n - 1], sid.n) + \
-        np.array([0, 0.5])
-    points_right = np.linspace([0, 0], [0, sid.n - 1], sid.n) + \
-        np.array([sid.n, 0.5])
-    points_top = np.random.uniform(0.5, sid.n - 0.5, (sid.n, 2)) * \
-        np.array([1, 0]) + np.random.uniform(0, 1, (sid.n, 2)) * \
-        np.array([0, 1])
-    points_bottom = np.random.uniform(0.5, sid.n - 0.5, (sid.n, 2)) * \
-        np.array([1, 0]) + np.array([0, sid.n]) - \
-        np.random.uniform(0, 1, (sid.n, 2)) * np.array([0, 1])
+    # points_left = np.random.uniform(0, sid.n, (sid.n, 2)) * np.array([1, 0])
+    # points_right = np.random.uniform(0, sid.n, (sid.n, 2)) * np.array([1, 0]) + np.array([0, sid.n])
+    # points_middle = np.random.uniform(0.5, sid.n - 0.5, (sid.n * (sid.n - 2), 2)) * np.array([1, 0]) + np.random.uniform(0, sid.n, (sid.n * (sid.n - 2), 2)) * np.array([0, 1])
+    # points = np.concatenate((points_middle, points_left, points_right))
+    # points = np.array(sorted(points, key = lambda elem: (elem[0], elem[1])))
+
+    points_left = np.linspace([0, 0], [0, sid.n - 1], sid.n) + np.array([0, 0.5])
+    points_right = np.linspace([0, 0], [0, sid.n - 1], sid.n) + np.array([sid.n, 0.5])
+    points_inlet = np.random.uniform(0.5, sid.n // 2 - 0.5, \
+        (sid.n * (sid.n - 2), 2)) * np.array([1, 0]) + np.random.uniform(-5, \
+        sid.n + 5, (sid.n * (sid.n - 2), 2)) * np.array([0, 1]) + np.array([-sid.n // 2, 0])
     points_middle = np.random.uniform(0.5, sid.n - 0.5, \
-        (sid.n * (sid.n - 4), 2)) * np.array([1, 0]) + np.random.uniform(1, \
-        sid.n - 1, (sid.n * (sid.n - 4), 2)) * np.array([0, 1])
-    points = np.concatenate((points_middle, points_left, points_right, \
-        points_top, points_bottom))
+        (sid.n * (sid.n - 2), 2)) * np.array([1, 0]) + np.random.uniform(-5, \
+        sid.n + 5, (sid.n * (sid.n - 2), 2)) * np.array([0, 1])
+    points = np.concatenate((points_middle, points_left, points_right, points_top, points_bottom))
     points = np.array(sorted(points, key = lambda elem: (elem[0], elem[1])))
 
     points_above_pbc = points.copy() + np.array([0, sid.n])
@@ -265,7 +263,7 @@ def build_delaunay_net(sid: SimInputData, inc: Incidence) \
     points_left_pbc = points.copy() + np.array([-sid.n, 0])
 
     if sid.periodic == 'none':
-        pos = points
+        pos = np.concatenate([points, points_above_pbc, points_below_pbc])
     elif sid.periodic == 'top': 
         pos = np.concatenate([points, points_above_pbc, points_below_pbc])
     elif sid.periodic == 'side':
@@ -282,6 +280,7 @@ def build_delaunay_net(sid: SimInputData, inc: Incidence) \
     boundary_edges = []
     boundary_nodes = []
     lens = []
+    angles = []
     edge_index = 0
 
     merge_matrix_row = []
@@ -298,6 +297,7 @@ def build_delaunay_net(sid: SimInputData, inc: Incidence) \
         m_n3 = 0
         bound = False
         if n3 < sid.nsq:
+            within_bounds = True
             pass
         elif n2 < sid.nsq:
             m_n3 = (n3 // sid.nsq) * sid.nsq
@@ -308,6 +308,8 @@ def build_delaunay_net(sid: SimInputData, inc: Incidence) \
         if n1_new == n2_new or n2_new == n3_new or n1_new == n3_new:
             continue
         if bound:
+            if sid.periodic == 'none':
+                continue
             boundary_nodes.extend((n1_new, n2_new, n3_new))
         lens_tr = (np.linalg.norm(np.array(pos[n1]) - np.array(pos[n2])), \
             np.linalg.norm(np.array(pos[n1]) - np.array(pos[n3])), \
@@ -321,6 +323,8 @@ def build_delaunay_net(sid: SimInputData, inc: Incidence) \
                 edge_list[(node1, node2)] = edge_index
                 cur_edge_index = edge_index
                 lens.append(lens_tr[i])
+                # angle = np.abs(np.array(pos[node2]) - np.array(pos[node1]))
+                # angles.append(angle[1] - angle[0] > 0)
                 edge_index += 1
                 if bound and i > 0:
                     boundary_edges.append(1)
@@ -330,6 +334,7 @@ def build_delaunay_net(sid: SimInputData, inc: Incidence) \
                 cur_edge_index = edge_list[(node1, node2)]
                 if bound and i > 0:
                     boundary_edges[cur_edge_index] = 1
+                # shouldn't contain sth for boundary edges?
             edge_index_list.append(cur_edge_index)
 
         merge_matrix_row.extend(2 * edge_index_list)
@@ -337,6 +342,10 @@ def build_delaunay_net(sid: SimInputData, inc: Incidence) \
         merge_matrix_col.extend(np.roll(edge_index_list, 2))
         for index in list(np.roll(edge_index_list, 2)) \
             + list(np.roll(edge_index_list, 1)):
+            # if angles[index]:
+            #     merge_matrix_data.append(lens[index] / 2)
+            # else:
+            #     merge_matrix_data.append(0)
             merge_matrix_data.append(lens[index] / 2)
 
 
@@ -379,7 +388,7 @@ def build_delaunay_net(sid: SimInputData, inc: Incidence) \
     diams /= np.average(diams)
     merge_matrix_data = np.array(merge_matrix_data) / np.average(lens)
     inc.merge = spr.csr_matrix((merge_matrix_data, (merge_matrix_row, \
-        merge_matrix_col)), shape=(sid.ne, sid.ne)) * sid.merge_length
+        merge_matrix_col)), shape=(sid.ne, sid.ne)) / sid.chi0
     lens = lens / np.average(lens)
     flow = np.zeros(len(edge_list))
 
@@ -391,8 +400,7 @@ def build_delaunay_net(sid: SimInputData, inc: Incidence) \
     graph.boundary_nodes = boundary_nodes
     # WARNING
     #
-    # Networkx changes order of edges, make sure you use edge_list 
-    # every time you plot!!!
+    # Networkx changes order of edges, make sure you use edge_list every time you plot!!!
     # 
     #
     nx.set_edge_attributes(graph, dict(zip(edge_list, diams)), 'd')

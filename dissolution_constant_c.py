@@ -45,6 +45,12 @@ def create_vector(sid: SimInputData, graph: Graph) -> spr.csc_matrix:
     scipy sparse vector
         result vector for B concentration calculation
     """
+    # data, row, col = [], [], []
+    # for node in graph.in_nodes:
+    #     data.append(sid.cb_in)
+    #     row.append(node)
+    #     col.append(0)
+    # return spr.csc_matrix((data, (row, col)), shape=(sid.nsq, 1))
     return sid.cb_in * graph.in_vec
 
 def solve_dissolution(sid: SimInputData, inc: Incidence, graph: Graph, \
@@ -87,15 +93,39 @@ def solve_dissolution(sid: SimInputData, inc: Incidence, graph: Graph, \
     # find incidence for cb (only upstream flow matters)
     cb_inc = 1 * (inc.incidence.T @ (spr.diags(edges.flow) \
         @ inc.incidence > 0) != 0)
+    # cb_inc = np.abs(inc.incidence.T @ (spr.diags(edges.flow) \
+    #    @ inc.incidence > 0))
+    alpha = np.clip(1 / np.abs(sid.Da / (1 + sid.G * edges.diams) \
+        * edges.diams * edges.lens / edges.flow), 0, 1)
     # find vector with non-diagonal coefficients
-    qc = edges.flow * np.exp(-np.abs(sid.Da / (1 + sid.G * edges.diams) \
+    qc = edges.flow * (1 - np.abs(alpha * sid.Da / (1 + sid.G * edges.diams) \
         * edges.diams * edges.lens / edges.flow))
     qc = np.array(np.ma.fix_invalid(qc, fill_value = 0))
     qc_matrix = np.abs(inc.incidence.T @ spr.diags(qc) @ inc.incidence)
     cb_matrix = cb_inc.multiply(qc_matrix)
     # find diagonal coefficients (inlet flow for each node)
+    #diag = np.array(-np.abs(inc.incidence.T @ spr.diags(edges.flow) @ inc.incidence).sum(axis = 1).reshape((1, sid.nsq)) / 2)[0] #
+    
+    #diag = graph.in_vec + 1 * (diag == 0) + diag * (1 + graph.out_vec - graph.in_vec)
+    
     diag = -np.abs(inc.incidence.T) @ np.abs(edges.flow) / 2
-    # set diagonal for input nodes to 1
+    # # set diagonal for input nodes to 1
+    # for node in graph.in_nodes:
+    #     diag[node] = 1
+    # # multiply diagonal for output nodes (they have no outlet, so inlet flow
+    # # is equal to whole flow); also fix for nodes which are connected only to
+    # # other out_nodes - without it we get a singular matrix (whole row of
+    # # zeros)
+    # for node in graph.out_nodes:
+    #     if diag[node] != 0:
+    #         diag[node] *= 2
+    #     else:
+    #         diag[node] = 1
+    # # fix for nodes with no connections
+    # for i, node in enumerate(diag):
+    #     if node == 0:
+    #         diag[i] = 1
+
     diag = diag * (1 - graph.in_vec + graph.out_vec) + graph.in_vec
     diag += 1 * (diag == 0)
     # replace diagonal

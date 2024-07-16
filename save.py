@@ -30,7 +30,7 @@ def save(name: str, sid: SimInputData, graph: Graph, inc: Incidence, \
         network and all its properties
     """
     data = [sid, graph, inc, edges]
-    with open(sid.dirname + name, 'wb') as file:
+    with open(sid.dirname+name, 'wb') as file:
         dill.dump(data, file)
 
 def load(name: str) -> tuple[SimInputData, Graph, Incidence, Edges]:

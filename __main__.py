@@ -13,58 +13,71 @@ will be created. Plots of the network and other data will be saved there.
 import dissolution as Di
 import draw_net as Dr
 import growth as Gr
-import pressure_pump as Pr
+import merging as Me
+import precipitation as Pi
+import pressure as Pr
+import save as Sv
 
 from build import build
-from save import save
 from utils import initialize_iterators, update_iterators
 from utils_vtk import save_VTK
-
-import numpy as np
-import scipy.sparse as spr
 
 # initialize main classes
 sid, inc, graph, edges, data = build()
 
-iter_max, t_max, i, t, draw_i = initialize_iterators(sid)
+iters, tmax, i, t, breakthrough = initialize_iterators(sid)
+iterator_dissolved = 0
 
-# initialize vectors
-pressure_b = Pr.create_vector(sid, graph)
-cb_b, cc_b = Di.create_vector(sid, graph)
+
+# initial merging
+if sid.include_merging:
+    for initial_i in range(sid.initial_merging):
+        Me.solve_merging(sid, inc, graph, edges, 'initial')
 
 # main loop
-# runs until we reach iteration limit or time limit
-while t < t_max and i < iter_max:
-    sid.q_rate = 1 + sid.q_amp * np.sin(2 * np.pi * t / sid.q_period)
-    print(f'Iter {i + 1}/{iter_max} Time {t:.2f}/{t_max:.2f}')
+# runs until we reach iteration limit or time limit or network is dissolved
+while t < tmax and i < iters and data.dissolved_v < sid.dissolved_v_max:
+    print((f'Iter {i + 1}/{iters} Time {t:.2f}/{tmax:.2f} \
+        Dissolved {data.dissolved_v:.2f}/{sid.dissolved_v_max:.2f}'))
+    # initialize vectors
+    pressure_b = Pr.create_vector(sid, graph)
+    cb_b = Di.create_vector(sid, graph)
     # find pressure and update flow in edges
     print ('Solving pressure')
     pressure = Pr.solve_flow(sid, inc, graph, edges, pressure_b)
-    # find B  and C concentration
+    # find B concentration
     print ('Solving concentration')
+    cb = Di.solve_dissolution(sid, inc, graph, edges, cb_b)
+    # find C concentration
+    cc = Pi.solve_precipitation(sid, inc, graph, edges, cb)
+    # calculate ffp, draw figures
     if t == 0:
-        cb, cc = Di.solve_dissolution_nr(sid, inc, graph, edges, cb_b, cc_b)
-    elif sid.solve_type == "full":
-        cb, cc = Di.solve_dissolution_nr(sid, inc, graph, edges, cb_b, cc_b)
-    elif sid.solve_type == "simple":
-        cb, cc = Di.solve_dissolution(sid, inc, graph, edges, cb_b, cc_b, cb, cc)
-    #print(np.average(cb), np.average(cc))
-    if sid.tracking_mode == 'time':
-        if t // sid.plot_every > draw_i:
+        data.check_data(edges)
+        data.check_init_slice_channelization(graph, inc, edges)
+        data.check_slice_channelization(graph, inc, edges, t)
+        Dr.draw_flow(sid, graph, edges, f'q_{data.dissolved_v:.2f}.jpg', 'q')
+        save_VTK(sid, graph, edges, pressure, cb, \
+            f'network_{data.dissolved_v:.2f}.vtk')
+    else:
+        if data.dissolved_v // sid.track_every > iterator_dissolved:
             print('Drawing')
-            draw_i += 1
-            cb_in = np.abs((spr.diags(edges.flow) @ inc.incidence > 0)) @ cb
-            cc_in = np.abs((spr.diags(edges.flow) @ inc.incidence > 0)) @ cc
-            Dr.draw(sid, graph, edges, f'q{t:05}.jpg', 'q')
-            Dr.draw_c(sid, graph, edges, f'd{t:05}.jpg', 'd', cb_in, cc_in)
-            #save_VTK(sid, graph, edges, pressure, cb, f'network_{t:.2f}.vtk')
-            data.check_data(sid, edges, inc, cb, cc)
+            iterator_dissolved += 1
+            if iterator_dissolved in sid.track_list:
+                Dr.draw_flow(sid, graph, edges, \
+                    f'q_{data.dissolved_v:.2f}.jpg', 'q')
+                save_VTK(sid, graph, edges, pressure, cb, \
+                    f'network_{data.dissolved_v:.2f}.vtk')
+                data.check_data(edges)
+                data.check_slice_channelization(graph, inc, edges, \
+                    data.dissolved_v)
     # grow/shrink diameters and update them in edges, update volumes with
     # dissolved/precipitated values, check if network dissolved, find new
     # timestep
     print ('Updating diameters')
     breakthrough, dt_next = Gr.update_diameters(sid, inc, edges, cb, cc)
-
+    # merge edges
+    if sid.include_merging:
+        Me.solve_merging(sid, inc, graph, edges)
     # update physical parameters in data
     data.collect_data(sid, inc, edges, pressure, cb, cc)
     i, t = update_iterators(sid, i, t, dt_next)
@@ -73,8 +86,13 @@ while t < t_max and i < iter_max:
 # save data from the last iteration of simulation, save the whole simulation
 # to be able to continue it later
 if i != 1 and sid.load != 1:
-    data.check_data(sid, edges, inc, cb, cc)
-    Dr.draw(sid, graph, edges, f'q{t:05}.jpg', 'q')
-    Dr.draw_c(sid, graph, edges, f'd{t:05}.jpg', 'd', cb_in, cc_in)
-    #save_VTK(sid, graph, edges, pressure, cb, f'network_{t:.2f}.vtk')
-    save("save.dill", sid, graph, inc, edges)
+    data.check_data(edges)
+    data.check_slice_channelization(graph, inc, edges, data.dissolved_v)
+    Dr.draw_flow_profile(sid, graph, edges, data, \
+        f'focusing_q_{data.dissolved_v:.2f}.jpg', 'q')
+    Dr.draw_diams_profile(sid, graph, edges, data, \
+        f'focusing_d_{data.dissolved_v:.2f}.jpg', 'd')
+    save_VTK(sid, graph, edges, pressure, cb, \
+        f'network_{data.dissolved_v:.2f}.vtk')
+    Sv.save('/save.dill', sid, graph, inc, edges)
+    data.save_data()

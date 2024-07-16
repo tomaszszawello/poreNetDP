@@ -80,9 +80,8 @@ def update_diameters(sid: SimInputData, inc: Incidence, edges: Edges, \
     diams_new = edges.diams + change * dt_next
     diams_new = diams_new * (diams_new >= sid.dmin) \
         + sid.dmin * (diams_new < sid.dmin)
-    # if np.max(edges.outlet * edges.diams) > sid.d_break:
-    #     breakthrough = True
-    #     print ('Network dissolved.')
+    if np.max(edges.outlet * edges.diams) > sid.d_break:
+        breakthrough = True
     # if sid.include_adt:
     #     diams_rate = np.abs((diams_new - edges.diams) / edges.diams)
     #     diams_rate = np.array(np.ma.fix_invalid(diams_rate, fill_value = 0))
@@ -128,9 +127,9 @@ def solve_d(sid: SimInputData, inc: Incidence, edges: Edges, cb: np.ndarray) \
     # create list of concentrations which should be used for growth of each
     # edge (upstream one)
     cb_in = np.abs((spr.diags(edges.flow) @ inc.incidence > 0)) @ cb
-    change = cb_in * np.abs(edges.flow) / (sid.Da * edges.lens \
-        * edges.diams) * (1 - np.exp(-sid.Da / (1 + sid.G * edges.diams) \
-        * edges.diams * edges.lens / np.abs(edges.flow)))
+    alpha = np.clip(1 / np.abs(sid.Da / (1 + sid.G * edges.diams) \
+        * edges.diams * edges.lens / edges.flow), 0, 1)
+    change = cb_in * np.abs(alpha * sid.Da / (1 + sid.G * edges.diams) * edges.diams * edges.lens / edges.flow)
     change = np.array(np.ma.fix_invalid(change, fill_value = 0))
     return change
 

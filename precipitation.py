@@ -76,8 +76,6 @@ def create_vector(sid: SimInputData, inc: Incidence, graph: Graph, \
     cb_matrix.setdiag(np.zeros(sid.nsq)) # set diagonal to zero
     cc_b = -cb_matrix @ cb
     cc_b = cc_b * (1 - graph.in_vec) + graph.in_vec * sid.cc_in
-    # for node in graph.in_nodes:
-    #     cc_b[node] = sid.cc_in # set result for input nodes to cc_in
     return cc_b
 
 def solve_precipitation(sid: SimInputData, inc: Incidence, graph: Graph, \

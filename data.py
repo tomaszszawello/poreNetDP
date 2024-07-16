@@ -107,7 +107,7 @@ class Data():
             self.cc_out = list(data[0]), list(data[1]), list(data[2]), list(data[3]), list(data[4])
         self.slices = list(np.loadtxt(self.dirname + '/slices.txt'))
 
-    def check_data(self, sid:SimInputData, edges: Edges, inc: Incidence, cb: np.ndarray, cc) -> None:
+    def check_data(self, edges: Edges) -> None:
         """ Check the key physical parameters of the simulation.
 
         This function calculates and checks if basic physical properties of the
@@ -124,18 +124,12 @@ class Data():
         Q_in = np.sum(edges.inlet * np.abs(edges.flow))
         Q_out = np.sum(edges.outlet * np.abs(edges.flow))
         print('Q_in =', Q_in, 'Q_out =', Q_out)
-        if np.abs(Q_in - Q_out) > 10:
+        if np.abs(Q_in - Q_out) > 1:
             raise ValueError('Flow not matching!')
         # delta = np.abs((np.abs(inc.incidence.T < 0) @ (np.abs(edges.flow) \
         #     * edges.inlet) - np.abs(inc.incidence.T > 0) @ (np.abs(edges.flow) \
         #     * edges.outlet)) @ cb * sid.dt)
-        # self.delta_b += delta
-        # delta = np.abs((np.abs(inc.incidence.T < 0) @ (np.abs(edges.flow) \
-        #     * edges.inlet) - np.abs(inc.incidence.T > 0) @ (np.abs(edges.flow) \
-        #     * edges.outlet)) @ cc * sid.dt)
-        # self.delta_c += delta
-        vol = np.sum(edges.lens * (edges.diams ** 2 - edges.diams_initial ** 2))
-        #print ('Difference =', (self.delta_b - self.delta_c) / sid.Gamma - self.delta_b + sid.Da * vol / 2)
+
 
     def collect_data(self, sid: SimInputData, inc: Incidence, edges: Edges, \
         p: np.ndarray, cb: np.ndarray, cc: np.ndarray) -> None:
@@ -217,28 +211,6 @@ class Data():
             plt.xlabel('simulation time')
         plt.savefig(self.dirname + '/params.png')
         plt.close()
-        # plt.figure(figsize = (10, 10))
-        # plt.title('Participation ratio')
-        # plt.plot(t, data[:, 2])
-        # plt.xlabel('simulation time')
-        # plt.savefig(self.dirname + '/participation_ratio.png')
-        # plt.close()
-
-    def plot_perm(self):
-        import matplotlib
-        font = {'family' : 'Times New Roman',
-                'weight' : 'normal',
-                'size'   : 20}
-
-        matplotlib.rc('font', **font)
-        #plt.figure(figsize = (10, 7))
-        plt.yscale('log')
-        plt.plot(self.t, self.pressure[0] / self.pressure, 'r')
-        #plt.xlim(0, 3000)
-        plt.xlabel('simulation time')
-        plt.ylabel(f'$\kappa / \kappa_0$')
-        plt.margins(tight = True)
-        plt.savefig(self.dirname + '/perm.png', bbox_inches="tight")
 
     def check_channelization(self, graph: Graph, inc: Incidence, edges: Edges, \
         slice_x: float) -> tuple[int, float]:
@@ -274,7 +246,6 @@ class Data():
             percentage of edges taking half of the flow in the slice
         """
         pos_x = np.array(list(nx.get_node_attributes(graph, 'pos').values()))[:,0]
-        #np.savetxt('x.txt', pos_x)
         # find edges crossing the given slice and their orientation - if edge
         # crosses the slice from left to right, it is marked with 1, if from
         # right to left - -1, if it doesn't cross - 0
@@ -344,7 +315,6 @@ class Data():
         self.slices.append(channels_tab)
         self.slices_d.append(diams_tab)
         self.slices_s.append(surface_tab)
-        #self.slice_times.append(f'{time:.2f}')
         self.slice_times.append("{0}".format(str(round(time, 1) if time % 1 else int(time))))
 
     def plot_slice_channelization(self, graph: Graph) -> None:

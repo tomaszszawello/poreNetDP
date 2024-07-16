@@ -70,8 +70,8 @@ def initialize_iterators(sid: SimInputData) -> tuple[int, float, int, float, \
     tmax = sid.old_t + sid.tmax
     i = sid.old_iters
     t = sid.old_t
-    draw = sid.old_t // sid.plot_every - 1
-    return iters, tmax, i, t, draw
+    breakthrough = False
+    return iters, tmax, i, t, breakthrough
 
 def update_iterators(sid: SimInputData, i: int, t: float, dt_next: float) -> \
     tuple[int, float]:

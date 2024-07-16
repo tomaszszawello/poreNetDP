@@ -6,8 +6,6 @@ from VARIOUS section) are set by the user before starting the simulation.
 Most notable parameters are: n - network size, iters/tmax - simulation length,
 Da_eff, G, K, Gamma - dissolution/precipitation parameters, include_cc - turn
 on precipitation, load - build a new network or load a previous one.
-
-TO DO: fix own geometry
 """
 
 import numpy as np
@@ -19,78 +17,73 @@ class SimInputData:
     # GENERAL
     n: int = 50
     "network size"
-    iters: int = 1000000
+    iters: int = 10000000
     "maximum number of iterations"
-    tmax: float = 500.
+    tmax: float = 100000.
     "maximum time"
     dissolved_v_max: float = 10
-    "maximum dissolved volume (in terms of initial pore volume)"
-    plot_every: int = 10
+    "maximum dissolved pore volume"
+    plot_every: int = 1
     "frequency of plotting the results"
-    plotting_mode: str = 'time' # 'volume', 'iters'
-    "time measure used for plotting"
-
+    track_every: int = 1
+    "frequency of checking channelization"
     track_list = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
-    "list of time measures in which tracking is performed"
+    "times of checking channelization"
 
     # DISSOLUTION & PRECIPITATION
-    Da_eff: float = 0.1
+    Da_eff: float = 0.5
     "effective Damkohler number"
-    G: float = 5.
+    G: float = 5
     "diffusion to reaction ratio"
     Da: float = Da_eff * (1 + G)
     "Damkohler number"
-    chi0: float = 0.01
+    K: float = 0.5
+    "precipitation to dissolution reaction rate"
+    Gamma: float = 2.
+    "precipitation to dissolution acid capacity number"
+    merge_length: float = 100.
     "diameter scale to length scale ratio for merging"
 
     # INCLUDE
     include_adt: bool = True
     "include adaptive timestep"
-    include_merging: bool = False
+    include_cc: bool = False
+    "include precipitation"
+    include_merging: bool = True
     "include pore merging"
-    tracking_mode = 'time'
 
     # INITIAL CONDITIONS
     qin: float = 1.
     "characteristic flow for inlet edge"
     cb_in: float = 1.
     "inlet B concentration"
-    cc_in: float = 2.
+    cc_in: float = 0.
     "inlet C concentration"
-    initial_merging: int = 5
-    "number of initial merging iterations"
-    c_eq = 2.
-    c_th = 1e-3
-    solve_type = "simple" # "full"
-
-    q_rate = 1
-    q_amp = 0.1
-    q_period = 50
 
     # TIME
     dt: float = 0.01
     "initial timestep (if no adaptive timestep, timestep for whole simulation)"
-    growth_rate: float = 0.05
+    growth_rate: float = 0.01
     ("maximum percentage growth of an edges (used for finding adaptive \
      timestep)")
     dt_max: float = 5.
     "maximum timestep (for adaptive)"
 
     # DIAMETERS
-    noise: str = 'file_lognormal_k' # 'gaussian', 'lognormal', 'klognormal'
-    # 'file_lognormal_d', 'file_lognormal_k'
-    "type of noise in diameters distribution"
-    noise_filename: str = 'n100lam10r01.dat'
+    noise: str = 'file_lognormal_k'
+    ("type of noise in diameters distribution: 'gaussian', 'lognormal', \
+    'klognormal', 'file_lognormal_d', 'file_lognormal_k'")
+    noise_filename: str = 'n100lam10r04.dat'
     "name of file with initial diameters if noise == file_"
     d0: float = 1.
     "initial dimensionless mean diameter"
     sigma_d0: float = 0.1
     "initial diameter standard deviation"
-    dmin: float = 0.1
+    dmin: float = 0
     "minimum diameter"
     dmax: float = 1000.
     "maximum diameter"
-    d_breakthrough: float = 4.
+    d_break: float = 4.
     "minimal diameter of outlet edge for network to be dissolved"
 
     # DRAWING
@@ -98,25 +91,27 @@ class SimInputData:
     "figure size"
     qdrawconst: float = 0.3
     "constant for improving flow drawing"
-    ddrawconst: float = 2.
+    ddrawconst: float = 0.1
     "constant for improving diameter drawing"
-    
+    draw_th_q: float = 3
+    "threshold for drawing of flow"
+    draw_th_d: float = 3
+    "threshold for drawing of diameters"
+
     # INITIALIZATION
     load: int = 0
     ("type of loading: 0 - build new network based on config and start new \
      simulation, 1 - load previous network from load_name and continue \
      simulation, 2 - load template network from load_name and start new \
      simulation")
-    load_name: str = 'singurindy/G5.00Daeff0.10/17'
+    load_name: str = 'rect100/G5.00Daeff0.05/0'
     "name of loaded network"
-    dirname: str = f'singurindy/G{G:.2f}Daeff{Da_eff:.2f}'
-    "directory of simulation"
 
     # GEOMETRY
     geo: str = "rect" # WARNING - own is deprecated
     ("type of geometry: 'rect' - rectangular, 'own' - custom inlet and outlet \
      nodes, set in in/out_nodes_own")
-    periodic: str = 'none'
+    periodic: str = 'top'
     ("periodic boundary condition: 'none' - no PBC, 'top' - up and down, \
      'side' - left and right, 'all' - PBC everywhere")
     in_nodes_own: np.ndarray = np.array([[20, 50]]) / 100 * n
@@ -125,9 +120,11 @@ class SimInputData:
         / 100 * n
     "custom outlet for 'own' geometry"
 
-    # VARIOUS (updated during simulation)
+    # VARIOUS
     ne: int = 0
-    "number of edges"
+    "number of edges (updated later)"
+    ntr: int = 0
+    "number of triangles (updated later)"
     nsq: int = n ** 2
     "number of nodes"
     old_iters: int = 0
@@ -135,4 +132,9 @@ class SimInputData:
     old_t: float = 0.
     "total time of simulation"
     Q_in = 1.
-    "total inlet flow"
+    "total inlet flow (updated later)"
+    dirname: str = geo + str(n) + '/' + f'G{G:.2f}Daeff{Da_eff:.2f}'
+    "directory of simulation"
+    initial_merging: int = 5
+    "number of initial merging iterations"
+    
