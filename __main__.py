@@ -55,18 +55,18 @@ while t < tmax and i < iters and data.dissolved_v < sid.dissolved_v_max:
         data.check_data(edges)
         data.check_init_slice_channelization(graph, inc, edges)
         data.check_slice_channelization(graph, inc, edges, t)
-        Dr.draw_flow(sid, graph, edges, f'q_{data.dissolved_v:.2f}.jpg', 'q')
-        save_VTK(sid, graph, edges, pressure, cb, \
-            f'network_{data.dissolved_v:.2f}.vtk')
+        # Dr.draw_flow(sid, graph, edges, f'q_{data.dissolved_v:.2f}.jpg', 'q')
+        # save_VTK(sid, graph, edges, pressure, cb, \
+        #     f'network_{data.dissolved_v:.2f}.vtk')
     else:
         if data.dissolved_v // sid.track_every > iterator_dissolved:
             print('Drawing')
             iterator_dissolved += 1
             if iterator_dissolved in sid.track_list:
-                Dr.draw_flow(sid, graph, edges, \
-                    f'q_{data.dissolved_v:.2f}.jpg', 'q')
-                save_VTK(sid, graph, edges, pressure, cb, \
-                    f'network_{data.dissolved_v:.2f}.vtk')
+                # Dr.draw_flow(sid, graph, edges, \
+                #     f'q_{data.dissolved_v:.2f}.jpg', 'q')
+                # save_VTK(sid, graph, edges, pressure, cb, \
+                #     f'network_{data.dissolved_v:.2f}.vtk')
                 data.check_data(edges)
                 data.check_slice_channelization(graph, inc, edges, \
                     data.dissolved_v)
@@ -88,11 +88,12 @@ while t < tmax and i < iters and data.dissolved_v < sid.dissolved_v_max:
 if i != 1 and sid.load != 1:
     data.check_data(edges)
     data.check_slice_channelization(graph, inc, edges, data.dissolved_v)
-    Dr.draw_flow_profile(sid, graph, edges, data, \
-        f'focusing_q_{data.dissolved_v:.2f}.jpg', 'q')
-    Dr.draw_diams_profile(sid, graph, edges, data, \
-        f'focusing_d_{data.dissolved_v:.2f}.jpg', 'd')
-    save_VTK(sid, graph, edges, pressure, cb, \
-        f'network_{data.dissolved_v:.2f}.vtk')
-    Sv.save('/save.dill', sid, graph, inc, edges)
+    # Dr.draw_flow_profile(sid, graph, edges, data, \
+    #     f'focusing_q_{data.dissolved_v:.2f}.jpg', 'q')
+    # Dr.draw_diams_profile(sid, graph, edges, data, \
+    #     f'focusing_d_{data.dissolved_v:.2f}.jpg', 'd')
+    # save_VTK(sid, graph, edges, pressure, cb, \
+    #     f'network_{data.dissolved_v:.2f}.vtk')
+    # Sv.save('/save.dill', sid, graph, inc, edges)
     data.save_data()
+    data.plot_profile(graph)

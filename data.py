@@ -15,6 +15,7 @@ TO DO: name data on plots, maybe collect permeability explicitly
 """
 
 from matplotlib import gridspec
+import matplotlib
 import matplotlib.pyplot as plt
 import networkx as nx
 import numpy as np
@@ -24,6 +25,11 @@ from config import SimInputData
 from network import Edges, Graph
 from incidence import Incidence
 
+font = {'family' : 'Times New Roman',
+        'weight' : 'normal',
+        'size'   : 50}
+
+matplotlib.rc('font', **font)
 
 class Data():
     """ Contains data collected during the simulation.
@@ -403,4 +409,51 @@ class Data():
         ax_p.plot(x, self.participation_ratio)
         ax_p2.legend()
         plt.savefig(self.dirname + '/participation_ratio.pdf')
+        plt.close()
+
+    def plot_profile(self, graph: Graph) -> None:
+        """ Plots slice data from text file.
+
+        This function loads the data from text file slices.txt and plots them
+        to files slices.png, slices_no_div.png, slices_norm.png.
+        """
+        pos_x = np.array(list(nx.get_node_attributes(graph, 'pos').values()))[:,0]
+        # slices = np.linspace(np.min(pos_x), np.max(pos_x), 120)[10:-10]
+        slices = np.linspace(np.min(pos_x), np.max(pos_x), 102)[1:-1]
+        edge_number  = np.array(self.slices[0])
+        colors = ['C0', 'C1', 'C2', 'C3']
+        plt.figure(figsize = (15, 10))
+        plt.plot([], [], ' ', label=' ')
+        plt.plot([], [], ' ', label=' ')
+        plt.plot([], [], ' ', label=' ')
+        plt.plot(slices, np.array((edge_number - 2 * np.array(self.slices[1])) \
+            / edge_number), linewidth = 5, color = 'black', label = '0.0')
+        for i, channeling in enumerate(self.slices[2:]):
+            plt.plot(slices, (edge_number - 2 * np.array(channeling)) \
+                / edge_number, label = self.slice_times[i+1], color = colors[i], linewidth = 5)
+        plt.ylim(0, 1.05)
+        plt.xlabel('x', fontsize = 60, style = 'italic')
+        # ax2.xaxis.label.set_color('white')
+        # ax2.tick_params(axis = 'x', colors='white')
+        #plt.xticks([],[])
+        plt.subplots_adjust(wspace=0, hspace=0)
+        plt.margins(tight = True)
+        plt.ylabel('flow focusing index', fontsize = 50)
+        #plt.yticks([],[])
+        plt.yticks([0, 0.5, 1],['0', '0.5', '1'])
+        handles, labels = plt.gca().get_legend_handles_labels()
+        order = [0,4,1,5,2,6,3,7]
+
+        legend = plt.legend([handles[idx] for idx in order],[labels[idx] for idx in order], loc="lower center", mode = "expand", ncol = 4, prop={'size': 40}, handlelength = 1, frameon=False, borderpad = 0, handletextpad = 0.4)
+        for legobj in legend.legendHandles:
+            legobj.set_linewidth(10.0)
+        #spine_color = 'blue'
+        # for spine in ax1.spines.values():
+        #     spine.set_linewidth(5)
+        #     spine.set_edgecolor(spine_color)
+        # for spine in ax2.spines.values():
+        #     spine.set_linewidth(5)
+        #     spine.set_edgecolor(spine_color)
+        # save file in the directory
+        plt.savefig(self.dirname + "/profile.png", bbox_inches="tight")
         plt.close()

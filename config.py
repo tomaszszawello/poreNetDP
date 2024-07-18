@@ -15,7 +15,7 @@ class SimInputData:
     ''' Configuration class for the whole simulation.
     '''
     # GENERAL
-    n: int = 50
+    n: int = 100
     "network size"
     iters: int = 10000000
     "maximum number of iterations"
@@ -27,11 +27,11 @@ class SimInputData:
     "frequency of plotting the results"
     track_every: int = 1
     "frequency of checking channelization"
-    track_list = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
+    track_list = [1, 2, 5, 10]
     "times of checking channelization"
 
     # DISSOLUTION & PRECIPITATION
-    Da_eff: float = 0.5
+    Da_eff: float = 0.005
     "effective Damkohler number"
     G: float = 5
     "diffusion to reaction ratio"
@@ -49,7 +49,7 @@ class SimInputData:
     "include adaptive timestep"
     include_cc: bool = False
     "include precipitation"
-    include_merging: bool = True
+    include_merging: bool = False
     "include pore merging"
 
     # INITIAL CONDITIONS
@@ -73,7 +73,7 @@ class SimInputData:
     noise: str = 'file_lognormal_k'
     ("type of noise in diameters distribution: 'gaussian', 'lognormal', \
     'klognormal', 'file_lognormal_d', 'file_lognormal_k'")
-    noise_filename: str = 'n100lam10r04.dat'
+    noise_filename: str = 'n100lam10r1.dat'
     "name of file with initial diameters if noise == file_"
     d0: float = 1.
     "initial dimensionless mean diameter"
@@ -99,12 +99,12 @@ class SimInputData:
     "threshold for drawing of diameters"
 
     # INITIALIZATION
-    load: int = 0
+    load: int = 2
     ("type of loading: 0 - build new network based on config and start new \
      simulation, 1 - load previous network from load_name and continue \
      simulation, 2 - load template network from load_name and start new \
      simulation")
-    load_name: str = 'rect100/G5.00Daeff0.05/0'
+    load_name: str = 'rect100/G5.00Daeff0.05/1'
     "name of loaded network"
 
     # GEOMETRY
