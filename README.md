@@ -1,6 +1,6 @@
 Package for simulating dissolution and precipitation in porous media. If used for scientific purposes, please cite as
 
-Szawello T., Hyman, J. D., Kang, P. K., Szymczak P. (2024). Quantifying Dissolution Dynamics in Porous Media Using a Spatial Flow Focusing Profile [Unpublished manuscript].
+Szawełło, T., Hyman, J. D., Kang, P. K., & Szymczak, P. (2024). Quantifying dissolution dynamics in porous media using a spatial flow focusing profile. Geophysical Research Letters, 51, e2024GL109940. https://doi.org/10.1029/2024GL109940
 
 WARNING: use Python 3.10 to have type hints etc. working properly.
 
