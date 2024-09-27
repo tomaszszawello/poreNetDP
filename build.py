@@ -12,7 +12,7 @@ build(None) -> tuple[SimInputData, In.Incidence, De.Graph, In.Edges, Data]
 """
 
 import delaunay as De
-import network_pump2 as Ne
+import network_hex as Ne
 import incidence as In
 import save as Sv
 
@@ -58,7 +58,7 @@ def build() -> tuple[SimInputData, In.Incidence, De.Graph, In.Edges, Data]:
         make_dir(sid)
         inc = In.Incidence()
         graph, edges = Ne.build_delaunay_net(sid, inc)
-        Ne.set_geometry(sid, graph)
+        #Ne.set_geometry(sid, graph)
         In.create_matrices(sid, graph, inc, edges)
         data = Data(sid, edges)
         Sv.save('/template.dill', sid, graph, inc, edges)

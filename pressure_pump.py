@@ -92,8 +92,8 @@ def solve_flow(sid: SimInputData, inc: Incidence, graph: Graph, edges: Edges, \
     pressure : numpy ndarray
         vector of pressure in nodes
     """
-    pressure_b_cb = np.concatenate([np.ones(sid.n // 2), np.zeros(sid.nsq - sid.n // 2)])
-    pressure_b_cc = np.concatenate([np.zeros(sid.n // 2), np.ones(sid. n - sid.n // 2), np.zeros(sid. nsq - sid.n)])
+    pressure_b_cb = graph.in_vec_a
+    pressure_b_cc = graph.in_vec_b
     # create matrix (nsq x nsq) for solving equations for pressure and flow
     # to find pressure in each node
     p_matrix = inc.incidence.T @ spr.diags(edges.diams ** 4 / edges.lens) \
@@ -101,31 +101,30 @@ def solve_flow(sid: SimInputData, inc: Incidence, graph: Graph, edges: Edges, \
     # for all inlet nodes we set the same pressure, for outlet nodes we set
     # zero pressure; so for boundary nodes we zero the elements of p_matrix
     # and add identity for those rows
-    p_matrix_cb = p_matrix.multiply(1 - np.concatenate([np.ones(sid.n // 2), np.zeros(sid.nsq - sid.n // 2)])[:, np.newaxis] - graph.out_vec[:, np.newaxis])
-    p_matrix_cc = p_matrix.multiply(1 - np.concatenate([np.zeros(sid.n // 2), np.ones(sid. n - sid.n // 2), np.zeros(sid. nsq - sid.n)])[:, np.newaxis] - graph.out_vec[:, np.newaxis])
+    p_matrix_cb = p_matrix.multiply(1 - pressure_b_cb[:, np.newaxis] - graph.out_vec[:, np.newaxis]) + spr.diags(pressure_b_cb + graph.out_vec)
+    p_matrix_cc = p_matrix.multiply(1 - pressure_b_cc[:, np.newaxis] - graph.out_vec[:, np.newaxis]) + spr.diags(pressure_b_cc + graph.out_vec)
     #p_matrix = p_matrix.multiply(inc.middle) + inc.boundary
     diag = p_matrix_cb.diagonal()
     # fix for nodes with no connections
-    for i, node in enumerate(diag):
-        if node == 0:
-            diag[i] = 1
+    diag += 1 * (diag == 0)
     # replace diagonal
     p_matrix_cb.setdiag(diag)
     diag = p_matrix_cc.diagonal()
     # fix for nodes with no connections
-    for i, node in enumerate(diag):
-        if node == 0:
-            diag[i] = 1
+    diag += 1 * (diag == 0)
     # replace diagonal
     p_matrix_cc.setdiag(diag)
     #np.savetxt(f'd{sid.old_iters}.txt', edges.diams)
     #np.savetxt(f'p{sid.old_iters}.txt', p_matrix.toarray())
     # solve matrix @ pressure = pressure_b
+    print("Solving b pressure")
     pressure_cb = solve_equation(p_matrix_cb, pressure_b_cb)
+    print("Solving c pressure")
     pressure_cc = solve_equation(p_matrix_cc, pressure_b_cc)
+    print("Pressure solved")
     # normalize pressure in inlet nodes to match condition for constant inlet
     # flow
-    pressure = pressure_cb * sid.q_rate + pressure_cc
+    pressure = pressure_cb * (1 + sid.q_rate) + pressure_cc * (1 - sid.q_rate)
 
     # q_cb = edges.diams ** 4 / edges.lens * (inc.incidence @ pressure_cb)
     # q_cc = edges.diams ** 4 / edges.lens * (inc.incidence @ pressure_cc)
@@ -138,8 +137,20 @@ def solve_flow(sid: SimInputData, inc: Incidence, graph: Graph, edges: Edges, \
     pressure *= sid.Q_in / q_in
     # update flow
     edges.flow = edges.diams ** 4 / edges.lens * (inc.incidence @ pressure)
-    #p_continuity = p_matrix @ pressure * (1 - graph.in_vec - graph.out_vec)
-    #if np.sum(p_continuity) > 1e-3:
-    #    np.savetxt('p_continuity.txt', p_continuity)
+    p_continuity = p_matrix @ pressure * (1 - graph.in_vec - graph.out_vec)
+    print(np.sum(np.abs(p_continuity)))
+    Q_in = np.sum(edges.inlet * np.abs(edges.flow))
+    Q_out = np.sum(edges.outlet * np.abs(edges.flow))
+    q_in = np.abs(np.sum(edges.diams ** 4 / edges.lens * (inc.inlet \
+        @ pressure)))
+    print('Q_in =', Q_in, 'Q_out =', Q_out)
+    print(np.sum(edges.inlet), np.sum(edges.outlet), q_in)
+    # np.savetxt('pa.txt', pressure_cb)
+    # np.savetxt('pb.txt', pressure_cc)
+    # np.savetxt('q.txt', edges.flow)
+    # if np.abs(np.abs(Q_in) - np.abs(Q_out)) > 0.1:
+    #     raise ValueError('Flow not matching!')
+    # if np.sum(np.abs(p_continuity)) > 1e-3:
+    # #    np.savetxt('p_continuity.txt', p_continuity)
     #    raise ValueError("continuity")
     return pressure

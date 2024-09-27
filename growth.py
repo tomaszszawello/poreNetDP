@@ -78,8 +78,17 @@ def update_diameters(sid: SimInputData, inc: Incidence, edges: Edges, \
     else:
         dt_next = sid.dt
     diams_new = edges.diams + change * dt_next
-    diams_new = diams_new * (diams_new >= sid.dmin) \
-        + sid.dmin * (diams_new < sid.dmin)
+    if sid.cut_edges:
+        diams_new = diams_new * (diams_new >= sid.dmin)
+        if np.sum(diams_new == 0) != np.sum(edges.diams == 0):
+            print("Edges cut")
+        inc.incidence = inc.incidence.multiply(1 * (diams_new > 0)[:, np.newaxis])
+        inc.inlet = inc.inlet.multiply(1 * (diams_new > 0)[:, np.newaxis])
+        edges.inlet *= diams_new > 0
+        edges.outlet *= diams_new > 0
+    else:
+        diams_new = diams_new * (diams_new >= sid.dmin) \
+            + sid.dmin * (diams_new < sid.dmin)
 
     # if sid.include_adt:
     #     diams_rate = np.abs((diams_new - edges.diams) / edges.diams)
@@ -125,10 +134,30 @@ def solve_d(sid: SimInputData, inc: Incidence, edges: Edges, cb: np.ndarray, cc:
     """
     # create list of concentrations which should be used for growth of each
     # edge (upstream one)
-    cb_in = np.abs((spr.diags(edges.flow) @ inc.incidence > 0)) @ cb
-    cc_in = np.abs((spr.diags(edges.flow) @ inc.incidence > 0)) @ cc
-    change = -cb_in * np.abs(edges.flow) / (sid.Da * edges.lens \
-        * edges.diams) * (1 - np.exp(-cc_in / sid.c_eq * sid.Da / (1 + sid.G * edges.diams) \
-        * edges.diams * edges.lens / np.abs(edges.flow)))
-    change = np.array(np.ma.fix_invalid(change, fill_value = 0))
+    cb_in = np.abs((spr.diags(edges.flow) @ inc.incidence > 0)) @ np.abs(cb)
+    cc_in = np.abs((spr.diags(edges.flow) @ inc.incidence > 0)) @ np.abs(cc)
+    # change = -cb_in * np.abs(edges.flow) / (sid.Da * edges.lens \
+    #     * edges.diams) * (1 - np.exp(-cc_in / sid.c_eq * sid.Da / (1 + sid.G * edges.diams) \
+    #     * edges.diams * edges.lens / np.abs(edges.flow)))
+    # change = -sid.c_eq * np.abs(edges.flow) / (sid.Da * edges.lens \
+    #     * edges.diams) * np.log(np.abs((-cc_in + cb_in * np.exp((cb_in - cc_in) / sid.c_eq * sid.Da / (1 + sid.G * edges.diams) \
+    #     * edges.diams * edges.lens / np.abs(edges.flow))) / (cb_in - cc_in)))
+    exp_a = np.exp((cb_in - cc_in) / sid.c_eq * sid.Da / (1 + sid.G * edges.diams) \
+         * edges.diams * edges.lens / np.abs(edges.flow))
+    exp_a = np.array(np.ma.fix_invalid(exp_a, fill_value = 0))
+    change = -cb_in * cc_in * (-1 + exp_a) / (-cc_in + cb_in * exp_a) * np.abs(edges.flow) / (sid.Da * edges.lens \
+         * edges.diams)
+
+    change = np.array(np.ma.fix_invalid(change, fill_value = 1))
+    change_fix = -cb_in * cc_in / (1 + cb_in / sid.c_eq * sid.Da / (1 + sid.G * edges.diams) \
+         * edges.diams * edges.lens / np.abs(edges.flow)) * np.abs(edges.flow) / (sid.Da * edges.lens \
+         * edges.diams)
+    change_fix = np.array(np.ma.fix_invalid(change_fix, fill_value = 0))
+    change = change * (change != 1) + change_fix * (change == 1)
+    # change = change * (change != 1) -cb_in * cc_in / (1 + cb_in / sid.c_eq * sid.Da / (1 + sid.G * edges.diams) \
+    #      * edges.diams * edges.lens / np.abs(edges.flow)) * (change == 1) * np.abs(edges.flow) / (sid.Da * edges.lens \
+    #      * edges.diams)
+    if np.sum(change > 1e-2):
+        np.savetxt('change.txt', change)
+        raise ValueError('change > 0')
     return change

@@ -104,8 +104,11 @@ def create_matrices(sid: SimInputData, graph: Graph, inc: Incidence, \
     reg_nodes = [] # list of regular nodes (not inlet or outlet)
     in_edges = np.zeros(sid.ne)
     out_edges = np.zeros(sid.ne)
-    for i, e in enumerate(edges.edge_list):
-        n1, n2 = e
+    nodes = list(graph.nodes())
+    node_to_index = {node: idx for idx, node in enumerate(nodes)}
+    for i, e in enumerate(edges.edge_list_draw):
+        n1 = node_to_index[e[0]]
+        n2 = node_to_index[e[1]]
         data.append(-1)
         row.append(i)
         col.append(n1)
@@ -149,13 +152,13 @@ def create_matrices(sid: SimInputData, graph: Graph, inc: Incidence, \
         elif (n1 not in graph.out_nodes and n2 in graph.out_nodes) \
             or (n1 in graph.out_nodes and n2 not in graph.out_nodes):
             out_edges[i] = 1
-        if (n1 in graph.in_nodes + graph.out_nodes and n2 \
-            in graph.in_nodes + graph.out_nodes):
-            edges.boundary_list[i] = 1
-            if n1 in graph.in_nodes and n2 in graph.in_nodes:
-                in_edges[i] = 1
-            if n1 in graph.out_nodes and n2 in graph.out_nodes:
-                out_edges[i] = 1
+        # if (n1 in graph.in_nodes + graph.out_nodes and n2 \
+        #     in graph.in_nodes + graph.out_nodes):
+        #     edges.boundary_list[i] = 1
+        #     if n1 in graph.in_nodes and n2 in graph.in_nodes:
+        #         in_edges[i] = 1
+        #     if n1 in graph.out_nodes and n2 in graph.out_nodes:
+        #         out_edges[i] = 1
     # in boundary matrix, we set identity to rows corresponding to inlet and
     # outlet nodes
     for node in np.concatenate((graph.in_nodes, graph.out_nodes)):

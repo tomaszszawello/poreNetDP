@@ -124,7 +124,7 @@ class Data():
         Q_in = np.sum(edges.inlet * np.abs(edges.flow))
         Q_out = np.sum(edges.outlet * np.abs(edges.flow))
         print('Q_in =', Q_in, 'Q_out =', Q_out)
-        if np.abs(Q_in - Q_out) > 10:
+        if np.abs(np.abs(Q_in) - np.abs(Q_out)) > 0.1:
             raise ValueError('Flow not matching!')
         # delta = np.abs((np.abs(inc.incidence.T < 0) @ (np.abs(edges.flow) \
         #     * edges.inlet) - np.abs(inc.incidence.T > 0) @ (np.abs(edges.flow) \

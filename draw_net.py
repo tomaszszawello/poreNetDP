@@ -97,13 +97,13 @@ def uniform_hist(sid: SimInputData, graph: Graph, edges: Edges, \
             * (edges.diams < edges.diams_initial / 2)
         qs2 = (1 - edges.boundary_list) * edges.diams \
             * (edges.diams >= edges.diams_initial / 2)
-        nx.draw_networkx_edges(graph, pos, edges.edge_list, edge_color = 'r', \
+        nx.draw_networkx_edges(graph, pos, edges.edge_list_draw, edge_color = 'r', \
             width = sid.ddrawconst * np.array(qs1))
-        nx.draw_networkx_edges(graph, pos, edges.edge_list, edge_color = 'k', \
+        nx.draw_networkx_edges(graph, pos, edges.edge_list_draw, edge_color = 'k', \
             width = sid.ddrawconst * np.array(qs2))
     elif data == 'q':
         qs = (1 - edges.boundary_list) * np.abs(edges.flow)
-        nx.draw_networkx_edges(graph, pos, edges.edge_list, edge_color = 'k', \
+        nx.draw_networkx_edges(graph, pos, edges.edge_list_draw, edge_color = 'k', \
             width = sid.ddrawconst * np.array(qs))
     # draw histograms with data below the network
     plt.subplot(spec[cols]).set_title('Diameter')
@@ -163,25 +163,27 @@ def draw(sid: SimInputData, graph: Graph, edges: Edges, \
     spec = gridspec.GridSpec(ncols = 2, nrows = 1, width_ratios=[100, 1])
     pos = nx.get_node_attributes(graph, 'pos')
     ax1 = plt.subplot(spec[0])
-    plt.axis('equal')
-    plt.xlim(0, sid.n)
-    plt.ylim(0, sid.n)
+    #plt.axis('equal')
+    plt.xlim(np.min(np.array(list(pos.values()))[:, 0]), np.max(np.array(list(pos.values()))[:, 0]))
+    plt.ylim(np.min(np.array(list(pos.values()))[:, 1]), np.max(np.array(list(pos.values()))[:, 1]))
     # draw inlet and outlet nodes
     x_in, y_in = [], []
+    nodes = list(graph.nodes())
+    index_to_node = {idx: node for idx, node in enumerate(nodes)}
     for node in graph.in_nodes:
-        x_in.append(pos[node][0])
-        y_in.append(pos[node][1])
+        x_in.append(pos[index_to_node[node]][0])
+        y_in.append(pos[index_to_node[node]][1])
     x_out, y_out = [], []
     for node in graph.out_nodes:
-        x_out.append(pos[node][0])
-        y_out.append(pos[node][1])
+        x_out.append(pos[index_to_node[node]][0])
+        y_out.append(pos[index_to_node[node]][1])
     plt.scatter(x_in, y_in, s = 1000 / sid.n, facecolors = 'white', \
         edgecolors = 'black')
-    plt.scatter(x_out, y_out, s = 1000 / sid.n, facecolors = 'black', \
-        edgecolors = 'white')
+    plt.scatter(x_out, y_out, s = 1000 / sid.n, facecolors = 'white', \
+        edgecolors = 'black')
     if plot_type == 'q':
         qs = (1 - edges.boundary_list) * np.abs(edges.flow)
-        nx.draw_networkx_edges(graph, pos, edges.edge_list, edge_color = 'k', \
+        nx.draw_networkx_edges(graph, pos, edges.edge_list_draw, edge_color = 'k', \
             width = sid.qdrawconst * np.array(qs))
     else:
         qs1 = (1 - edges.boundary_list) * edges.diams_initial * 0.9 \
@@ -194,13 +196,13 @@ def draw(sid: SimInputData, graph: Graph, edges: Edges, \
             * (edges.diams > edges.diams_initial * 0.9)
         qs4 = (1 - edges.boundary_list) * edges.diams \
             * (edges.diams > edges.diams_initial * 1.5)
-        nx.draw_networkx_edges(graph, pos, edges.edge_list, edge_color = 'r', \
+        nx.draw_networkx_edges(graph, pos, edges.edge_list_draw, edge_color = 'r', \
             width = sid.ddrawconst * np.array(qs1))
-        nx.draw_networkx_edges(graph, pos, edges.edge_list, edge_color = 'y', \
+        nx.draw_networkx_edges(graph, pos, edges.edge_list_draw, edge_color = 'y', \
             width = sid.ddrawconst * np.array(qs2))
-        nx.draw_networkx_edges(graph, pos, edges.edge_list, edge_color = 'grey', \
+        nx.draw_networkx_edges(graph, pos, edges.edge_list_draw, edge_color = 'grey', \
             width = sid.ddrawconst * np.array(qs3))
-        nx.draw_networkx_edges(graph, pos, edges.edge_list, edge_color = 'k', \
+        nx.draw_networkx_edges(graph, pos, edges.edge_list_draw, edge_color = 'k', \
             width = sid.ddrawconst * np.array(qs4))
     #nx.draw_networkx_nodes(graph, pos, node_color = cd)
     plt.subplots_adjust(wspace=0, hspace=0)
@@ -245,29 +247,31 @@ def draw_c(sid: SimInputData, graph: Graph, edges: Edges, \
         parameter taken as edge width (diameter or flow)
     """
     # draw first panel for the network
-    plt.figure(figsize=(sid.figsize, sid.figsize))
+    plt.figure(figsize=(sid.figsize, sid.figsize * sid.m / sid.n))
     spec = gridspec.GridSpec(ncols = 2, nrows = 1, width_ratios=[100, 1])
     pos = nx.get_node_attributes(graph, 'pos')
     ax1 = plt.subplot(spec[0])
-    plt.axis('equal')
-    plt.xlim(0, sid.n)
-    plt.ylim(0, sid.n)
+    #plt.axis('equal')
+    plt.xlim(np.min(np.array(list(pos.values()))[:, 0]), np.max(np.array(list(pos.values()))[:, 0]))
+    plt.ylim(np.min(np.array(list(pos.values()))[:, 1]), np.max(np.array(list(pos.values()))[:, 1]))
     # draw inlet and outlet nodes
     x_in, y_in = [], []
+    nodes = list(graph.nodes())
+    index_to_node = {idx: node for idx, node in enumerate(nodes)}
     for node in graph.in_nodes:
-        x_in.append(pos[node][0])
-        y_in.append(pos[node][1])
+        x_in.append(pos[index_to_node[node]][0])
+        y_in.append(pos[index_to_node[node]][1])
     x_out, y_out = [], []
     for node in graph.out_nodes:
-        x_out.append(pos[node][0])
-        y_out.append(pos[node][1])
+        x_out.append(pos[index_to_node[node]][0])
+        y_out.append(pos[index_to_node[node]][1])
     plt.scatter(x_in, y_in, s = 1000 / sid.n, facecolors = 'white', \
         edgecolors = 'black')
     plt.scatter(x_out, y_out, s = 1000 / sid.n, facecolors = 'black', \
         edgecolors = 'white')
     if plot_type == 'q':
         qs = (1 - edges.boundary_list) * np.abs(edges.flow)
-        nx.draw_networkx_edges(graph, pos, edges.edge_list, edge_color = 'k', \
+        nx.draw_networkx_edges(graph, pos, edges.edge_list_draw, edge_color = 'k', \
             width = sid.qdrawconst * np.array(qs))
     else:
         qs1 = (1 - edges.boundary_list) * edges.diams \
@@ -276,11 +280,11 @@ def draw_c(sid: SimInputData, graph: Graph, edges: Edges, \
             * (edges.diams >= edges.diams_initial / 2) * (cb_in > cc_in)
         qs3 = (1 - edges.boundary_list) * edges.diams \
             * (edges.diams >= edges.diams_initial / 2) * (cb_in <= cc_in)
-        nx.draw_networkx_edges(graph, pos, edges.edge_list, edge_color = 'r', \
+        nx.draw_networkx_edges(graph, pos, edges.edge_list_draw, edge_color = 'r', \
             width = sid.ddrawconst * np.array(qs1))
-        nx.draw_networkx_edges(graph, pos, edges.edge_list, edge_color = 'y', \
+        nx.draw_networkx_edges(graph, pos, edges.edge_list_draw, edge_color = 'y', \
             width = sid.ddrawconst * np.array(qs2))
-        nx.draw_networkx_edges(graph, pos, edges.edge_list, edge_color = 'b', \
+        nx.draw_networkx_edges(graph, pos, edges.edge_list_draw, edge_color = 'b', \
             width = sid.ddrawconst * np.array(qs3))
     plt.subplots_adjust(wspace=0, hspace=0)
     # save file in the directory
@@ -342,8 +346,9 @@ def draw_nodes(sid: SimInputData, graph: Graph, edges: Edges, cb, \
         x_zero.append(pos[node][0])
         y_zero.append(pos[node][1])
     #print (x_zero, y_zero)
-    nx.draw_networkx_nodes(graph, pos, node_color = cb * (cb >= 1))
-    nx.draw_networkx_labels(graph, pos, labels=dict(zip(graph.nodes(), graph.nodes())), font_size=5)
+    pathcollection = nx.draw_networkx_nodes(graph, pos, node_color = cb * (cb >= 0))
+    plt.colorbar(pathcollection)
+    #nx.draw_networkx_labels(graph, pos, labels=dict(zip(graph.nodes(), graph.nodes())), font_size=5)
     plt.scatter(x_in, y_in, s = 30, facecolors = 'white', edgecolors = 'black')
     plt.scatter(x_out, y_out, s = 30, facecolors = 'black', \
         edgecolors = 'white')
@@ -416,15 +421,15 @@ def draw_labels(sid: SimInputData, graph: Graph, edges: Edges, \
             * (edges.diams < edges.diams_initial / 2)
         qs2 = (1 - edges.boundary_list) * edges.diams \
             * (edges.diams >= edges.diams_initial / 2)
-        nx.draw_networkx_edges(graph, pos, edges.edge_list, edge_color = 'r', \
+        nx.draw_networkx_edges(graph, pos, edges.edge_list_draw, edge_color = 'r', \
             width = sid.ddrawconst * np.array(qs1))
-        nx.draw_networkx_edges(graph, pos, edges.edge_list, edge_color = 'k', \
+        nx.draw_networkx_edges(graph, pos, edges.edge_list_draw, edge_color = 'k', \
             width = sid.ddrawconst * np.array(qs2))
     elif data == 'q':
         qs = (1 - edges.boundary_list) * np.abs(edges.flow)
-        nx.draw_networkx_edges(graph, pos, edges.edge_list, edge_color = 'k', \
+        nx.draw_networkx_edges(graph, pos, edges.edge_list_draw, edge_color = 'k', \
             width = sid.qdrawconst * np.array(qs))
-    nx.draw_networkx_edge_labels(graph, pos, edge_labels=dict(zip(edges.edge_list, np.arange(0, len(edges.edge_list)))), font_size = 5)
+    nx.draw_networkx_edge_labels(graph, pos, edge_labels=dict(zip(edges.edge_list_draw, np.arange(0, len(edges.edge_list_draw)))), font_size = 5)
     #plt.scatter(x_zero, y_zero, s = 60, facecolors = 'blue', edgecolors = 'black')
     # save file in the directory
     plt.axis('off')
@@ -496,13 +501,13 @@ def draw_data(sid: SimInputData, graph: Graph, edges: Edges, \
             * (edges.diams < edges.diams_initial / 2)
         qs2 = (1 - edges.boundary_list) * edges.diams \
             * (edges.diams >= edges.diams_initial / 2)
-        nx.draw_networkx_edges(graph, pos, edges.edge_list, edge_color = 'r', \
+        nx.draw_networkx_edges(graph, pos, edges.edge_list_draw, edge_color = 'r', \
             width = sid.ddrawconst * np.array(qs1))
-        nx.draw_networkx_edges(graph, pos, edges.edge_list, edge_color = 'k', \
+        nx.draw_networkx_edges(graph, pos, edges.edge_list_draw, edge_color = 'k', \
             width = sid.ddrawconst * np.array(qs2))
     elif plot_data == 'q':
         qs = (1 - edges.boundary_list) * np.abs(edges.flow)
-        nx.draw_networkx_edges(graph, pos, edges.edge_list, edge_color = 'k', \
+        nx.draw_networkx_edges(graph, pos, edges.edge_list_draw, edge_color = 'k', \
             width = sid.ddrawconst * np.array(qs))
     # draw histograms with data below the network
     plt.subplot(spec[1]).set_title(f'Slice t: {data.slice_times[-1]}')
@@ -608,7 +613,7 @@ def draw_focusing(sid: SimInputData, graph: Graph, inc: Incidence, edges: Edges,
     diams = inc.plot @ edges.diams / merged_number
     flow = inc.plot @ np.abs(edges.flow) / merged_number
     # in_flow = np.abs(inc.incidence.T) @ np.abs(edges.flow) / 2
-    # transverse_flow = np.max(in_flow[edges.edge_list], axis = 1) * edges.transversed
+    # transverse_flow = np.max(in_flow[edges.edge_list_draw], axis = 1) * edges.transversed
     # flow2 = inc.plot @ np.abs(transverse_flow) / merged_number
     # flow = np.max([flow, flow2], axis = 0)
     qs = (1 - edges.boundary_list) * np.abs(flow)
@@ -635,16 +640,16 @@ def draw_focusing(sid: SimInputData, graph: Graph, inc: Incidence, edges: Edges,
     ax1.add_collection(coll)
     if plot_data == 'd':
         qs = (1 - edges.boundary_list) * (diams - edges.diams_initial) * (diams - edges.diams_initial > 0)
-        nx.draw_networkx_edges(graph, pos, edges.edge_list, edge_color = 'k', \
+        nx.draw_networkx_edges(graph, pos, edges.edge_list_draw, edge_color = 'k', \
             width = sid.ddrawconst * np.array(qs))
     elif plot_data == 'q':
         # qs = (1 - edges.boundary_list) * np.abs(flow)
-        # nx.draw_networkx_edges(graph, pos, edges.edge_list, edge_color = 'k', \
+        # nx.draw_networkx_edges(graph, pos, edges.edge_list_draw, edge_color = 'k', \
         #     width = sid.ddrawconst * q1, connectionstyle=connectionstyle_list, arrows = False)
         #arc_rad = 0.1
-        nx.draw_networkx_edges(graph, pos, edges.edge_list, edge_color = 'k', \
+        nx.draw_networkx_edges(graph, pos, edges.edge_list_draw, edge_color = 'k', \
             width = sid.qdrawconst * qs)
-    # nx.draw_networkx_edge_labels(graph, pos, edge_labels=dict(zip(edges.edge_list, np.arange(0, len(edges.edge_list)))), font_size = 5)
+    # nx.draw_networkx_edge_labels(graph, pos, edge_labels=dict(zip(edges.edge_list_draw, np.arange(0, len(edges.edge_list_draw)))), font_size = 5)
     # draw histograms with data below the network
     plt.subplot(spec[1], sharex = ax1)
     pos_x = np.array(list(nx.get_node_attributes(graph, 'pos').values()))[:,0]
@@ -754,16 +759,16 @@ def draw_focusing2(sid: SimInputData, graph: Graph, inc: Incidence, edges: Edges
             elif edge_flow > 0:
                 colored_edges_g[np.where(np.abs(edges.flow) == slice_flow[i])[0][0]] = 1
 
-        nx.draw_networkx_edges(graph, pos, edges.edge_list, edge_color = 'k', \
+        nx.draw_networkx_edges(graph, pos, edges.edge_list_draw, edge_color = 'k', \
             width = sid.qdrawconst * np.array(qs) * (1 - colored_edges_r - colored_edges_g))
-        nx.draw_networkx_edges(graph, pos, edges.edge_list, edge_color = 'r', \
+        nx.draw_networkx_edges(graph, pos, edges.edge_list_draw, edge_color = 'r', \
             width = sid.qdrawconst * np.array(qs) * colored_edges_r)
-        nx.draw_networkx_edges(graph, pos, edges.edge_list, edge_color = 'b', \
+        nx.draw_networkx_edges(graph, pos, edges.edge_list_draw, edge_color = 'b', \
             width = sid.qdrawconst * np.array(qs) * colored_edges_g)
     else:
-        nx.draw_networkx_edges(graph, pos, edges.edge_list, edge_color = 'k', \
+        nx.draw_networkx_edges(graph, pos, edges.edge_list_draw, edge_color = 'k', \
             width = sid.qdrawconst * np.array(qs))
-    # nx.draw_networkx_edge_labels(graph, pos, edge_labels=dict(zip(edges.edge_list, np.arange(0, len(edges.edge_list)))), font_size = 5)
+    # nx.draw_networkx_edge_labels(graph, pos, edge_labels=dict(zip(edges.edge_list_draw, np.arange(0, len(edges.edge_list_draw)))), font_size = 5)
     # draw histograms with data below the network
     plt.subplot(spec[1], sharex = ax1)
     pos_x = np.array(list(nx.get_node_attributes(graph, 'pos').values()))[:,0]
@@ -883,17 +888,17 @@ def draw_final_focusing(sid: SimInputData, graph: Graph, inc: Incidence, edges: 
             elif edge_flow > 0:
                 colored_edges_g[np.where(np.abs(edges.flow) == slice_flow[i])[0][0]] = 1
 
-        nx.draw_networkx_edges(graph, pos, edges.edge_list, edge_color = 'k', \
+        nx.draw_networkx_edges(graph, pos, edges.edge_list_draw, edge_color = 'k', \
             width = sid.qdrawconst * np.array(qs) * (1 - colored_edges_r - colored_edges_g))
-        nx.draw_networkx_edges(graph, pos, edges.edge_list, edge_color = 'r', \
+        nx.draw_networkx_edges(graph, pos, edges.edge_list_draw, edge_color = 'r', \
             width = sid.qdrawconst * np.array(qs) * colored_edges_r)
-        nx.draw_networkx_edges(graph, pos, edges.edge_list, edge_color = 'b', \
+        nx.draw_networkx_edges(graph, pos, edges.edge_list_draw, edge_color = 'b', \
             width = sid.qdrawconst * np.array(qs) * colored_edges_g)
     else:
         # qs = np.ma.fix_invalid(np.log(1+qs), fill_value=0)
-        nx.draw_networkx_edges(graph, pos, edges.edge_list, edge_color = 'k', \
+        nx.draw_networkx_edges(graph, pos, edges.edge_list_draw, edge_color = 'k', \
             width = sid.qdrawconst * np.array(qs), alpha = np.array(qs)/np.max(qs))
-    # nx.draw_networkx_edge_labels(graph, pos, edge_labels=dict(zip(edges.edge_list, np.arange(0, len(edges.edge_list)))), font_size = 5)
+    # nx.draw_networkx_edge_labels(graph, pos, edge_labels=dict(zip(edges.edge_list_draw, np.arange(0, len(edges.edge_list_draw)))), font_size = 5)
     # draw histograms with data below the network
     ax2 = plt.subplot(spec[1], sharex = ax1)
     pos_x = np.array(list(nx.get_node_attributes(graph, 'pos').values()))[:,0]

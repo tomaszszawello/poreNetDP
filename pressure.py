@@ -99,12 +99,10 @@ def solve_flow(sid: SimInputData, inc: Incidence, graph: Graph, edges: Edges, \
     # for all inlet nodes we set the same pressure, for outlet nodes we set
     # zero pressure; so for boundary nodes we zero the elements of p_matrix
     # and add identity for those rows
-    p_matrix = p_matrix.multiply(inc.middle) + inc.boundary
+    p_matrix = p_matrix.multiply((1 - graph.in_vec - graph.out_vec)[:, np.newaxis]) + spr.diags(graph.in_vec + graph.out_vec)
     diag = p_matrix.diagonal()
     # fix for nodes with no connections
-    for i, node in enumerate(diag):
-        if node == 0:
-            diag[i] = 1
+    diag += 1 * (diag == 0)
     # replace diagonal
     p_matrix.setdiag(diag)
     #np.savetxt(f'd{sid.old_iters}.txt', edges.diams)
@@ -118,8 +116,8 @@ def solve_flow(sid: SimInputData, inc: Incidence, graph: Graph, edges: Edges, \
     pressure *= sid.Q_in / q_in
     # update flow
     edges.flow = edges.diams ** 4 / edges.lens * (inc.incidence @ pressure)
-    #p_continuity = p_matrix @ pressure * (1 - graph.in_vec - graph.out_vec)
-    #if np.sum(p_continuity) > 1e-3:
-    #    np.savetxt('p_continuity.txt', p_continuity)
-    #    raise ValueError("continuity")
+    p_continuity = p_matrix @ pressure * (1 - graph.in_vec - graph.out_vec)
+    if np.sum(p_continuity) > 1e-3:
+       np.savetxt('p_continuity.txt', p_continuity)
+       raise ValueError("continuity")
     return pressure
