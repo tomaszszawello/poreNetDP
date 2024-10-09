@@ -212,7 +212,7 @@ def draw_flow_profile(sid: SimInputData, graph: Graph, edges: Edges, \
     order = [0,4,1,5,2,6,3,7]
 
     legend = plt.legend([handles[idx] for idx in order],[labels[idx] for idx in order], loc="lower center", mode = "expand", ncol = 4, prop={'size': 40}, handlelength = 1, frameon=False, borderpad = 0, handletextpad = 0.4)
-    for legobj in legend.legendHandles:
+    for legobj in legend.legend_handles:
         legobj.set_linewidth(10.0)
     plt.savefig(sid.dirname + "/" + name, bbox_inches="tight")
     plt.close()

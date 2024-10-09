@@ -72,6 +72,10 @@ class Data():
     "channelization for slices through the whole system in a given time"
     slice_times: list = []
     "list of times of checking slice channelization"
+    breakthrough_times: list = []
+    concentrations: list = []
+    reactive_breakthrough_times: list = []
+    track_times: list = []
 
     def __init__(self, sid: SimInputData, edges: Edges):
         self.dirname = sid.dirname
@@ -102,6 +106,24 @@ class Data():
                 file = open(self.dirname + '/profiles.txt', 'w', \
                     encoding = "utf-8")
                 np.savetxt(file, self.slices)
+                file.close()
+                is_saved = True
+            except PermissionError:
+                pass
+        is_saved = False
+        while not is_saved: # prevents problems with opening text file
+            try:
+                file = open(self.dirname + '/track.txt', 'w', \
+                    encoding = "utf-8")
+                np.savetxt(file, self.breakthrough_times)
+                file.close()
+                file = open(self.dirname + '/c_track.txt', 'w', \
+                    encoding = "utf-8")
+                np.savetxt(file, self.concentrations)
+                file.close()
+                file = open(self.dirname + '/r_track.txt', 'w', \
+                    encoding = "utf-8")
+                np.savetxt(file, self.reactive_breakthrough_times)
                 file.close()
                 is_saved = True
             except PermissionError:
@@ -442,10 +464,17 @@ class Data():
         #plt.yticks([],[])
         plt.yticks([0, 0.5, 1],['0', '0.5', '1'])
         handles, labels = plt.gca().get_legend_handles_labels()
-        order = [0,4,1,5,2,6,3,7]
-
+        #order = [0,4,1,5,2,6,3,7]
+        order = []
+        for i in range(len(handles) // 2):
+            order.append(i)
+            if i == len(handles) // 2 - 1:
+                if len(handles) % 2 == 0:
+                    order.append(len(handles) // 2 + i)
+            else:
+                order.append(len(handles) // 2 + i)
         legend = plt.legend([handles[idx] for idx in order],[labels[idx] for idx in order], loc="lower center", mode = "expand", ncol = 4, prop={'size': 40}, handlelength = 1, frameon=False, borderpad = 0, handletextpad = 0.4)
-        for legobj in legend.legendHandles:
+        for legobj in legend.legend_handles:
             legobj.set_linewidth(10.0)
         #spine_color = 'blue'
         # for spine in ax1.spines.values():
