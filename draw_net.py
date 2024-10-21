@@ -159,7 +159,7 @@ def draw(sid: SimInputData, graph: Graph, edges: Edges, \
         parameter taken as edge width (diameter or flow)
     """
     # draw first panel for the network
-    plt.figure(figsize=(sid.figsize, sid.figsize))
+    plt.figure(figsize=(sid.figsize, sid.figsize * sid.m / sid.n), dpi = 300)
     spec = gridspec.GridSpec(ncols = 2, nrows = 1, width_ratios=[100, 1])
     pos = nx.get_node_attributes(graph, 'pos')
     ax1 = plt.subplot(spec[0])
@@ -247,7 +247,7 @@ def draw_c(sid: SimInputData, graph: Graph, edges: Edges, \
         parameter taken as edge width (diameter or flow)
     """
     # draw first panel for the network
-    plt.figure(figsize=(sid.figsize, sid.figsize * sid.m / sid.n))
+    plt.figure(figsize=(sid.figsize, sid.figsize * sid.m / sid.n), dpi = 300)
     spec = gridspec.GridSpec(ncols = 2, nrows = 1, width_ratios=[100, 1])
     pos = nx.get_node_attributes(graph, 'pos')
     ax1 = plt.subplot(spec[0])

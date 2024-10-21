@@ -46,7 +46,7 @@ while t < t_max and i < iter_max:
     if t == 0:
         cb, cc = Di.solve_dissolution_an(sid, inc, graph, edges, cb_b, cc_b)
     elif sid.solve_type == "full":
-        cb, cc = Di.solve_dissolution_an2(sid, inc, graph, edges, cb_b, cc_b, cb, cc)
+        cb, cc = Di.solve_dissolution_v2(sid, inc, graph, edges, cb_b, cc_b, cb, cc)
     elif sid.solve_type == "simple":
         cb, cc = Di.solve_dissolution(sid, inc, graph, edges, cb_b, cc_b, cb, cc)
     if np.sum(cb < -1e-3) or np.sum(cc < -1e-3):
@@ -62,7 +62,8 @@ while t < t_max and i < iter_max:
             cb_in = np.abs((spr.diags(edges.flow) @ inc.incidence > 0)) @ cb
             cc_in = np.abs((spr.diags(edges.flow) @ inc.incidence > 0)) @ cc
             Dr.draw(sid, graph, edges, f'q{t:05}.jpg', 'q')
-            Dr.draw_c(sid, graph, edges, f'd{t:05}.jpg', 'd', cb_in, cc_in)
+            Dr.draw(sid, graph, edges, f'd{t:05}.jpg', 'd')
+            Dr.draw_c(sid, graph, edges, f'color{t:05}.jpg', 'd', cb_in, cc_in)
             # Dr.draw_nodes(sid, graph, edges, cb, f'cb{t:05}.jpg', 'q')
             # Dr.draw_nodes(sid, graph, edges, cc, f'cc{t:05}.jpg', 'q')
             #save_VTK(sid, graph, edges, pressure, cb, f'network_{t:.2f}.vtk')
@@ -83,6 +84,8 @@ while t < t_max and i < iter_max:
 if i != 1 and sid.load != 1:
     #data.check_data(sid, edges, inc, cb, cc)
     Dr.draw(sid, graph, edges, f'q{t:05}.jpg', 'q')
+    Dr.draw(sid, graph, edges, f'd{t:05}.jpg', 'd')
+    Dr.draw_c(sid, graph, edges, f'color{t:05}.jpg', 'd', cb_in, cc_in)
     #Dr.draw_c(sid, graph, edges, f'd{t:05}.jpg', 'd', cb_in, cc_in)
     #save_VTK(sid, graph, edges, pressure, cb, f'network_{t:.2f}.vtk')
     save("save.dill", sid, graph, inc, edges)

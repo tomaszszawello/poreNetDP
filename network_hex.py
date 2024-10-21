@@ -249,13 +249,23 @@ def build_delaunay_net(sid: SimInputData, inc: Incidence) \
     graph.add_edges_from(graph_init.edges())
     pos = nx.get_node_attributes(graph_init, 'pos')
     nx.set_node_attributes(graph, pos, 'pos')
-    for edge in graph.copy().edges():
-        if (pos[edge[0]][0] < sid.bound_x and pos[edge[1]][0] < sid.bound_x) and ((pos[edge[0]][1] < sid.bound_y and pos[edge[1]][1] > sid.bound_y) or (pos[edge[0]][1] > sid.bound_y and pos[edge[1]][1] < sid.bound_y)):
-            graph.remove_edge(edge[0], edge[1])
+    # for edge in graph.copy().edges():
+    #     if (pos[edge[0]][0] < sid.bound_x and pos[edge[1]][0] < sid.bound_x) and ((pos[edge[0]][1] < sid.bound_y and pos[edge[1]][1] > sid.bound_y) or (pos[edge[0]][1] > sid.bound_y and pos[edge[1]][1] < sid.bound_y)):
+    #         graph.remove_edge(edge[0], edge[1])
+    for node in graph.copy().nodes():
+        if pos[node][0] < sid.bound_x and pos[node][1] < sid.bound_y + 0.1 and pos[node][1] > sid.bound_y - 0.1:
+            graph.remove_node(node)
+    for node in graph.copy().nodes():
+        if (pos[node][1] == np.sqrt(3) / 2 and pos[node][0] == 0) or (pos[node][1] == (sid.m * 2 - 1) * np.sqrt(3) / 2 and pos[node][0] == 0) or pos[node][1] == sid.y_min or pos[node][1] >= sid.y_max:
+            graph.remove_node(node)
+
     sid.ne = len(graph.edges())
     sid.nsq = len(graph.nodes())
 
-    diams = np.ones(sid.ne)
+    normal = np.random.randn(sid.ne)
+    diams = np.exp(sid.d0 + sid.sigma_d0 * normal)
+    diams = np.clip(diams, 0, 50)
+    #diams = np.ones(sid.ne)
     lens = np.ones(sid.ne)
     flow = np.zeros(sid.ne)
     boundary_edges = np.zeros(sid.ne)
@@ -282,6 +292,7 @@ def build_delaunay_net(sid: SimInputData, inc: Incidence) \
     for node in graph.nodes():
         if pos[node][0] == pos_in:
             graph.in_nodes.append(node_to_index[node])
+            print(pos[node])
             if pos[node][1] < sid.bound_y:
                 graph.in_vec_a[node_to_index[node]] = 1
             else:

@@ -154,6 +154,7 @@ def solve_d(sid: SimInputData, inc: Incidence, edges: Edges, cb: np.ndarray, cc:
          * edges.diams)
     change_fix = np.array(np.ma.fix_invalid(change_fix, fill_value = 0))
     change = change * (change != 1) + change_fix * (change == 1)
+    change *= (edges.diams > sid.dmin)
     # change = change * (change != 1) -cb_in * cc_in / (1 + cb_in / sid.c_eq * sid.Da / (1 + sid.G * edges.diams) \
     #      * edges.diams * edges.lens / np.abs(edges.flow)) * (change == 1) * np.abs(edges.flow) / (sid.Da * edges.lens \
     #      * edges.diams)

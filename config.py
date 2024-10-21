@@ -17,29 +17,31 @@ class SimInputData:
     ''' Configuration class for the whole simulation.
     '''
     # GENERAL
+
     m = 20
-    n: int = 50
+    n: int = 100
     "network size"
     iters: int = 1000000
     "maximum number of iterations"
-    tmax: float = 1000.
+    tmax: float = 40000.
     "maximum time"
     dissolved_v_max: float = 10
     "maximum dissolved volume (in terms of initial pore volume)"
-    plot_every: int = 10
+    plot_every: int = 1000
     "frequency of plotting the results"
     plotting_mode: str = 'time' # 'volume', 'iters'
     "time measure used for plotting"
 
-    bound_x = n / 5
-    bound_y = m * 3 / 4 + 2
-
+    bound_x = n / 10 * np.sqrt(3)
+    bound_y = m * np.sqrt(3) / 2
+    y_max = (2 * m) * np.sqrt(3) / 2
+    y_min = 0
 
     track_list = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
     "list of time measures in which tracking is performed"
 
     # DISSOLUTION & PRECIPITATION
-    Da_eff: float = 0.1
+    Da_eff: float = 10
     "effective Damkohler number"
     G: float = 0
     "diffusion to reaction ratio"
@@ -55,14 +57,14 @@ class SimInputData:
     "include pore merging"
     tracking_mode = 'time'
 
-    cut_edges = True
+    cut_edges = False
 
     # INITIAL CONDITIONS
     qin: float = 1.
     "characteristic flow for inlet edge"
-    cb_in: float = 1.
+    cb_in: float = 1
     "inlet B concentration"
-    cc_in: float = 1.
+    cc_in: float = 1
     "inlet C concentration"
     initial_merging: int = 5
     "number of initial merging iterations"
@@ -72,7 +74,7 @@ class SimInputData:
 
     q_rate = 1
     q_amp = 0.1
-    q_period = 20
+    q_period = 40
 
     # TIME
     dt: float = 0.01
@@ -80,7 +82,7 @@ class SimInputData:
     growth_rate: float = 0.05
     ("maximum percentage growth of an edges (used for finding adaptive \
      timestep)")
-    dt_max: float = 5.
+    dt_max: float = 50.
     "maximum timestep (for adaptive)"
 
     # DIAMETERS
@@ -91,9 +93,9 @@ class SimInputData:
     "name of file with initial diameters if noise == file_"
     d0: float = 1.
     "initial dimensionless mean diameter"
-    sigma_d0: float = 0.
+    sigma_d0: float = 0.1
     "initial diameter standard deviation"
-    dmin: float = 0.001
+    dmin: float = 0.1
     "minimum diameter"
     dmax: float = 1000.
     "maximum diameter"
@@ -101,22 +103,23 @@ class SimInputData:
     "minimal diameter of outlet edge for network to be dissolved"
 
     # DRAWING
-    figsize: float = 10.
+    figsize: float = 20.
     "figure size"
-    qdrawconst: float = 10
+    qdrawconst: float = 1
     "constant for improving flow drawing"
-    ddrawconst: float = 4.
+    ddrawconst: float = 1.
     "constant for improving diameter drawing"
     
     # INITIALIZATION
-    load: int = 0
+    load: int = 2
     ("type of loading: 0 - build new network based on config and start new \
      simulation, 1 - load previous network from load_name and continue \
      simulation, 2 - load template network from load_name and start new \
      simulation")
-    load_name: str = 'singurindy/G0.00Daeff0.10/1'
+    #load_name: str = 'mip/G0.00Daeff1.00/0'
+    load_name: str = 'mip/G0.00Daeff0.10/19'
     "name of loaded network"
-    dirname: str = f'singurindy/G{G:.2f}Daeff{Da_eff:.2f}'
+    dirname: str = f'mip/G{G:.2f}Daeff{Da_eff:.2f}'
     "directory of simulation"
 
     # GEOMETRY
