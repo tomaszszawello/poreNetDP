@@ -14,8 +14,10 @@ import matplotlib.pyplot as plt
 import numpy as np
 import scipy.sparse as spr
 
+
 from config import SimInputData
 from data import Data
+from draw_net import draw_particles
 from network import Graph, Edges
 from incidence import Incidence
 
@@ -59,7 +61,7 @@ def track(sid: SimInputData, graph: Graph, inc: Incidence, edges: Edges, data: D
         vector of pressure in nodes
     """
     breakthrough_times = []
-    n_part = 1000
+    n_part = sid.n_tracking
     concentrations = []
     # find upstream neighbours
     neigh_inc = (spr.diags(edges.flow) @ inc.incidence > 0).T
@@ -72,7 +74,8 @@ def track(sid: SimInputData, graph: Graph, inc: Incidence, edges: Edges, data: D
     tot_time = np.abs(edges.lens / tot_velocity)
     # we introduce a particle to an inlet edge with probability proportional to
     # the flow in that edge
-    inlet_flow = edges.inlet * np.abs(edges.flow)
+    #inlet_flow = edges.inlet * np.abs(edges.flow)
+    inlet_flow = edges.inlet * np.ones_like(edges.flow)
     inlet_flow /= np.sum(inlet_flow)
     # standard and concentration weighted tracking
     
@@ -80,7 +83,12 @@ def track(sid: SimInputData, graph: Graph, inc: Incidence, edges: Edges, data: D
     exp = np.exp(-np.abs(sid.Da / (1 + sid.G * edges.diams) \
         * edges.diams * edges.lens / edges.flow))
     # loop for tracking particles
+    flag = True
+    locations = []
     for _ in range(n_part):
+        if _ > sid.n_tracking / 10 and flag:
+            time_loc = np.average(breakthrough_times) / 3
+            flag = 0
         time = 0
         conc = 1
         # choose inlet edge to introduce particle
@@ -92,6 +100,7 @@ def track(sid: SimInputData, graph: Graph, inc: Incidence, edges: Edges, data: D
         else:
             node = n1
         # travel until particle reaches an outlet node
+        flag2 = True
         while node not in graph.out_nodes:
             prob = []
             # get edge indices to neighbors of nodes
@@ -103,6 +112,10 @@ def track(sid: SimInputData, graph: Graph, inc: Incidence, edges: Edges, data: D
             edge = neigh_edges[np.random.choice(len(prob), p = prob)]
             # increase time and decrease concentration
             time += tot_time[edge]
+            if _ > sid.n_tracking / 10:
+                if flag2 and time > time_loc:
+                    locations.append(node)
+                    flag2 = False
             conc *= exp[edge]
             # if concentration is too low, reduce it to 0 (for plotting)
             if conc < 1e-40:
@@ -122,54 +135,57 @@ def track(sid: SimInputData, graph: Graph, inc: Incidence, edges: Edges, data: D
         * edges.diams * edges.lens / edges.flow) / 10)
     reactive_breakthrough_times = []
     # loop for tracking particles
-    while len(reactive_breakthrough_times) < n_part:
-        time = 0
-        conc = 1
-        # choose inlet edge to introduce particle
-        in_edge = np.random.choice(len(inlet_flow), p = inlet_flow)
-        n1, n2 = edges.edge_list[in_edge]
-        # put particle on the end of inlet edge with lower pressure
-        if pressure[n1] > pressure[n2]:
-            node = n2
-        else:
-            node = n1
-        # travel until particle is killed or reaches an outlet node
-        flag = True
-        while flag:
-            prob = []
-            # get edge indices to neighbors of nodes
-            neigh_edges = neigh_inc[node].nonzero()[1]
-            for edge in neigh_edges:
-                prob.append(tot_flow[edge])
-            prob = np.array(prob) / np.sum(prob)
-            # choose neighbor with probability dependent on flow
-            edge = neigh_edges[np.random.choice(len(prob), p = prob)]
-            time += tot_time[edge]
+    # while len(reactive_breakthrough_times) < n_part:
+    #     time = 0
+    #     conc = 1
+    #     # choose inlet edge to introduce particle
+    #     in_edge = np.random.choice(len(inlet_flow), p = inlet_flow)
+    #     n1, n2 = edges.edge_list[in_edge]
+    #     # put particle on the end of inlet edge with lower pressure
+    #     if pressure[n1] > pressure[n2]:
+    #         node = n2
+    #     else:
+    #         node = n1
+    #     # travel until particle is killed or reaches an outlet node
+    #     flag = True
+    #     while flag:
+    #         prob = []
+    #         # get edge indices to neighbors of nodes
+    #         neigh_edges = neigh_inc[node].nonzero()[1]
+    #         for edge in neigh_edges:
+    #             prob.append(tot_flow[edge])
+    #         prob = np.array(prob) / np.sum(prob)
+    #         # choose neighbor with probability dependent on flow
+    #         edge = neigh_edges[np.random.choice(len(prob), p = prob)]
+    #         time += tot_time[edge]
             
-            # kill particle with probability depending on amount of
-            # reaction in a given edge
-            if np.random.rand() < conc * (1 - exp[edge]):
-                # if particle is killed, break loop and skip it in data
-                break
-            conc *= exp[edge]
-            n1, n2 = edges.edge_list[edge]
-            # change node to the chosen one
-            if n1 == node:
-                node = n2
-            else:
-                node = n1
-            # if particle reached outlet, end loop
-            if node in graph.out_nodes:
-                flag = False
-        # if particle reached outlet, include it in data
-        if not flag:
-            reactive_breakthrough_times.append(time)
+    #         # kill particle with probability depending on amount of
+    #         # reaction in a given edge
+    #         if np.random.rand() < conc * (1 - exp[edge]):
+    #             # if particle is killed, break loop and skip it in data
+    #             break
+    #         conc *= exp[edge]
+    #         n1, n2 = edges.edge_list[edge]
+    #         # change node to the chosen one
+    #         if n1 == node:
+    #             node = n2
+    #         else:
+    #             node = n1
+    #         # if particle reached outlet, end loop
+    #         if node in graph.out_nodes:
+    #             flag = False
+    #     # if particle reached outlet, include it in data
+    #     if not flag:
+    #         reactive_breakthrough_times.append(time)
     # collect reactive tracking times
     
     data.breakthrough_times.append(breakthrough_times)
     data.concentrations.append(concentrations)
     data.reactive_breakthrough_times.append(reactive_breakthrough_times)
     data.track_times.append("{0}".format(str(round(data.dissolved_v, 1) if data.dissolved_v % 1 else int(data.dissolved_v))))
+    draw_particles(sid, graph, edges, locations, \
+                    f'q_particles_{data.dissolved_v:.1f}.jpg', 'q')
+
 
 def create_bins(vals, num_bins, spacing = "log", x=[], weights=None, a_low=None, a_high=None, bin_edge = "center"):
     if a_low == None:
@@ -284,24 +300,25 @@ def plot_tracking(data: Data, nbins) -> None:
     ax2.set_xlabel('normalized time')
     ax3.set_xlabel('normalized time')
     ax1.set_ylabel('probability density')
-    bx1 = create_bins(data.breakthrough_times[-1], nbins)
-    bx3 = create_bins(data.reactive_breakthrough_times[-1], nbins)
+    bx1 = create_bins(data.breakthrough_times[-1] / np.median(data.breakthrough_times[-1]), nbins)
+    #bx3 = create_bins(data.reactive_breakthrough_times[-1] / np.median(data.reactive_breakthrough_times[-1]), nbins)
     colors = ['black', 'C0', 'C1', 'C2', 'C3', 'C4']
     #ymin = 10 ** (-10)
     #ymax = 10 ** (-1)
     for i, time in enumerate(data.track_times):
-        bx11, pdf = create_pdf(data.breakthrough_times[i], nbins, x = bx1)
+        bx11, pdf = create_pdf(data.breakthrough_times[i] / np.median(data.breakthrough_times[i]), nbins, x = bx1)
+        #avr = bx11[np.where(pdf == pdf.max())]
         ax1.loglog(bx11, pdf, "o", alpha = 1, markersize=12, label = time, color = colors[i])
         #ax1.set_ylim(ymin, ymax)
-        bx12, pdf = create_pdf(data.breakthrough_times[i], nbins, x = bx1, \
+        bx12, pdf = create_pdf(data.breakthrough_times[i] / np.median(data.breakthrough_times[i]), nbins, x = bx1, \
             weights = data.concentrations[i])
         ax2.loglog(bx12, pdf, "o", alpha = 1, markersize=12, label = time, color = colors[i])
         #ax2.set_ylim(ymin, ymax)
-        bx13, pdf = create_pdf(data.reactive_breakthrough_times[i], nbins, x = bx3)
-        ax3.loglog(bx13, pdf, "o", alpha = 1, markersize=12, label = time, color = colors[i])
-        #ax3.set_ylim(ymin, ymax)
+        # bx13, pdf = create_pdf(data.reactive_breakthrough_times[i] / np.median(data.reactive_breakthrough_times[i]), nbins, x = bx3)
+        # ax3.loglog(bx13, pdf, "o", alpha = 1, markersize=12, label = time, color = colors[i])
+        # #ax3.set_ylim(ymin, ymax)
     #legend = ax3.legend(loc='center right', bbox_to_anchor=(1.05, 0.5), prop={'size': 40}, frameon=False, handlelength = 0.2, borderpad = 0, handletextpad = 0.4)
-    legend = ax3.legend(loc='lower center', prop={'size': 40}, mode = 'expand', ncol = 5, frameon=False, handlelength = 0.2, borderpad = 0, handletextpad = 0.4)
+    legend = ax1.legend(loc='lower center', prop={'size': 40}, mode = 'expand', ncol = 5, frameon=False, handlelength = 0.2, borderpad = 0, handletextpad = 0.4)
     for legobj in legend.legend_handles:
         legobj.set_markersize(24.0)
     plt.savefig(data.dirname + f'/track.png', bbox_inches="tight")

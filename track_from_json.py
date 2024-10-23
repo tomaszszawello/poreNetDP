@@ -544,9 +544,9 @@ for i in range(1, 2):
     f = open(dirname + 'r_tracks.txt', 'r')
     data_r = np.loadtxt(f)
     for j, _ in enumerate(data):
-        tracking_list_tot[j].extend(data[j])
-        c_tracking_list_tot[j].extend(data_c[j])
-        r_tracking_list_tot[j].extend(data_r[j])
+        tracking_list_tot[j].extend(data[j] / np.average(data[j]))
+        c_tracking_list_tot[j].extend(data_c[j] / np.average(data_c[j]))
+        r_tracking_list_tot[j].extend(data_r[j] / np.average(data_r[j]))
 #%%
 nbins = 100
 #networks = ['0.00', '0.10', '0.20', '0.50', '1.00']

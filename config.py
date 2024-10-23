@@ -15,23 +15,23 @@ class SimInputData:
     ''' Configuration class for the whole simulation.
     '''
     # GENERAL
-    n: int = 100
+    n: int = 50
     "network size"
-    iters: int = 10000000
+    iters: int = 1000000
     "maximum number of iterations"
     tmax: float = 100000.
     "maximum time"
-    dissolved_v_max: float = 10
+    dissolved_v_max: float = 20
     "maximum dissolved pore volume"
     plot_every: int = 1
     "frequency of plotting the results"
-    track_every: int = 1
+    track_every: int = 2
     "frequency of checking channelization"
     track_list = [1, 2, 5, 10]
     "times of checking channelization"
 
     # DISSOLUTION & PRECIPITATION
-    Da_eff: float = 0.005
+    Da_eff: float = 0.5
     "effective Damkohler number"
     G: float = 5
     "diffusion to reaction ratio"
@@ -43,6 +43,11 @@ class SimInputData:
     "precipitation to dissolution acid capacity number"
     merge_length: float = 100.
     "diameter scale to length scale ratio for merging"
+    n_tracking = 2000
+
+    initial_pipe = False
+    pipe_diam = 5
+    pipe_width = 2
 
     # INCLUDE
     include_adt: bool = True
@@ -70,14 +75,14 @@ class SimInputData:
     "maximum timestep (for adaptive)"
 
     # DIAMETERS
-    noise: str = 'file_lognormal_k'
+    noise: str = 'gaussian'
     ("type of noise in diameters distribution: 'gaussian', 'lognormal', \
     'klognormal', 'file_lognormal_d', 'file_lognormal_k'")
-    noise_filename: str = 'n100lam10r1.dat'
+    noise_filename: str = 'n100lam10r01.dat'
     "name of file with initial diameters if noise == file_"
     d0: float = 1.
     "initial dimensionless mean diameter"
-    sigma_d0: float = 0.1
+    sigma_d0: float = 0.
     "initial diameter standard deviation"
     dmin: float = 0
     "minimum diameter"
@@ -99,7 +104,7 @@ class SimInputData:
     "threshold for drawing of diameters"
 
     # INITIALIZATION
-    load: int = 2
+    load: int = 0
     ("type of loading: 0 - build new network based on config and start new \
      simulation, 1 - load previous network from load_name and continue \
      simulation, 2 - load template network from load_name and start new \
@@ -133,7 +138,8 @@ class SimInputData:
     "total time of simulation"
     Q_in = 1.
     "total inlet flow (updated later)"
-    dirname: str = geo + str(n) + '/' + f'G{G:.2f}Daeff{Da_eff:.2f}'
+    #dirname: str = geo + str(n) + '/' + f'G{G:.2f}Daeff{Da_eff:.2f}'
+    dirname: str = 'tracking/' + f'G{G:.2f}Daeff{Da_eff:.2f}'
     "directory of simulation"
     initial_merging: int = 5
     "number of initial merging iterations"

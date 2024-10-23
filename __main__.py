@@ -59,7 +59,7 @@ while t < tmax and i < iters and data.dissolved_v < sid.dissolved_v_max:
         data.check_init_slice_channelization(graph, inc, edges)
         data.check_slice_channelization(graph, inc, edges, t)
         Tr.track(sid, graph, inc, edges, data, pressure)
-        Dr.draw_flow(sid, graph, edges, f'q_{data.dissolved_v:.1f}.jpg', 'q')
+        # Dr.draw_flow(sid, graph, edges, f'q_{data.dissolved_v:.1f}.jpg', 'q')
         save_VTK(sid, graph, edges, pressure, cb, \
             f'network_{data.dissolved_v:.1f}.vtk')
     else:
@@ -105,3 +105,4 @@ if i != 1 and sid.load != 1:
     Dr.draw_flow_profile(sid, graph, edges, data, \
             f'focusing_q_{data.dissolved_v:.1f}.jpg', 'q')
     
+Tr.plot_tracking(data, 100)

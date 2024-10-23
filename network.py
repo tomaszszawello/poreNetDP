@@ -282,6 +282,7 @@ def build_delaunay_net(sid: SimInputData, inc: Incidence) \
     boundary_edges = []
     boundary_nodes = []
     lens = []
+    pipe_diams = []
     edge_index = 0
 
     merge_matrix_row = []
@@ -314,12 +315,19 @@ def build_delaunay_net(sid: SimInputData, inc: Incidence) \
             np.linalg.norm(np.array(pos[n2]) - np.array(pos[n3])))
 
         edge_index_list = []
+        
         for i, edge in enumerate((sorted((n1_new, n2_new)), \
             sorted((n1_new, n3_new)), sorted((n2_new, n3_new)))):
             node1, node2 = edge
             if (node1, node2) not in edge_list:
                 edge_list[(node1, node2)] = edge_index
                 cur_edge_index = edge_index
+
+                if sid.initial_pipe:
+                    if pos[node1][1] < sid.n / 2 + sid.pipe_width and pos[node1][1] > sid.n / 2 - sid.pipe_width and pos[node2][1] < sid.n / 2 + sid.pipe_width and pos[node2][1] > sid.n / 2 - sid.pipe_width:
+                        pipe_diams.append(sid.pipe_diam)
+                    else:
+                        pipe_diams.append(0)
                 lens.append(lens_tr[i])
                 edge_index += 1
                 if bound and i > 0:
@@ -377,6 +385,9 @@ def build_delaunay_net(sid: SimInputData, inc: Incidence) \
     lens = np.array(lens)
     
     diams /= np.average(diams)
+    if sid.initial_pipe:
+        diams += np.array(pipe_diams)
+    
     merge_matrix_data = np.array(merge_matrix_data) / np.average(lens)
     inc.merge = spr.csr_matrix((merge_matrix_data, (merge_matrix_row, \
         merge_matrix_col)), shape=(sid.ne, sid.ne)) * sid.merge_length

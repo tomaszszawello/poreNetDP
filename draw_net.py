@@ -319,3 +319,95 @@ def draw_diams_profile(sid: SimInputData, graph: Graph, edges: Edges, \
     # save file in the directory
     plt.savefig(sid.dirname + "/" + name, bbox_inches="tight")
     plt.close()
+
+def draw_particles(sid: SimInputData, graph: Graph, edges: Edges, locations: list, \
+    name: str, plot_type: str) -> None:
+    """ Draw the network with diameters/flow as edge width.
+
+    This function plots the network with one of parameters as edge width, as
+    well as some histograms of key data.
+
+    Parameters
+    -------
+    sid : SimInputData
+        all config parameters of the simulation
+        figsize - size of the plot (~resolution)
+        ddrawconst - scaling parameter to improve visibility when drawing
+        diameters
+        qdrawconst - scaling parameter to improve visibility when drawing flow
+        dirname - directory of the simulation
+
+    graph : Graph class object
+        network and all its properties
+        in_nodes - list of inlet nodes
+        out_nodes - list of outlet nodes
+
+    edges : Edges class object
+        all edges in network and their parameters
+        diams - diameters of edges
+        diams_initial - initial diameters of edges
+        flow - flow in edges
+        boundary_list - edges assuring PBC (to be excluded from drawing)
+
+    cb : numpy ndarray
+        vector of current B concentration
+
+    cc : numpy ndarray
+        vector of current C concentration
+
+    name : str
+        name of the saved file with the plot
+
+    data : str
+        parameter taken as edge width (diameter or flow)
+    """
+    plt.figure(figsize=(sid.figsize, sid.figsize))
+    plt.suptitle(f'G = {sid.G:.2f}', fontsize = 1, color='white')
+    spec = gridspec.GridSpec(ncols = 2, nrows = 1, width_ratios=[100, 1])
+    # draw first panel for the network
+    ax1 = plt.subplot(spec[0])
+    plt.axis('equal')
+    ax1.set_axis_on()
+    ax1.tick_params(bottom=True)
+    plt.xlim(0, sid.n)
+    plt.ylim(0, sid.n)
+    plt.xlabel('x', fontsize = 60, style = 'italic')
+    #plt.ylabel('flow focusing index', fontsize = 40)
+    plt.yticks([], [])
+    #ax1.yaxis.label.set_color('white')
+    #ax1.tick_params(axis = 'y', colors='white')
+    ax1.xaxis.label.set_color('white')
+    ax1.tick_params(axis = 'x', colors='white')
+    pos = nx.get_node_attributes(graph, 'pos')
+    # draw inlet and outlet nodes
+    x_in, y_in = [], []
+    for node in graph.in_nodes:
+        x_in.append(pos[node][0])
+        y_in.append(pos[node][1])
+    x_out, y_out = [], []
+    for node in graph.out_nodes:
+        x_out.append(pos[node][0])
+        y_out.append(pos[node][1])
+    x_part, y_part = [], []
+    for node in locations:
+        x_part.append(pos[node][0])
+        y_part.append(pos[node][1])
+    plt.scatter(x_in, y_in, s = 1000 / sid.n, facecolors = 'white', \
+        edgecolors = 'black')
+    plt.scatter(x_out, y_out, s = 1000 / sid.n, facecolors = 'black', \
+        edgecolors = 'white')
+
+    if plot_type == 'q':
+        qs = (1 - edges.boundary_list) * np.abs(edges.flow)
+        draw_const = sid.qdrawconst
+    else:
+        qs = (1 - edges.boundary_list) * np.abs(edges.diams) * (edges.diams > 0)
+        draw_const = sid.ddrawconst
+    qs = np.clip(qs / np.median(qs), None, 2)
+    nx.draw_networkx_edges(graph, pos, edges.edge_list, edge_color = 'k', \
+        width = draw_const * 3 * np.array(qs), hide_ticks = False)
+    plt.scatter(x_part, y_part, s = 1000 / sid.n, facecolors = 'red', \
+        edgecolors = 'white')
+    plt.subplots_adjust(wspace=0, hspace=0)
+    plt.savefig(sid.dirname + "/" + name, bbox_inches="tight")
+    plt.close()
