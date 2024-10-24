@@ -402,13 +402,13 @@ def solve_dissolution_an(sid: SimInputData, inc: Incidence, graph: Graph, \
     #upstream = 1 * (spr.diags(edges.flow) @ inc.incidence > 0).T
     upstream = 1 * (inc.incidence.T @ spr.diags(edges.flow) < 0)
     
-    #downstream = 1 * spr.diags(edges.flow) @ inc.incidence < 0
+    #downstream = 1 * (spr.diags(edges.flow) @ inc.incidence < 0)
     #np.savetxt('upstream.txt', upstream.toarray())
     while np.linalg.norm(cb - cb_prev) > sid.c_th or np.linalg.norm(cc - cc_prev) > sid.c_th:
         cb_in = np.abs((spr.diags(edges.flow) @ inc.incidence > 0)) @ cb
         cc_in = np.abs((spr.diags(edges.flow) @ inc.incidence > 0)) @ cc
         alpha = np.abs(sid.Da / (1 + sid.G * edges.diams) \
-            / sid.c_eq * edges.diams * edges.lens * (edges.diams > sid.dmin) / edges.flow)
+            / sid.c_eq * edges.diams * edges.lens / edges.flow)
         exp_a = np.exp(-alpha * (cb_in - cc_in))
         alpha = np.array(np.ma.fix_invalid(alpha, fill_value = 0))
         exp_a = np.array(np.ma.fix_invalid(exp_a, fill_value = 0)) * (cb_in >= cc_in) + np.array(np.ma.fix_invalid(exp_a, fill_value = 1e10)) * (cc_in > cb_in)
@@ -519,7 +519,7 @@ def solve_dissolution_an2(sid: SimInputData, inc: Incidence, graph: Graph, \
         cb_in = np.abs((spr.diags(edges.flow) @ inc.incidence > 0)) @ cb
         cc_in = np.abs((spr.diags(edges.flow) @ inc.incidence > 0)) @ cc
         alpha = np.abs(sid.Da / (1 + sid.G * edges.diams) \
-            / sid.c_eq * edges.diams * edges.lens * (edges.diams > sid.dmin) / edges.flow)
+            / sid.c_eq * edges.diams * edges.lens / edges.flow)
         exp_a = np.exp(-alpha * (cb_in - cc_in))
         alpha = np.array(np.ma.fix_invalid(alpha, fill_value = 0))
         exp_a = np.array(np.ma.fix_invalid(exp_a, fill_value = 0))
@@ -643,7 +643,7 @@ def solve_dissolution_v2(sid: SimInputData, inc: Incidence, graph: Graph, \
         cb_in = np.abs((spr.diags(edges.flow) @ inc.incidence > 0)) @ cb
         cc_in = np.abs((spr.diags(edges.flow) @ inc.incidence > 0)) @ cc
         alpha = np.abs(sid.Da / (1 + sid.G * edges.diams) \
-            / sid.c_eq * edges.diams * edges.lens * (edges.diams > sid.dmin) / edges.flow)
+            / sid.c_eq * edges.diams * edges.lens / edges.flow)
         exp_a = np.exp(-alpha * (cb_in - cc_in))
         alpha = np.array(np.ma.fix_invalid(alpha, fill_value = 0))
         exp_a = np.array(np.ma.fix_invalid(exp_a, fill_value = 0)) * (cb_in >= cc_in) + np.array(np.ma.fix_invalid(exp_a, fill_value = 1e10)) * (cc_in > cb_in)

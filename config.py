@@ -41,7 +41,7 @@ class SimInputData:
     "list of time measures in which tracking is performed"
 
     # DISSOLUTION & PRECIPITATION
-    Da_eff: float = 10
+    Da_eff: float = 30
     "effective Damkohler number"
     G: float = 0
     "diffusion to reaction ratio"
@@ -57,7 +57,7 @@ class SimInputData:
     "include pore merging"
     tracking_mode = 'time'
 
-    cut_edges = False
+    cut_edges = True
 
     # INITIAL CONDITIONS
     qin: float = 1.

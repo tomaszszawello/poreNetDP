@@ -88,4 +88,4 @@ if i != 1 and sid.load != 1:
     Dr.draw_c(sid, graph, edges, f'color{t:05}.jpg', 'd', cb_in, cc_in)
     #Dr.draw_c(sid, graph, edges, f'd{t:05}.jpg', 'd', cb_in, cc_in)
     #save_VTK(sid, graph, edges, pressure, cb, f'network_{t:.2f}.vtk')
-    save("save.dill", sid, graph, inc, edges)
+    save("/save.dill", sid, graph, inc, edges)

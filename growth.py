@@ -79,7 +79,7 @@ def update_diameters(sid: SimInputData, inc: Incidence, edges: Edges, \
         dt_next = sid.dt
     diams_new = edges.diams + change * dt_next
     if sid.cut_edges:
-        diams_new = diams_new * (diams_new >= sid.dmin)
+        diams_new = diams_new * (diams_new > sid.dmin)
         if np.sum(diams_new == 0) != np.sum(edges.diams == 0):
             print("Edges cut")
         inc.incidence = inc.incidence.multiply(1 * (diams_new > 0)[:, np.newaxis])
