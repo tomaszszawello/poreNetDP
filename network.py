@@ -132,10 +132,10 @@ def set_geometry(sid: SimInputData, graph: Graph) -> None:
     # the right side are the outlet
     if sid.geo == 'rect':
         graph.in_nodes = np.arange(0, sid.n, 1)
-        graph.out_nodes = np.arange(sid.n * (sid.n - 1), sid.nsq, 1)
+        graph.out_nodes = np.arange(sid.n * (sid.m - 1), sid.nsq, 1)
         graph.in_vec = np.concatenate((np.ones(sid.n), \
-            np.zeros(sid.n * (sid.n - 1))))
-        graph.out_vec = np.concatenate((np.zeros(sid.n * (sid.n - 1)), \
+            np.zeros(sid.n * (sid.m - 1))))
+        graph.out_vec = np.concatenate((np.zeros(sid.n * (sid.m - 1)), \
             np.ones(sid.n)))
     # own geometry - inlet and outlet nodes are found based on the positions
     # given in config
@@ -224,6 +224,9 @@ class Edges():
         self.diams_initial = diams
         self.merged = np.zeros_like(diams)
         self.transversed = np.zeros_like(diams)
+        self.A = np.zeros_like(diams)
+        self.B = np.zeros_like(diams)
+        self.diams_draw = diams.copy()
 
 def build_delaunay_net(sid: SimInputData, inc: Incidence) \
     -> tuple(Graph, Edges):
@@ -245,24 +248,24 @@ def build_delaunay_net(sid: SimInputData, inc: Incidence) \
     points_left = np.linspace([0, 0], [0, sid.n - 1], sid.n) + \
         np.array([0, 0.5])
     points_right = np.linspace([0, 0], [0, sid.n - 1], sid.n) + \
-        np.array([sid.n, 0.5])
-    points_top = np.random.uniform(0.5, sid.n - 0.5, (sid.n, 2)) * \
-        np.array([1, 0]) + np.random.uniform(0, 1, (sid.n, 2)) * \
+        np.array([sid.m, 0.5])
+    points_top = np.random.uniform(0.5, sid.m - 0.5, (sid.m, 2)) * \
+        np.array([1, 0]) + np.random.uniform(0, 1, (sid.m, 2)) * \
         np.array([0, 1])
-    points_bottom = np.random.uniform(0.5, sid.n - 0.5, (sid.n, 2)) * \
+    points_bottom = np.random.uniform(0.5, sid.m - 0.5, (sid.m, 2)) * \
         np.array([1, 0]) + np.array([0, sid.n]) - \
-        np.random.uniform(0, 1, (sid.n, 2)) * np.array([0, 1])
-    points_middle = np.random.uniform(0.5, sid.n - 0.5, \
-        (sid.n * (sid.n - 4), 2)) * np.array([1, 0]) + np.random.uniform(1, \
-        sid.n - 1, (sid.n * (sid.n - 4), 2)) * np.array([0, 1])
+        np.random.uniform(0, 1, (sid.m, 2)) * np.array([0, 1])
+    points_middle = np.random.uniform(0.5, sid.m - 0.5, \
+        ((sid.m - 2) * (sid.n - 2) - 4, 2)) * np.array([1, 0]) + np.random.uniform(1, \
+        sid.n - 1, ((sid.m - 2) * (sid.n - 2) - 4, 2)) * np.array([0, 1])
     points = np.concatenate((points_middle, points_left, points_right, \
         points_top, points_bottom))
     points = np.array(sorted(points, key = lambda elem: (elem[0], elem[1])))
 
     points_above_pbc = points.copy() + np.array([0, sid.n])
     points_below_pbc = points.copy() + np.array([0, -sid.n])
-    points_right_pbc =  points.copy() + np.array([sid.n, 0])
-    points_left_pbc = points.copy() + np.array([-sid.n, 0])
+    points_right_pbc =  points.copy() + np.array([sid.m, 0])
+    points_left_pbc = points.copy() + np.array([-sid.m, 0])
 
     if sid.periodic == 'none':
         pos = points
@@ -320,12 +323,20 @@ def build_delaunay_net(sid: SimInputData, inc: Incidence) \
             sorted((n1_new, n3_new)), sorted((n2_new, n3_new)))):
             node1, node2 = edge
             if (node1, node2) not in edge_list:
+                if pos[node1][0] == 0 and pos[node2][0] == 0:
+                    continue
+                if pos[node1][0] == sid.n and pos[node2][0] == sid.n:
+                    continue
                 edge_list[(node1, node2)] = edge_index
                 cur_edge_index = edge_index
 
                 if sid.initial_pipe:
                     if pos[node1][1] < sid.n / 2 + sid.pipe_width and pos[node1][1] > sid.n / 2 - sid.pipe_width and pos[node2][1] < sid.n / 2 + sid.pipe_width and pos[node2][1] > sid.n / 2 - sid.pipe_width:
-                        pipe_diams.append(sid.pipe_diam)
+                        if pos[node1][0] < sid.n / 10 and pos[node2][0] < sid.n / 10:
+                            pipe_diams.append(sid.pipe_diam)
+                        else:
+                            pipe_diams.append(0)
+                        #pipe_diams.append(sid.pipe_diam)
                     else:
                         pipe_diams.append(0)
                 lens.append(lens_tr[i])

@@ -88,14 +88,12 @@ def solve_flow(sid: SimInputData, inc: Incidence, graph: Graph, edges: Edges, \
     # for all inlet nodes we set the same pressure, for outlet nodes we set
     # zero pressure; so for boundary nodes we zero the elements of p_matrix
     # and add identity for those rows
-    p_matrix = p_matrix.multiply(inc.middle) + inc.boundary
+    p_matrix = p_matrix.multiply((1 - graph.in_vec - graph.out_vec)[:, np.newaxis]) + spr.diags(graph.in_vec + graph.out_vec)
     diag = p_matrix.diagonal()
+    diag_old = diag.copy()
     # fix for nodes with no connections
-    for i, node in enumerate(diag):
-        if node == 0:
-            diag[i] = 1
-    # replace diagonal
-    p_matrix.setdiag(diag)
+    diag += 1 * (diag == 0)
+    p_matrix += spr.diags(diag - diag_old)
     # solve matrix @ pressure = pressure_b
     pressure = solve_equation(p_matrix, pressure_b)
     # normalize pressure in inlet nodes to match condition for constant inlet
@@ -105,5 +103,6 @@ def solve_flow(sid: SimInputData, inc: Incidence, graph: Graph, edges: Edges, \
     pressure *= sid.Q_in / q_in
     # update flow
     edges.flow = edges.diams ** 4 / edges.lens * (inc.incidence @ pressure)
-    p_continuity = p_matrix @ pressure * (1 - graph.in_vec - graph.out_vec)
+    #p_continuity = p_matrix @ pressure * (1 - graph.in_vec - graph.out_vec)
+    
     return pressure

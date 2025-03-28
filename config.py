@@ -16,34 +16,52 @@ class SimInputData:
     '''
     # GENERAL
     n: int = 50
+    m: int = 50
     "network size"
-    iters: int = 1000000
+    iters: int = 10000
     "maximum number of iterations"
-    tmax: float = 100000.
+    tmax: float = 10000000.
     "maximum time"
-    dissolved_v_max: float = 20
+    dissolved_v_max: float = 100
     "maximum dissolved pore volume"
-    plot_every: int = 1
+    plot_every: int = 100000
     "frequency of plotting the results"
-    track_every: int = 2
+    track_every: int = dissolved_v_max / 10
     "frequency of checking channelization"
     track_list = [1, 2, 5, 10]
     "times of checking channelization"
 
     # DISSOLUTION & PRECIPITATION
-    Da_eff: float = 0.5
-    "effective Damkohler number"
-    G: float = 5
+    Da_L = 100
+    Pe_L = 1
+    load_name: str = 'diffusion/Pe1000.00Da1000.00/1/template/71'
+    # Da: float = 100#0.67 * 10 ** -1
+    # "effective Damkohler number"
+    # Pe = 100.
+    chi0 = 0.1
+    Sh = 4
+    include_diffusion = True
+    Da = Da_L * np.pi * 2  * chi0 / (m)
+    Pe = Pe_L * 2 / (np.pi * chi0 ** 2)
+
+    G: float = Da * Pe / Sh * chi0 ** 2 / 4
     "diffusion to reaction ratio"
-    Da: float = Da_eff * (1 + G)
+    Da_eff: float = Da / (1 + G)
     "Damkohler number"
+    # G = 50
+    # Da_eff = 5
+    # Da = Da_eff * (1 + G)
     K: float = 0.5
     "precipitation to dissolution reaction rate"
     Gamma: float = 2.
     "precipitation to dissolution acid capacity number"
-    merge_length: float = 100.
+    merge_length: float = 1 / chi0
     "diameter scale to length scale ratio for merging"
     n_tracking = 2000
+
+    Jb_in = 1
+    diffusion_exp_limit = 10
+    "threshold above which we set the lambda+ solution for concentration to zero"
 
     initial_pipe = False
     pipe_diam = 5
@@ -68,39 +86,39 @@ class SimInputData:
     # TIME
     dt: float = 0.01
     "initial timestep (if no adaptive timestep, timestep for whole simulation)"
-    growth_rate: float = 0.01
+    growth_rate: float = 0.05
     ("maximum percentage growth of an edges (used for finding adaptive \
      timestep)")
-    dt_max: float = 5.
+    dt_max: float = 50000.
     "maximum timestep (for adaptive)"
 
     # DIAMETERS
-    noise: str = 'gaussian'
+    noise: str = 'file_lognormal_k'
     ("type of noise in diameters distribution: 'gaussian', 'lognormal', \
     'klognormal', 'file_lognormal_d', 'file_lognormal_k'")
-    noise_filename: str = 'n100lam10r01.dat'
+    noise_filename: str = 'n100m300lam30r01.dat' #'n200lam20r1.dat'
     "name of file with initial diameters if noise == file_"
     d0: float = 1.
     "initial dimensionless mean diameter"
-    sigma_d0: float = 0.
+    sigma_d0: float = 0
     "initial diameter standard deviation"
     dmin: float = 0
     "minimum diameter"
-    dmax: float = 1000.
+    dmax: float = n
     "maximum diameter"
     d_break: float = 4.
     "minimal diameter of outlet edge for network to be dissolved"
 
     # DRAWING
-    figsize: float = 10.
+    figsize: float = 30.
     "figure size"
-    qdrawconst: float = 0.3
+    qdrawconst: float = 10 / n
     "constant for improving flow drawing"
-    ddrawconst: float = 0.1
+    ddrawconst: float = 2400 / n * chi0 #10 / n
     "constant for improving diameter drawing"
     draw_th_q: float = 3
     "threshold for drawing of flow"
-    draw_th_d: float = 3
+    draw_th_d: float = 2
     "threshold for drawing of diameters"
 
     # INITIALIZATION
@@ -109,7 +127,8 @@ class SimInputData:
      simulation, 1 - load previous network from load_name and continue \
      simulation, 2 - load template network from load_name and start new \
      simulation")
-    load_name: str = 'rect100/G5.00Daeff0.05/1'
+    #load_name: str = 'tracking/Pe50.00Da20.00/1'
+    
     "name of loaded network"
 
     # GEOMETRY
@@ -130,7 +149,7 @@ class SimInputData:
     "number of edges (updated later)"
     ntr: int = 0
     "number of triangles (updated later)"
-    nsq: int = n ** 2
+    nsq: int = n * m #n ** 2
     "number of nodes"
     old_iters: int = 0
     "total iterations of simulation"
@@ -139,7 +158,7 @@ class SimInputData:
     Q_in = 1.
     "total inlet flow (updated later)"
     #dirname: str = geo + str(n) + '/' + f'G{G:.2f}Daeff{Da_eff:.2f}'
-    dirname: str = 'tracking/' + f'G{G:.2f}Daeff{Da_eff:.2f}'
+    dirname: str = 'diffusion/' + f'Pe{Pe_L:.2f}Da{Da_L:.2f}'
     "directory of simulation"
     initial_merging: int = 5
     "number of initial merging iterations"

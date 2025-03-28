@@ -20,7 +20,110 @@ from incidence import Incidence
 
 import draw_net as Dr
 
+def find_closest_node(graph: Graph, node0: int) -> int:
+    """ Find node in the graph closest to the given position.
 
+    Parameters
+    -------
+    graph : Graph class object
+        network and all its properties
+
+    pos : tuple
+        approximate position of the wanted node
+
+    Returns
+    -------
+    n_min : int
+        index of the node closest to the given position
+    """
+    x0, y0 = graph.nodes[node0]['pos']
+    def r_squared(node):
+        x, y = graph.nodes[node]['pos']
+        r_sqr = (x - x0) ** 2 + (y - y0) ** 2
+        return r_sqr
+    r_min = len(graph.nodes())
+    n_min = 0
+    for node in graph.nodes():
+        r = r_squared(node)
+        if r < r_min and node != node0:
+            r_min = r
+            n_min = node
+    return n_min
+
+
+def fix_merging(sid: SimInputData, inc: Incidence, graph: Graph, \
+    edges: Edges):
+    merge_fix_edge = np.where(((np.array((inc.merge != 0).sum(axis = 0))[0] == 0) * (edges.diams != 0) * (1 - edges.inlet - edges.outlet)) != 0)[0]
+    print(merge_fix_edge)
+    for edge in merge_fix_edge:
+        print(edge)
+        print(graph.in_vec[:10])
+        try:
+            n1, n2 = inc.incidence[edge].nonzero()[1]
+        except:
+            np.savetxt('inc.txt', inc.incidence.toarray())
+            print(edges.diams[edge])
+            print(edges.edge_list[edge])
+
+        edges_n1 = inc.incidence.T[n1].nonzero()[1]
+        edges_n2 = inc.incidence.T[n2].nonzero()[1]
+        r_min = sid.n
+        edge_index = -1
+        for new_edge in edges_n1:
+            if new_edge != edge:
+                n3, n4 = inc.incidence[new_edge].nonzero()[1]
+                if n3 == n1:
+                    n3, n4 = n4, n3
+                x1, y1 = graph.nodes[n2]['pos']
+                x2, y2 = graph.nodes[n3]['pos']
+                r = np.sqrt((x1 - x2) ** 2 + (y1 - y2) ** 2)
+                if r < r_min:
+                    r_min = r
+                    edge_index = new_edge
+        # inc.merge[edge, edge_index] = r
+        # inc.merge[edge_index, edge] = r
+        # r_min = sid.n
+        # edge_index = -1
+        for new_edge in edges_n2:
+            if new_edge != edge:
+                n3, n4 = inc.incidence[new_edge].nonzero()[1]
+                if n3 == n2:
+                    n3, n4 = n4, n3
+                x1, y1 = graph.nodes[n1]['pos']
+                x2, y2 = graph.nodes[n3]['pos']
+                r = np.sqrt((x1 - x2) ** 2 + (y1 - y2) ** 2)
+                if r < r_min:
+                    r_min = r
+                    edge_index = new_edge
+        if edge_index != -1:
+            inc.merge[edge, edge_index] = r
+            inc.merge[edge_index, edge] = r
+            print('added possible merging ', edge, edge_index)
+        # edges_n2 = inc.incidence.T[n2].nonzero()[1]
+        # for new_edge in edges_n1:
+        #     print(new_edge)
+        #     n3, n4 = inc.incidence[new_edge].nonzero()[1]
+        #     if n3 == n1:
+        #         n3, n4 = n4, n3
+        #     if n3 in edges_n2.flatten():
+        #         print('Fixing! ', n3, n2)
+        #         x1, y1 = graph.nodes[n2]['pos']
+        #         x2, y2 = graph.nodes[n3]['pos']
+        #         r = np.sqrt((x1 - x2) ** 2 + (y1 - y2) ** 2)
+        #         inc.merge[edge, new_edge] = r
+        #         inc.merge[new_edge, edge] = r
+        # for new_edge in edges_n2:
+        #     print(new_edge)
+        #     n3, n4 = inc.incidence[new_edge].nonzero()[1]
+        #     if n3 == n2:
+        #         n3, n4 = n4, n3
+        #     if n3 in edges_n1.flatten():
+        #         print('Fixing! ', n3, n1)
+        #         x1, y1 = graph.nodes[n1]['pos']
+        #         x2, y2 = graph.nodes[n3]['pos']
+        #         r = np.sqrt((x1 - x2) ** 2 + (y1 - y2) ** 2)
+        #         inc.merge[edge, new_edge] = r
+        #         inc.merge[new_edge, edge] = r
 
 def solve_merging(sid: SimInputData, inc: Incidence, graph: Graph, \
     edges: Edges, merging_type: str = 'standard'):
@@ -31,6 +134,10 @@ def solve_merging(sid: SimInputData, inc: Incidence, graph: Graph, \
     merge_edges = ((inc.merge @ spr.diags(1 - edges.merged) > 0) \
         @ spr.diags(edges.diams) + ((inc.merge.T @ spr.diags(1 - edges.merged) \
             > 0) @ spr.diags(edges.diams)).T) / 2 > inc.merge
+    # if np.sum(merge_edges) == inc.prev_merge:
+    #     return None
+    # else:
+    #     inc.prev_merge = np.sum(merge_edges)
     merged, zeroed, transversed = [], [], []
     merged_diams, zeroed_diams = [], []
     merged_nodes = []
@@ -64,14 +171,39 @@ def solve_merging(sid: SimInputData, inc: Incidence, graph: Graph, \
         if merge_i in merged + zeroed + transversed_flat or zero_i in merged + \
             zeroed + transversed_flat:
             continue
-        n1, n2 = inc.incidence[merge_i].nonzero()[1]
-        n3, n4 = inc.incidence[zero_i].nonzero()[1]
-        if (n1 in graph.in_nodes and n2 in graph.in_nodes) or \
-            (n1 in graph.out_nodes and n2 in graph.out_nodes):
-            continue
-        if (n3 in graph.in_nodes and n4 in graph.in_nodes) or \
-            (n3 in graph.out_nodes and n4 in graph.out_nodes):
-            continue
+        try:
+            n1, n2 = inc.incidence[merge_i].nonzero()[1]
+        except:
+            np.savetxt('inc.txt', inc.incidence.toarray())
+            print(merge_i, zero_i)
+            #print(n1, n2)
+            print(inc.incidence[zero_i].nonzero()[1])
+            print(edges.edge_list[merge_i])
+            print(edges.edge_list[zero_i])
+            import draw_net as Dr
+            Dr.draw_nodes(sid, graph, edges, np.ones(sid.nsq), \
+                'labels.png', 'd')
+            raise ValueError('n1')
+        # if (n1 in graph.in_nodes and n2 in graph.in_nodes) or \
+        #     (n1 in graph.out_nodes and n2 in graph.out_nodes):
+        #     continue
+        try:
+            n3, n4 = inc.incidence[zero_i].nonzero()[1]
+        except:
+            np.savetxt('inc.txt', inc.incidence.toarray())
+            print(merge_i, zero_i)
+            print(n1, n2)
+            print(inc.incidence[zero_i].nonzero()[1])
+            print(edges.edge_list[merge_i])
+            print(edges.edge_list[zero_i])
+            import draw_net as Dr
+            Dr.draw_nodes(sid, graph, edges, np.ones(sid.nsq), \
+                'labels.png', 'd')
+            raise ValueError('n3')
+
+        # if (n3 in graph.in_nodes and n4 in graph.in_nodes) or \
+        #     (n3 in graph.out_nodes and n4 in graph.out_nodes):
+        #     continue
         if n1 == n3:
             merge_node = n2
             zero_node = n4
@@ -85,7 +217,14 @@ def solve_merging(sid: SimInputData, inc: Incidence, graph: Graph, \
             merge_node = n1
             zero_node = n3
         else:
-            raise ValueError("Wrong merging!")
+            inc.merge[merge_i, zero_i] = 0
+            inc.merge[zero_i, merge_i] = 0
+            continue
+        if np.abs(pos[merge_node][0] - pos[zero_node][0]) > 1:
+            inc.merge[merge_i, zero_i] = 0
+            inc.merge[zero_i, merge_i] = 0
+            continue
+            #raise ValueError("Wrong merging!")
         merge_nodes_flat = np.reshape(merged_nodes, 2 * len(merged_nodes))
         if merge_node in merge_nodes_flat or zero_node in merge_nodes_flat:
             continue
@@ -105,6 +244,16 @@ def solve_merging(sid: SimInputData, inc: Incidence, graph: Graph, \
             continue
         print (f"Merging {merge_i} {zero_i} {transverse_i_list} Nodes \
             {merge_node} {zero_node}")
+        if merge_node != zero_node:
+            if merge_node in graph.in_nodes:
+                for edge in inc.incidence.T[zero_node].nonzero()[1]:
+                    if edges.inlet[edge]:
+                        transverse_i_list.append(edge)
+            if merge_node in graph.out_nodes:
+                for edge in inc.incidence.T[zero_node].nonzero()[1]:
+                    if edges.outlet[edge]:
+                        transverse_i_list.append(edge)
+            
         merged.append(merge_i)
         zeroed.append(zero_i)
         transversed.append(transverse_i_list)
@@ -113,18 +262,20 @@ def solve_merging(sid: SimInputData, inc: Incidence, graph: Graph, \
         # TO DO: consider how merged diameter should be calculated
         d1, d2, l1, l2 = edges.diams[merge_i], edges.diams[zero_i], \
             edges.lens[merge_i], edges.lens[zero_i]
-        edges.diams[merge_i] = d1 + d2
-        edges.diams_initial[merge_i] += edges.diams_initial[zero_i]
-        edges.diams_initial[zero_i] = 0
-        edges.lens[merge_i] = d1 * l1 + d2 * l2
+        if merging_type == 'standard':
+            edges.diams[merge_i] = d1 + d2
+            edges.diams_initial[merge_i] += edges.diams_initial[zero_i]
+            edges.lens[merge_i] = d1 * l1 + d2 * l2
+        #edges.diams_initial[zero_i] = 0
         edges.diams[zero_i] = 0
         for transverse_i in transverse_i_list:
-            di, li = edges.diams[transverse_i], edges.lens[transverse_i]
-            edges.diams[merge_i] += di
-            edges.diams_initial[merge_i] += edges.diams_initial[transverse_i]
-            edges.diams_initial[transverse_i] = 0
+            if merging_type == 'standard':
+                di, li = edges.diams[transverse_i], edges.lens[transverse_i]
+                edges.diams[merge_i] += di
+                edges.diams_initial[merge_i] += edges.diams_initial[transverse_i]
+                edges.lens[merge_i] += di * li
+            #edges.diams_initial[transverse_i] = 0
             edges.diams[transverse_i] = 0
-            edges.lens[merge_i] += di * li
             edges.lens[transverse_i] = 1
             if edges.inlet[transverse_i]:
                 edges.inlet[merge_i] = 1
@@ -141,6 +292,12 @@ def solve_merging(sid: SimInputData, inc: Incidence, graph: Graph, \
         # edges.lens[merge_i] = edges.diams[merge_i] ** 4 \
         # / (d1 ** 4 / l1 + d2 ** 4 / l2)
         edges.lens[zero_i] = 1
+        if merge_node in graph.in_nodes:
+            for edge in inc.incidence.T[zero_node].nonzero()[1]:
+                edges.inlet[edge] = 1
+        if merge_node in graph.out_nodes:
+            for edge in inc.incidence.T[zero_node].nonzero()[1]:
+                edges.outlet[edge] = 1
         edges.inlet[zero_i] = 0
         edges.outlet[zero_i] = 0
         if edges.boundary_list[zero_i]:
@@ -160,9 +317,9 @@ def solve_merging(sid: SimInputData, inc: Incidence, graph: Graph, \
                         n3 not in graph.boundary_nodes:
                         graph.merged_triangles.append((merge_i, merge_node, \
                             zero_node, n4))
-            if merge_node not in graph.boundary_nodes and \
-                zero_node not in graph.boundary_nodes:
-                graph.nodes[zero_node]['pos'] = graph.nodes[merge_node]['pos']
+            # if merge_node not in graph.boundary_nodes and \
+            #     zero_node not in graph.boundary_nodes:
+            #     graph.nodes[zero_node]['pos'] = graph.nodes[merge_node]['pos']
             graph.zero_nodes.append(zero_node)
             # check if one of inlet/outlet nodes was merged
             if merge_node in graph.in_nodes and zero_node in graph.in_nodes:
@@ -172,7 +329,8 @@ def solve_merging(sid: SimInputData, inc: Incidence, graph: Graph, \
             else:
                 if zero_node in graph.out_nodes:
                     print (zero_node)
-        elif merging_type != 'initial':
+        else:
+            merged_nodes.append((merge_node, merge_node))
             n1, n2 = edges.edge_list[merge_i]
             n3, n4 = edges.edge_list[zero_i]
             if n3 != n1 and n3 != n2:
@@ -187,6 +345,9 @@ def solve_merging(sid: SimInputData, inc: Incidence, graph: Graph, \
         edges.merged[zero_i] = 1
         for transverse_i in transverse_i_list:
             edges.merged[transverse_i] = 1
+
+
+                
     if len(merged) > 0:
         # fix merge matrix
         plot_fix = spr.csr_matrix(spr.diags(np.ones(sid.ne)))
@@ -207,21 +368,31 @@ def solve_merging(sid: SimInputData, inc: Incidence, graph: Graph, \
         inc.merge += merge_fix + merge_fix.T
         diag_nodes = spr.csr_matrix(spr.diags(np.ones(sid.nsq)))
         for n1, n2 in merged_nodes:
-            diag_nodes[n1, n1] = 0
-            diag_nodes[n1, n2] = 1
+            if n1 != n2:
+                diag_nodes[n1, n1] = 0
+                diag_nodes[n1, n2] = 1
+                inc.merge_vec[n1] = 1
         merged_edges = np.ones(sid.ne)
         for edge in zeroed:
             merged_edges[edge] = 0
             edges.transversed[edge] = 1
+            inc.merge_vec[sid.nsq + edge] = 1
+            inc.merge_vec[sid.nsq + sid.ne + edge] = 1
         for transversed_list in transversed:
             for edge in transversed_list:
                 merged_edges[edge] = 0
+                inc.merge_vec[sid.nsq + edge] = 1
+                inc.merge_vec[sid.nsq + sid.ne + edge] = 1
         diag_edges = spr.diags(merged_edges)
         inc.incidence = diag_edges @ (inc.incidence @ diag_nodes)
+        #inc.incidence = ((diag_edges @ (inc.incidence @ diag_nodes)).T @ diag_edges).T
         sign_fix2 = 2 * inc.incidence @ graph.in_vec + edges.inlet + 2 * \
             inc.incidence @ graph.out_vec + edges.outlet
         sign_fix = 1 * (sign_fix2 == -1) - 1 * (sign_fix2 == 3) + \
             1 * (sign_fix2 == 0)
+        
+        inc.merge = diag_edges @ inc.merge @ diag_edges
+        
         diag_edges *= spr.diags(1 * (sign_fix != 0))
         edges.inlet *= (sign_fix != 0)
         edges.outlet *= (sign_fix != 0)
@@ -230,4 +401,30 @@ def solve_merging(sid: SimInputData, inc: Incidence, graph: Graph, \
         inc.middle = spr.diags(1 - graph.in_vec - graph.out_vec) @ \
             ((inc.incidence.T @ inc.incidence) != 0)
         inc.boundary = spr.diags(graph.in_vec + graph.out_vec)
+        diag = inc.merge.diagonal()
+        inc.merge -= spr.diags(diag)
+        #inc.merge = diag_edges @ inc.merge @ diag_edges
+        #fix_merging(sid, inc, graph, edges)
+        # np.savetxt('inc.txt', inc.incidence.toarray())
+        # np.savetxt('inl.txt', inc.inlet.toarray())
+
+
+                    
+
+def fix_connections(sid: SimInputData, inc: Incidence, graph: Graph, \
+    edges: Edges):
+    lonely_nodes = np.array(((1 * (inc.incidence.T @ inc.incidence != 0)).sum(axis = 0) == 2))[0] * (1 - graph.in_vec - graph.out_vec)
+    while(np.sum(lonely_nodes)):
+        lonely_edges = inc.incidence @ lonely_nodes
+        diag_edges = spr.diags(1 - lonely_edges)
+        diag_nodes = spr.diags(1 - lonely_nodes)
+        inc.incidence = (diag_nodes @ (diag_edges @ (inc.incidence @ diag_nodes)).T @ diag_edges).T
+        edges.inlet *= (1 - lonely_edges)
+        edges.outlet *= (1 - lonely_edges)
         inc.merge = diag_edges @ inc.merge @ diag_edges
+        inc.merge_vec += np.concatenate([lonely_nodes, lonely_edges, lonely_edges])
+        print(np.where(lonely_nodes > 0))
+        lonely_nodes = np.array(((1 * (inc.incidence.T @ inc.incidence != 0)).sum(axis = 0) == 2))[0] * (1 - graph.in_vec - graph.out_vec)
+        print("Lonely nodes removed")
+        print(np.where(lonely_edges > 0))
+        #raise ValueError('Alone...')
