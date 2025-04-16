@@ -154,6 +154,28 @@ def set_geometry(sid: SimInputData, graph: Graph) -> None:
         raise ValueError(f"Unknown geometry type: {sid.geo}")
     sid.Q_in = sid.qin * 2 * len(graph.in_nodes)
 
+class Triangles():
+    """ Container for information on space between edges.
+    
+    """
+    tlist = []
+    "list of triangles in the network"
+    boundary = []
+    "list of triangles on the boundary (to exclude for drawing)"
+    incidence = []
+    "incidence matrix for triangles and edges"
+    volume = []
+    "vector of geometrical volume of each triangle"
+    centers = []
+    "positions of centers of triangles"
+    def __init__(self):
+        self.tlist = []
+        self.boundary = []
+        self.incidence = []
+        self.volume = []
+        self.centers = []
+
+
 class Edges():
     """ Contains all data connected with network edges.
 
@@ -215,7 +237,13 @@ class Edges():
     "edges which were merged and should now be omitted"
     transversed: np.ndarray
     "edges which were merged as transverse"
-    def __init__(self, diams, lens, flow, edge_list, boundary_list):
+    triangles: np.ndarray
+    "number of triangles neighbouring each edge (usually 2)"
+    alpha_b : np.ndarray
+    ("vector scaling the effective reaction parameter for reaction B \
+    (defaultly equal 1, but could be < 1 when there is not enough volume to \
+    dissolve, for the reaction to proceed as usual)")
+    def __init__(self, diams, lens, flow, edge_list, boundary_list, triangles = np.array([])):
         self.diams = diams
         self.lens = lens
         self.flow = flow
@@ -227,9 +255,11 @@ class Edges():
         self.A = np.zeros_like(diams)
         self.B = np.zeros_like(diams)
         self.diams_draw = diams.copy()
+        self.triangles = triangles
+        self.alpha_b = np.zeros_like(diams)
 
 def build_delaunay_net(sid: SimInputData, inc: Incidence) \
-    -> tuple(Graph, Edges):
+    -> tuple(Graph, Edges, Triangles):
     """ Build Delaunay network with parameters from config.
 
     This function creates Delaunay network with size and boundary condition
@@ -288,6 +318,11 @@ def build_delaunay_net(sid: SimInputData, inc: Incidence) \
     pipe_diams = []
     edge_index = 0
 
+    triangles = Triangles()
+    triangles_inc_row = []
+    triangles_inc_col = []
+    triangles_inc_data = []
+
     merge_matrix_row = []
     merge_matrix_col = []
     merge_matrix_data = []
@@ -318,6 +353,13 @@ def build_delaunay_net(sid: SimInputData, inc: Incidence) \
             np.linalg.norm(np.array(pos[n2]) - np.array(pos[n3])))
 
         edge_index_list = []
+        
+        triangles.tlist.append((n1_new, n2_new, n3_new))
+        triangles.boundary.append(int(bound))
+        triangles.centers.append((pos[n1] + pos[n2] + pos[n3]) / 3)
+        triangles.volume.append(np.abs(pos[n1][0] * (pos[n2][1] - pos[n3][1]) \
+            + pos[n2][0] * (pos[n3][1] - pos[n1][1]) + pos[n3][0] \
+            * (pos[n1][1] - pos[n2][1])) / 2)
         
         for i, edge in enumerate((sorted((n1_new, n2_new)), \
             sorted((n1_new, n3_new)), sorted((n2_new, n3_new)))):
@@ -351,6 +393,10 @@ def build_delaunay_net(sid: SimInputData, inc: Incidence) \
                     boundary_edges[cur_edge_index] = 1
             edge_index_list.append(cur_edge_index)
 
+            triangles_inc_row.append(cur_edge_index)
+            triangles_inc_col.append(len(triangles.tlist) - 1)
+            triangles_inc_data.append(1)
+
         merge_matrix_row.extend(2 * edge_index_list)
         merge_matrix_col.extend(np.roll(edge_index_list, 1))
         merge_matrix_col.extend(np.roll(edge_index_list, 2))
@@ -363,6 +409,13 @@ def build_delaunay_net(sid: SimInputData, inc: Incidence) \
 
     edge_list = list(edge_list)
     sid.ne = len(edge_list)
+
+    sid.ntr = len(triangles.tlist)
+    triangles.volume = np.array(triangles.volume)
+    # triangles.volume = triangles.volume / np.average(triangles.volume) \
+    #     * sid.V_tot / sid.ntr
+    triangles.boundary = np.array(triangles.boundary)
+    triangles.incidence = spr.csr_matrix((triangles_inc_data, (triangles_inc_row, triangles_inc_col)), shape=(sid.ne, sid.ntr))
 
     if sid.noise == 'gaussian':
         diams = np.array(truncnorm.rvs(sid.dmin, sid.dmax, loc = sid.d0, \
@@ -384,7 +437,7 @@ def build_delaunay_net(sid: SimInputData, inc: Incidence) \
                 diams_array[n2 // sid.n, n2 % sid.n]) / 2)
         diams = np.array(diams)
     elif sid.noise == 'file_lognormal_k':
-        k_array = np.loadtxt(sid.noise_filename).T
+        k_array = np.loadtxt(sid.noise_filename)#.T
         k_array = np.roll(k_array, sid.n ** 2 // 3)
         k = []
         for n1, n2 in edge_list:
@@ -405,7 +458,11 @@ def build_delaunay_net(sid: SimInputData, inc: Incidence) \
     lens = lens / np.average(lens)
     flow = np.zeros(len(edge_list))
 
-    edges = Edges(diams, lens, flow, edge_list, boundary_edges)
+    edge_triangles = np.array(np.sum(triangles.incidence, axis = 1))[:, 0]
+
+    edges = Edges(diams, lens, flow, edge_list, boundary_edges, edge_triangles)
+
+    triangles.volume = triangles.volume / np.average(triangles.volume) * sid.V_tot
 
     graph = Graph()
     graph.add_nodes_from(list(range(sid.nsq)))
@@ -423,4 +480,4 @@ def build_delaunay_net(sid: SimInputData, inc: Incidence) \
 
     nx.set_node_attributes(graph, dict(zip(list(range(sid.nsq)), pos)), 'pos')
 
-    return graph, edges
+    return graph, edges, triangles

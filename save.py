@@ -11,11 +11,12 @@ import dill
 
 from config import SimInputData
 from incidence import Incidence
-from network import Edges, Graph
+from network import Edges, Graph, Triangles
+from volumes import Volumes
 
 
 def save(name: str, sid: SimInputData, graph: Graph, inc: Incidence, \
-    edges: Edges) -> None:
+    edges: Edges, triangles: Triangles, vols: Volumes) -> None:
     """ Save all simulation data.
 
     This function saves all data necessary to either continue simulation from
@@ -29,11 +30,11 @@ def save(name: str, sid: SimInputData, graph: Graph, inc: Incidence, \
     graph : Graph class object
         network and all its properties
     """
-    data = [sid, graph, inc, edges]
+    data = [sid, graph, inc, edges, triangles, vols]
     with open(sid.dirname+name, 'wb') as file:
         dill.dump(data, file)
 
-def load(name: str) -> tuple[SimInputData, Graph, Incidence, Edges]:
+def load(name: str) -> tuple[SimInputData, Graph, Incidence, Edges, Triangles, Volumes]:
     """ Load all simulation data.
 
     This function loads data necessary to recreate the simulation or continue
@@ -59,7 +60,9 @@ def load(name: str) -> tuple[SimInputData, Graph, Incidence, Edges]:
     graph = data[1]
     inc = data[2]
     edges = data[3]
-    return  sid, graph, inc, edges
+    triangles = data[4]
+    vols = data[5]
+    return  sid, graph, inc, edges, triangles, vols
 
 def save_config(sid: SimInputData) -> None:
     """ Save configuration of simulation to text file.

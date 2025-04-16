@@ -159,7 +159,7 @@ class Data():
         #     * edges.outlet)) @ cb * sid.dt)
 
 
-    def collect_data(self, sid: SimInputData, inc: Incidence, edges: Edges, \
+    def collect_data(self, sid: SimInputData, inc: Incidence, edges: Edges, vols, \
         p: np.ndarray, cb: np.ndarray, cc: np.ndarray) -> None:
         """ Collect data from different vectors.
 
@@ -194,7 +194,7 @@ class Data():
             vector of current substance C concentration
         """
         self.t.append(sid.old_t)
-        
+
         self.pressure.append(np.max(p))
         self.order.append((sid.ne - np.sum(edges.flow ** 2) ** 2 \
             / np.sum(edges.flow ** 4)) / (sid.ne - 1))
@@ -205,10 +205,52 @@ class Data():
         self.participation_ratio_denom.append(pi_prime)
         self.participation_ratio.append(pi / pi_prime)
         # calculate the difference between inflow and outflow of each substance
-        delta = np.abs((np.abs(inc.incidence.T < 0) @ (np.abs(edges.flow) \
-            * edges.inlet) - np.abs(inc.incidence.T > 0) @ (np.abs(edges.flow) \
-            * edges.outlet)) @ cb * sid.dt)
+
+        # if sid.include_diffusion:
+
+        #     lam_plus_val = sid.Pe / 2 / edges.diams ** 2 * \
+        #         (np.sqrt(np.abs(edges.flow) ** 2 + 4 * edges.alpha * sid.Da / (1 + sid.G * edges.diams) / sid.Pe * edges.diams ** 3) + np.abs(edges.flow))
+        #     lam_plus_val = np.array(np.ma.fix_invalid(lam_plus_val, fill_value = 0))
+        #     lam_plus_zero = 1 * (lam_plus_val > sid.diffusion_exp_limit)
+        #     lam_plus_val = lam_plus_val * (1 - lam_plus_zero)
+        #     lam_minus_val = sid.Pe / 2 / edges.diams ** 2 * \
+        #         (np.sqrt(np.abs(edges.flow) ** 2 + 4 * edges.alpha * sid.Da / (1 + sid.G * edges.diams) / sid.Pe * edges.diams ** 3) - np.abs(edges.flow))
+        #     lam_minus_val = np.array(np.ma.fix_invalid(lam_minus_val, fill_value = 0))
+        #     # Not sure how to calculate J_out - should it be just q_out c_out (as we set dc/dx = 0 at the outlet? - do we for 100%?)
+        #     # But no matter how I calculate, I end up with a small error, there could be some small bug
+        #     #J_in2 = np.sum(edges.inlet * (np.abs(edges.flow) * (edges.A * (1 - lam_plus_zero) + edges.B) - (1 - lam_plus_zero) / sid.Pe * edges.diams ** 2 * (lam_plus_val * edges.A - lam_minus_val * edges.B)))
+        #     #J_in = np.sum(edges.inlet * (np.abs(edges.flow) * (edges.A + edges.B) - 1 / sid.Pe * edges.diams ** 2 *  (lam_plus_val * edges.A - lam_minus_val * edges.B)))
+        #     #J_out2 = np.sum((1 - lam_plus_zero) * edges.outlet * (np.abs(edges.flow) * (edges.A * np.exp(lam_plus_val * edges.lens) + edges.B * np.exp(-lam_minus_val * edges.lens)) - 1 / sid.Pe * edges.diams ** 2 *(lam_plus_val * edges.A * np.exp(lam_plus_val * edges.lens) - lam_minus_val * edges.B * np.exp(-lam_minus_val * edges.lens))) + lam_plus_zero * edges.outlet * edges.B * np.abs(edges.flow) * np.exp(-edges.alpha * sid.Da / (1 + sid.G * edges.diams) * edges.diams * edges.lens / np.abs(edges.flow)))
+        #     #J_out = np.sum(edges.outlet * (np.abs(edges.flow) * (edges.A * np.exp(lam_plus_val * edges.lens) + edges.B * np.exp(-lam_minus_val * edges.lens)) - 1 / sid.Pe * edges.diams ** 2 *(lam_plus_val * edges.A * np.exp(lam_plus_val * edges.lens) - lam_minus_val * edges.B * np.exp(-lam_minus_val * edges.lens))))
+        #     #J_out = np.sum(edges.outlet * (np.abs(edges.flow) * (edges.A * np.exp(lam_plus_val * edges.lens) + edges.B * np.exp(-lam_minus_val * edges.lens)) - 1 / sid.Pe * edges.diams ** 2 *(lam_plus_val * edges.A * np.exp(lam_plus_val * edges.lens) - lam_minus_val * edges.B * np.exp(-lam_minus_val * edges.lens))))
+        #     J_in = np.sum(edges.inlet * (np.abs(edges.flow) * (edges.A * (1 - lam_plus_zero) + edges.B) - (1 - lam_plus_zero) / sid.Pe * edges.diams ** 2 * (lam_plus_val * edges.A - lam_minus_val * edges.B)))
+        #     J_out = np.abs(np.abs(inc.incidence.T > 0) @ (np.abs(edges.flow) \
+        #          * edges.outlet)) @ cb
+        
+        # J_out3 = np.abs(np.abs(inc.incidence.T > 0) @ (np.abs(edges.flow) \
+        #     * edges.outlet)) @ cb
+        # print(f'lam plus zero: {np.sum(lam_plus_zero), np.sum(1 - lam_plus_zero)}')
+        
+        # print(f'J_in2: {J_in2 * sid.dt}, J_out2: {J_out2 * sid.dt}')
+        # print(f'delta J_adv: {(np.sum(edges.inlet * (np.abs(edges.flow) * (edges.A + edges.B)))-np.sum(edges.outlet * (np.abs(edges.flow) * (edges.A * np.exp(lam_plus_val * edges.lens) + edges.B * np.exp(-lam_minus_val * edges.lens))))) * sid.dt}')
+        # print(f'delta J_diff: {(np.sum(edges.inlet * (- 1 / sid.Pe * edges.diams ** 2 *  (lam_plus_val * edges.A - lam_minus_val * edges.B)))-np.sum(edges.outlet * (-1 / sid.Pe * edges.diams ** 2 *(lam_plus_val * edges.A * np.exp(lam_plus_val * edges.lens) - lam_minus_val * edges.B * np.exp(-lam_minus_val * edges.lens))))) * sid.dt}')
+
+        # delta = np.abs((np.abs(inc.incidence.T < 0) @ (np.abs(edges.flow) \
+        #     * edges.inlet) - np.abs(inc.incidence.T > 0) @ (np.abs(edges.flow) \
+        #     * edges.outlet)) @ cb * sid.dt)
+        print(f'J_in: {self.J_in}, J_out: {self.J_out}')
+        delta = (self.J_in - self.J_out) * sid.dt
+        vol_dissolved = np.sum(edges.diams ** 2 * edges.lens) - self.vol_init
+        vol_a = np.sum(vols.vol_a_0 - vols.vol_a)
         self.delta_b += delta
+        # delta2 = np.abs((np.abs(inc.incidence.T < 0) @ (np.abs(edges.flow) \
+        #         * edges.inlet) - np.abs(inc.incidence.T > 0) @ (np.abs(edges.flow) \
+        #         * edges.outlet)) @ cb * sid.dt)
+        # print(f'Delta2: {delta2}')
+        # print(f'Delta3: {(J_in - J_out2) * sid.dt}')
+        # print(f'Delta4: {(J_in - J_out3) * sid.dt}')
+        print(f'Used concentration: {self.delta_b}, Dissolved volume: {sid.Da * vol_dissolved / 2}, Dissolved volume A: {sid.Da * vol_a / 2}')
+        print(f'c - V: {(self.delta_b - sid.Da * vol_dissolved / 2) / self.delta_b}, c - V_A: {(self.delta_b - sid.Da * vol_a / 2) / self.delta_b}, V - V_A {(vol_dissolved - vol_a) / vol_dissolved}')
         self.cb_out.append(self.delta_b)
         delta = np.abs((np.abs(inc.incidence.T < 0) @ (np.abs(edges.flow) \
             * edges.inlet) - np.abs(inc.incidence.T > 0) @ (np.abs(edges.flow) \
@@ -443,7 +485,7 @@ class Data():
         # slices = np.linspace(np.min(pos_x), np.max(pos_x), 120)[10:-10]
         slices = np.linspace(np.min(pos_x), np.max(pos_x), 102)[1:-1]
         edge_number  = np.array(self.slices[0])
-        colors = ['C0', 'C1', 'C2', 'C3']
+        colors = ['C0', 'C1', 'C2', 'C3', 'C4', 'C5', 'C6', 'C7', 'C8', 'C9']
         plt.figure(figsize = (15, 10))
         plt.plot([], [], ' ', label=' ')
         plt.plot([], [], ' ', label=' ')
@@ -474,8 +516,8 @@ class Data():
             else:
                 order.append(len(handles) // 2 + i)
         legend = plt.legend([handles[idx] for idx in order],[labels[idx] for idx in order], loc="lower center", mode = "expand", ncol = 4, prop={'size': 40}, handlelength = 1, frameon=False, borderpad = 0, handletextpad = 0.4)
-        for legobj in legend.legend_handles:
-            legobj.set_linewidth(10.0)
+        # for legobj in legend.legend_handles:
+        #     legobj.set_linewidth(10.0)
         #spine_color = 'blue'
         # for spine in ax1.spines.values():
         #     spine.set_linewidth(5)
