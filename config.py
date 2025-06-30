@@ -15,9 +15,9 @@ class SimInputData:
     ''' Configuration class for the whole simulation.
     '''
     # GENERAL
-    n: int = 50
+    n: int = 100
     "network size"
-    iters: int = 10000000
+    iters: int = 100#0000
     "maximum number of iterations"
     tmax: float = 100000.
     "maximum time"
@@ -27,13 +27,13 @@ class SimInputData:
     "frequency of plotting the results"
     track_every: int = 1
     "frequency of checking channelization"
-    track_list = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
+    track_list = [1, 2, 5, 10]
     "times of checking channelization"
 
     # DISSOLUTION & PRECIPITATION
-    Da_eff: float = 0.5
+    Da_eff: float = 0.04
     "effective Damkohler number"
-    G: float = 5
+    G: float = 5.0
     "diffusion to reaction ratio"
     Da: float = Da_eff * (1 + G)
     "Damkohler number"
@@ -49,7 +49,7 @@ class SimInputData:
     "include adaptive timestep"
     include_cc: bool = False
     "include precipitation"
-    include_merging: bool = True
+    include_merging: bool = False
     "include pore merging"
 
     # INITIAL CONDITIONS
@@ -61,9 +61,9 @@ class SimInputData:
     "inlet C concentration"
 
     # TIME
-    dt: float = 0.01
+    dt: float = 0.000001
     "initial timestep (if no adaptive timestep, timestep for whole simulation)"
-    growth_rate: float = 0.01
+    growth_rate: float = 0.05
     ("maximum percentage growth of an edges (used for finding adaptive \
      timestep)")
     dt_max: float = 5.
@@ -73,7 +73,7 @@ class SimInputData:
     noise: str = 'file_lognormal_k'
     ("type of noise in diameters distribution: 'gaussian', 'lognormal', \
     'klognormal', 'file_lognormal_d', 'file_lognormal_k'")
-    noise_filename: str = 'n100lam10r04.dat'
+    noise_filename: str = 'samples/n100l100r1_01.dat'
     "name of file with initial diameters if noise == file_"
     d0: float = 1.
     "initial dimensionless mean diameter"
@@ -89,9 +89,9 @@ class SimInputData:
     # DRAWING
     figsize: float = 10.
     "figure size"
-    qdrawconst: float = 0.3
+    qdrawconst: float = 0.6
     "constant for improving flow drawing"
-    ddrawconst: float = 0.1
+    ddrawconst: float = 2
     "constant for improving diameter drawing"
     draw_th_q: float = 3
     "threshold for drawing of flow"
@@ -133,7 +133,7 @@ class SimInputData:
     "total time of simulation"
     Q_in = 1.
     "total inlet flow (updated later)"
-    dirname: str = geo + str(n) + '/' + f'G{G:.2f}Daeff{Da_eff:.2f}'
+    dirname: str = f'G{G:.2f}Daeff{Da_eff:.2f}'
     "directory of simulation"
     initial_merging: int = 5
     "number of initial merging iterations"

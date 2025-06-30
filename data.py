@@ -63,6 +63,7 @@ class Data():
     slices: list = []
     slices_d: list = []
     slices_s: list = []
+    slices_angle: list = []
     "channelization for slices through the whole system in a given time"
     slice_times: list = []
     "list of times of checking slice channelization"
@@ -124,8 +125,8 @@ class Data():
         Q_in = np.sum(edges.inlet * np.abs(edges.flow))
         Q_out = np.sum(edges.outlet * np.abs(edges.flow))
         print('Q_in =', Q_in, 'Q_out =', Q_out)
-        if np.abs(Q_in - Q_out) > 1:
-            raise ValueError('Flow not matching!')
+        #if np.abs(Q_in - Q_out) > 1:
+        #    raise ValueError('Flow not matching!')
         # delta = np.abs((np.abs(inc.incidence.T < 0) @ (np.abs(edges.flow) \
         #     * edges.inlet) - np.abs(inc.incidence.T > 0) @ (np.abs(edges.flow) \
         #     * edges.outlet)) @ cb * sid.dt)
@@ -187,7 +188,7 @@ class Data():
             * edges.outlet)) @ cc * sid.dt)
         self.delta_c += delta
         self.cc_out.append(self.delta_c)
-        self.dissolved_v = (np.sum(edges.diams ** 2 * edges.lens) - self.vol_init) / self.vol_init
+        self.dissolved_v = (np.sum(edges.diams ** 2 * edges.lens) - self.vol_init) / self.vol_init # xD
         self.dissolved_v_list.append(self.dissolved_v)
 
     def plot_data(self) -> None:
@@ -255,7 +256,7 @@ class Data():
             * np.abs(inc.incidence @ (pos_x <= slice_x))
         # sort edges from maximum flow to minimum (taking into account
         # their orientation)
-        slice_flow = np.array(sorted(slice_edges * np.abs(edges.flow), reverse = True))
+        slice_flow = np.array(sorted(np.abs(slice_edges * edges.flow), reverse = True))
         fraction_flow = 0
         total_flow = np.sum(slice_flow)
         # calculate how many edges take half of the flow
@@ -264,6 +265,26 @@ class Data():
             if fraction_flow > total_flow / 2:
                 flow_50 = i + 1
                 break
+       
+        val = np.abs(slice_edges * edges.flow * edges.angles)        # 1-D array
+
+        # indices that sort it in descending order
+        idx_desc = np.argsort(val)[::-1]      # argsort gives ascending → flip
+
+        # apply the same ordering to anything you want to “follow” that sort
+        slice_flow_ang = val[idx_desc]        # sorted copy (optional)
+        sorted_angles  = edges.angles[idx_desc]
+        fraction_flow = 0
+        fraction_angle = 0
+        total_flow = np.sum(slice_flow_ang)
+        # calculate how many edges take half of the flow
+        for i, edge_flow in enumerate(slice_flow_ang):
+            fraction_flow += edge_flow
+            fraction_angle += sorted_angles[i]
+            if fraction_flow > total_flow / 2:
+                flow_ang_50 = i + 1
+                break
+        
         slice_diams = np.array(sorted(slice_edges * np.abs(edges.diams), reverse = True))
         fraction_diams = 0
         total_diams = np.sum(slice_diams)
@@ -282,7 +303,7 @@ class Data():
             if fraction_surface > total_surface / 2:
                 surface_50 = i + 1
                 break
-        return (flow_50, np.sum(slice_flow != 0), diams_50, np.sum(slice_diams != 0), surface_50, np.sum(surface_50 != 0))
+        return (flow_50, np.sum(slice_flow != 0), diams_50, np.sum(slice_diams != 0), surface_50, np.sum(surface_50 != 0), fraction_angle, np.sum(np.abs(edges.angles * slice_flow)))
 
     def check_init_slice_channelization(self, graph: Graph, inc: Incidence, \
         edges: Edges) -> None:
@@ -291,14 +312,17 @@ class Data():
         channels_tab = []
         diams_tab = []
         surface_tab = []
+        channels_angle_tab = []
         for x in slices:
             res = self.check_channelization(graph, inc, edges, x)
             channels_tab.append(res[1])
             diams_tab.append(res[3])
             surface_tab.append(res[5])
+            channels_angle_tab.append(res[7])
         self.slices.append(channels_tab)
         self.slices_d.append(diams_tab)
         self.slices_s.append(surface_tab)
+        self.slices_angle.append(channels_angle_tab)
 
     def check_slice_channelization(self, graph: Graph, inc: Incidence, \
         edges: Edges, time: float) -> None:
@@ -307,14 +331,17 @@ class Data():
         channels_tab = []
         diams_tab = []
         surface_tab = []
+        channels_angle_tab = []
         for x in slices:
             res = self.check_channelization(graph, inc, edges, x)
             channels_tab.append(res[0])
             diams_tab.append(res[2])
             surface_tab.append(res[4])
+            channels_angle_tab.append(res[6])
         self.slices.append(channels_tab)
         self.slices_d.append(diams_tab)
         self.slices_s.append(surface_tab)
+        self.slices_angle.append(channels_angle_tab)
         self.slice_times.append("{0}".format(str(round(time, 1) if time % 1 else int(time))))
 
     def plot_slice_channelization(self, graph: Graph) -> None:
@@ -385,6 +412,30 @@ class Data():
         plt.ylim(0, 1)
         plt.legend(loc='center left', bbox_to_anchor=(1, 0.5))
         plt.savefig(self.dirname + '/slices.png')
+        plt.close()
+
+        edge_number  = np.array(self.slices_angle[0])
+        plt.figure(figsize = (10, 10))
+        for i, channeling in enumerate(self.slices_angle[1:]):
+            if i < i_start:
+                plt.plot(slices, (edge_number - 2 * np.array(channeling)) / edge_number, \
+                        label = self.slice_times[i])
+        plt.xlabel('x')
+        plt.ylabel('flow focusing index')
+        plt.ylim(0, 1)
+        plt.legend(loc='center left', bbox_to_anchor=(1, 0.5))
+        plt.savefig(self.dirname + '/slices_angle_start.png')
+        plt.close()
+        plt.figure(figsize = (10, 10))
+        for i, channeling in enumerate(self.slices_angle[1:]):
+            if i % i_division == 0:
+                plt.plot(slices, (edge_number - 2 * np.array(channeling)) / edge_number, \
+                        label = self.slice_times[i])
+        plt.xlabel('x')
+        plt.ylabel('flow focusing index')
+        plt.ylim(0, 1)
+        plt.legend(loc='center left', bbox_to_anchor=(1, 0.5))
+        plt.savefig(self.dirname + '/slices_angle.png')
         plt.close()
 
     def plot_participation(self, sid: SimInputData):

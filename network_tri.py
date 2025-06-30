@@ -243,22 +243,28 @@ def build_delaunay_net(sid: SimInputData, inc: Incidence) \
     graph : Graph class object
         network and all its properties
     """
-    points_left = np.linspace([0, 0], [0, sid.n - 1], sid.n) + \
-        np.array([0, 0.5])
-    points_right = np.linspace([0, 0], [0, sid.n - 1], sid.n) + \
-        np.array([sid.n, 0.5])
-    points_top = np.random.uniform(0.5, sid.n - 0.5, (sid.n, 2)) * \
-        np.array([1, 0]) + np.random.uniform(0, 1, (sid.n, 2)) * \
-        np.array([0, 1])
-    points_bottom = np.random.uniform(0.5, sid.n - 0.5, (sid.n, 2)) * \
-        np.array([1, 0]) + np.array([0, sid.n]) - \
-        np.random.uniform(0, 1, (sid.n, 2)) * np.array([0, 1])
-    points_middle = np.random.uniform(0.5, sid.n - 0.5, \
-        (sid.n * (sid.n - 4), 2)) * np.array([1, 0]) + np.random.uniform(1, \
-        sid.n - 1, (sid.n * (sid.n - 4), 2)) * np.array([0, 1])
-    points = np.concatenate((points_middle, points_left, points_right, \
-        points_top, points_bottom))
-    points = np.array(sorted(points, key = lambda elem: (elem[0], elem[1])))
+    dx = 1
+    # vertical spacing for a triangular lattice
+    #dy = np.sqrt(3) / 2 * dx
+
+    # y-coordinates for each row (use linspace to span 0 … n)
+    #y_vals = np.linspace(0, dy * (sid.n - 1), sid.n)
+    y_vals = np.linspace(0, sid.n, sid.n)
+
+    pts = []
+    for j, y in enumerate(y_vals):
+        # even rows start at x = 0 … n
+        # odd rows are shifted by half a step (periodic wrap handled by clipping)
+        x_shift = 0.0 if j % 2 == 0 else dx / 2
+        x_vals = np.linspace(0, sid.n - 1, sid.n) + x_shift
+
+        # clip any points that fall slightly outside [0, n] due to the shift
+        x_vals = x_vals[(x_vals >= 0) & (x_vals <= sid.n)]
+
+        # append the (x, y) pairs
+        pts.extend(zip(np.full_like(x_vals, y), x_vals))
+
+    points = np.array(sorted(pts, key = lambda elem: (elem[0], elem[1])))
 
     points_above_pbc = points.copy() + np.array([0, sid.n])
     points_below_pbc = points.copy() + np.array([0, -sid.n])
@@ -318,6 +324,8 @@ def build_delaunay_net(sid: SimInputData, inc: Incidence) \
         for i, edge in enumerate((sorted((n1_new, n2_new)), \
             sorted((n1_new, n3_new)), sorted((n2_new, n3_new)))):
             node1, node2 = edge
+            if pos[node1][0] == pos[node2][0]:
+                continue
             if (node1, node2) not in edge_list:
                 edge_list[(node1, node2)] = edge_index
                 cur_edge_index = edge_index
@@ -386,7 +394,6 @@ def build_delaunay_net(sid: SimInputData, inc: Incidence) \
 
     edges = Edges(diams, lens, flow, edge_list, boundary_edges)
 
-
     graph = Graph()
     graph.add_nodes_from(list(range(sid.nsq)))
     graph.add_edges_from(edge_list)
@@ -403,8 +410,7 @@ def build_delaunay_net(sid: SimInputData, inc: Incidence) \
 
     nx.set_node_attributes(graph, dict(zip(list(range(sid.nsq)), pos)), 'pos')
 
-    
     for i, edge in enumerate(edge_list):
-        edges.angles[i] = np.abs(pos[edge[0]][0] - pos[edge[1]][0]) / np.sqrt(np.abs(pos[edge[0]][0] - pos[edge[1]][0]) ** 2 + np.abs(pos[edge[0]][1] - pos[edge[1]][1]) ** 2)
-    #edges.angles = np.ones_like(edges.diams)
+            edges.angles[i] = np.abs(pos[edge[0]][0] - pos[edge[1]][0]) / np.sqrt(np.abs(pos[edge[0]][0] - pos[edge[1]][0]) ** 2 + np.abs(pos[edge[0]][1] - pos[edge[1]][1]) ** 2)
+
     return graph, edges

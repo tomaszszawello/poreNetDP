@@ -34,6 +34,9 @@ if sid.include_merging:
     for initial_i in range(sid.initial_merging):
         Me.solve_merging(sid, inc, graph, edges, 'initial')
 
+import numpy as np
+from network import Edges
+
 # main loop
 # runs until we reach iteration limit or time limit or network is dissolved
 while t < tmax and i < iters and data.dissolved_v < sid.dissolved_v_max:
@@ -45,6 +48,7 @@ while t < tmax and i < iters and data.dissolved_v < sid.dissolved_v_max:
     # find pressure and update flow in edges
     print ('Solving pressure')
     pressure = Pr.solve_flow(sid, inc, graph, edges, pressure_b)
+    
     # find B concentration
     print ('Solving concentration')
     cb = Di.solve_dissolution(sid, inc, graph, edges, cb_b)
@@ -56,6 +60,7 @@ while t < tmax and i < iters and data.dissolved_v < sid.dissolved_v_max:
         data.check_init_slice_channelization(graph, inc, edges)
         data.check_slice_channelization(graph, inc, edges, t)
         Dr.draw_flow(sid, graph, edges, f'q_{data.dissolved_v:.2f}.jpg', 'q')
+        Dr.draw_flow(sid, graph, edges, f'd_{data.dissolved_v:.2f}.jpg', 'd')
         save_VTK(sid, graph, edges, pressure, cb, \
             f'network_{data.dissolved_v:.2f}.vtk')
     else:
@@ -88,6 +93,7 @@ while t < tmax and i < iters and data.dissolved_v < sid.dissolved_v_max:
 if i != 1 and sid.load != 1:
     data.check_data(edges)
     data.check_slice_channelization(graph, inc, edges, data.dissolved_v)
+    #data.plot_slice_channelization_v2(sid, graph)
     Dr.draw_flow_profile(sid, graph, edges, data, \
         f'focusing_q_{data.dissolved_v:.2f}.jpg', 'q')
     Dr.draw_diams_profile(sid, graph, edges, data, \

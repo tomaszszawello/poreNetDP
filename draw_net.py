@@ -109,7 +109,8 @@ def draw_flow(sid: SimInputData, graph: Graph, edges: Edges, \
     nx.draw_networkx_edges(graph, pos, edges.edge_list, edge_color = 'k', \
         width = draw_const * np.array(qs), hide_ticks = False)
     plt.subplots_adjust(wspace=0, hspace=0)
-    plt.savefig(sid.dirname + "/" + name, bbox_inches="tight")
+    plt.savefig(sid.dirname + "/" + name, bbox_inches="tight", dpi = 600)
+    plt.savefig(sid.dirname + "/2" + name, bbox_inches="tight", dpi = 300)
     plt.close()
 
 def draw_flow_profile(sid: SimInputData, graph: Graph, edges: Edges, \
@@ -158,7 +159,7 @@ def draw_flow_profile(sid: SimInputData, graph: Graph, edges: Edges, \
     # draw first panel for the network
     ax1 = plt.subplot(spec[0])
     plt.axis('equal')
-    plt.xlim(0, sid.n)
+    ax1.set_xlim(0, sid.n)
     plt.ylim(-1.1, sid.n + 1.1)
     plt.yticks([],[])
     pos = nx.get_node_attributes(graph, 'pos')
@@ -188,29 +189,34 @@ def draw_flow_profile(sid: SimInputData, graph: Graph, edges: Edges, \
     pos_x = np.array(list(nx.get_node_attributes(graph, 'pos').values()))[:,0]
     slices = np.linspace(np.min(pos_x), np.max(pos_x), 102)[1:-1]
     edge_number  = np.array(data.slices[0])
+    plt.plot([], [], ' ', label=' ')
+    plt.plot([], [], ' ', label=' ')
+    plt.plot([], [], ' ', label=' ')
     plt.plot(slices, np.array((edge_number - 2 * np.array(data.slices[1])) \
         / edge_number), color = 'black', label = '0.0', linewidth = 5)
-    #colors = ['C0', 'C1', 'C2', 'C3']
+    colors = ['C0', 'C1', 'C2', 'C3', 'C4', 'C5', 'C6']
+    labels = ['1.0', '2.0', '5.0', '10.0']
     for i, channeling in enumerate(data.slices[2:]):
         plt.plot(slices, (edge_number - 2 * np.array(channeling)) \
-            / edge_number, label = data.slice_times[i+1], linewidth = 5)
+            / edge_number, label = labels[i], color = colors[i], linewidth = 5)
     #plt.plot([], [], ' ', label=' ')
     plt.ylim(0, 1.05)
-    plt.xlabel('x', fontsize = 60, style = 'italic')
+    plt.xlabel('x / L', fontsize = 60, style = 'italic')
     #ax2.xaxis.label.set_color('white')
     #ax2.tick_params(axis = 'x', colors='white')
-    #plt.xticks([],[])
+    plt.xticks([0, 50, 100],[0, 0.5, 1])
     plt.subplots_adjust(wspace=0, hspace=0)
     plt.margins(tight = True)
     #plt.ylabel('flow focusing index', fontsize = 50)
     plt.yticks([],[])
     #plt.yticks([0, 0.5, 1],['0', '0.5', '1'])
-    legend = plt.legend(loc="lower center", mode = "expand", ncols = 4, \
-        prop={'size': 40}, handlelength = 1, frameon=False, borderpad = 0, \
-        handletextpad = 0.4)
-    for legobj in legend.legendHandles:
-        legobj.set_linewidth(10.0)
-    plt.savefig(sid.dirname + "/" + name, bbox_inches="tight")
+    handles, labels = plt.gca().get_legend_handles_labels()
+    order = [0,4,1,5,2,6,3,7]
+
+    # legend = plt.legend([handles[idx] for idx in order],[labels[idx] for idx in order], loc="lower center", mode = "expand", ncol = 4, prop={'size': 40}, handlelength = 1, frameon=False, borderpad = 0, handletextpad = 0.4)
+    # for legobj in legend.legend_handles:
+    #     legobj.set_linewidth(10.0)
+    plt.savefig(sid.dirname + "/" + name, bbox_inches="tight", dpi = 300)
     plt.close()
 
 def draw_diams_profile(sid: SimInputData, graph: Graph, edges: Edges, \
