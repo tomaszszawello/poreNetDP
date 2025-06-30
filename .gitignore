@@ -3,7 +3,6 @@
 *.dill
 *.txt
 *.vtk
-*.json
 *.zip
 *.pdf
 test.py

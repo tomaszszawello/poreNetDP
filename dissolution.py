@@ -1,104 +1,129 @@
-""" Calculate substance B concentration (dissolution).
+""" Calculate solvent concentration.
 
 This module contains functions for solving the advection-reaction equation for
-substance B concentration. It constructs a result vector for the matrix
+solvent concentration. It constructs a result vector for the matrix
 equation (constant throughout the simulation) and the matrix with coefficients
 corresponding to aforementioned equation. Function solve_equation from module
-utils is used to solve the equation for B concentration.
+utils is used to solve the equation for solvent concentration.
 
 Notable functions
 -------
 solve_dissolution(SimInputData, Incidence, Graph, Edges, spr.csc_matrix) \
-    -> np.ndarray
-    calculate substance B concentration
+    -> numpy ndarray
+    calculate solvent concentration
 """
 
 import numpy as np
 import scipy.sparse as spr
 
 from config import SimInputData
-from network import Edges, Graph
-from incidence import Incidence
+from incidence import Edges, Incidence
+from network import Graph
 from utils import solve_equation
 
 
-def create_vector(sid: SimInputData, graph: Graph) -> spr.csc_matrix:
-    """ Create vector result for B concentration calculation.
-
-    For inlet nodes elements of the vector correspond explicitly
-    to the concentration in nodes, for other it corresponds to
-    mixing condition.
+def create_result_vector(sid:SimInputData, graph: Graph) -> spr.csc_matrix:
+    """ Creates vector result for solvent concentration calculation.
+    
+    This function builds a result vector for solving advection-reaction
+    equation for solvent concentration. For inlet nodes elements of the
+    vector correspond explicitly to the concentration in nodes, for other it
+    corresponds to mixing condition.
 
     Parameters
     -------
-    sid : simInputData class object
+    sid : SimInputData class object
         all config parameters of the simulation
-        nsq - number of nodes in the network
-        cb_in - substance B concentration in inlet nodes
 
     graph : Graph class object
         network and all its properties
-        in_nodes - inlet nodes
-
+    
     Returns
     ------
-    scipy sparse vector
-        result vector for B concentration calculation
+    scipy sparse csc matrix
+        result vector for solvent concentration calculation
     """
-    return sid.cb_in * graph.in_vec
+    data, row, col = [], [], []
+    for node in graph.in_nodes:
+        data.append(sid.concentration_in)
+        row.append(node)
+        col.append(0)
+    return spr.csc_matrix((data, (row, col)), shape=(sid.n_nodes, 1))
+
+def create_vector(sid:SimInputData) -> np.ndarray:
+    """ Creates variable vector for solvent concentration calculation.
+
+    Parameters
+    -------
+    sid : SimInputData class object
+        all config parameters of the simulation
+
+    Returns
+    -------
+    numpy ndarray
+        vector of solvent concentration in nodes
+    """
+    return np.zeros(sid.n_nodes, dtype = float)
 
 def solve_dissolution(sid: SimInputData, inc: Incidence, graph: Graph, \
-    edges: Edges, cb_b: spr.csc_matrix) -> np.ndarray:
-    """ Calculate B concentration.
+    edges: Edges, concentration_b: spr.csc_matrix) -> np.ndarray:
+    """ Calculates solvent concentration.
 
-    This function solves the advection-reaction equation for substance B
-    concentration. We assume substance A is always available.
+    This function solves the advection-reaction equation for solvent
+    concentration. We assume dissolving substance is always available.
 
     Parameters
     -------
     sid : simInputData class object
         all config parameters of the simulation
-        Da : float
-        G : float
 
     inc : Incidence class object
         matrices of incidence
-        incidence : scipy sparse csr matrix (ne x nsq)
 
     graph : Graph class object
         network and all its properties
-        in_nodes : list
-        out_nodes : list
 
     edges : Edges class object
         all edges in network and their parameters
-        diams : numpy ndarray (ne)
-        lens : numpy ndarray (ne)
-        flow : numpy ndarray (ne)
 
-    cb_b : scipy sparse csc matrix (nsq x 1)
-        result vector for substance B concentration calculation
+    concentration_b : scipy sparse csc matrix
+        result vector for solvent concentration calculation
 
     Returns
     -------
-    cb : numpy array (nsq)
-        vector of substance B concentration in nodes
+    concentration : numpy array
+        vector of solvent concentration in nodes
     """
-    # find incidence for cb (only upstream flow matters)
-    cb_inc = 1 * (inc.incidence.T @ (spr.diags(edges.flow) \
+    # find incidence for concentration calculation (only upstream flow matters)
+    concentration_inc =  1 * (inc.incidence.T @ (spr.diags(edges.flow) \
         @ inc.incidence > 0) != 0)
-    # find vector with non-diagonal coefficients
-    qc = edges.flow * np.exp(-np.abs(sid.Da / (1 + sid.G * edges.diams) \
-        * edges.diams * edges.lens / edges.flow))
-    qc = np.array(np.ma.fix_invalid(qc, fill_value = 0))
+    # find vector with non-diagonal coefficients (exponential decrease of
+    # along concentration along edges)
+    qc = edges.fracture_lens * edges.flow * np.exp(-np.abs(sid.Da \
+        / (1 + sid.G * edges.apertures) * edges.lens / edges.flow))
     qc_matrix = np.abs(inc.incidence.T @ spr.diags(qc) @ inc.incidence)
-    cb_matrix = cb_inc.multiply(qc_matrix)
+    concentration_matrix = concentration_inc.multiply(qc_matrix)
+    diag_old = concentration_matrix.diagonal()
     # find diagonal coefficients (inlet flow for each node)
-    diag = -np.abs(inc.incidence.T) @ np.abs(edges.flow) / 2
-    # set diagonal for input nodes to 1
+    diag = -np.abs(inc.incidence.T) @ np.abs(edges.flow * edges.fracture_lens) \
+        / 2
+    # set diagonal for inlet nodes to 1 - there concentration equals the inlet
+    # concentration sid.concentration_in
+    # for node in graph.in_nodes:
+    #     diag[node] = 1
+    # # multiply diagonal for output nodes (they have no outlet, so inlet flow
+    # # is equal to whole flow)
+    # for node in graph.out_nodes:
+    #     diag[node] *= 2
+    # fix for nodes with 0 flow - without it we get a singular matrix
+    #diag = diag * (diag != 0) + 1 * (diag == 0)
+    # replace diagonal
+    #concentration_matrix.setdiag(diag)
     diag = diag * (1 - graph.in_vec + graph.out_vec) + graph.in_vec
     diag += 1 * (diag == 0)
     # replace diagonal
-    cb_matrix.setdiag(diag)
-    cb = solve_equation(cb_matrix, cb_b)
-    return cb
+    #cb_matrix.setdiag(diag)
+    concentration_matrix = concentration_matrix + spr.diags(diag - diag_old)
+    # calculate concentration of solvent in whole system
+    concentration = solve_equation(concentration_matrix, concentration_b)
+    return concentration

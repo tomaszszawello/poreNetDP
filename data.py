@@ -1,90 +1,142 @@
 """ Collect physical data from the simulation and save/plot them.
 
-This module initializes Data class, storing information about physical data in
+This module contains Data class, storing information about physical data in
 the simulation. It stores the data during simulation and afterwards saves them
-in a text file and plots them. For now the data are: pressure difference
-between input and output (1 / permeability) and quantities of substance B and C
-that flowed out of the system.
+in a text file and plots them. For now the data are: permeability and
+channelization (take a slice of the system in a given x-coordinate and check
+how many of the edges contain half of the total flow through the slice) for
+3 slices of the system (at 1/4, 1/2 and 3/4).
 
 Notable classes
 -------
 Data
     container for physical data collected during simulation
 
-TO DO: name data on plots, maybe collect permeability explicitly
+TO DO: name data on plots, fix no values on y-axis for permeability in
+channelization plot, maybe add plots of effluent concentration and dissolved
+volume, include tracking plots in data?
 """
 
 from matplotlib import gridspec
+import matplotlib
 import matplotlib.pyplot as plt
 import networkx as nx
 import numpy as np
 import scipy.sparse as spr
 
 from config import SimInputData
-from network import Edges, Graph
-from incidence import Incidence
+from incidence import Edges, Incidence
+from network import Graph
+from utils import create_bins, create_pdf
+
+font = {'family' : 'Times New Roman',
+        'weight' : 'normal',
+        'size'   : 50}
+
+matplotlib.rc('font', **font)
 
 
 class Data():
     """ Contains data collected during the simulation.
 
-    Attributes
-    -------
-    t : list
-        elapsed time of the simulation
-
-    pressure : list
-        pressure difference between inlet and outlet
-
-    cb_out : list
-        difference of inflow and outflow of substance B in the system
-
-    cb_out : list
-        difference of inflow and outflow of substance C in the system
-
-    delta_b : float
-        current difference of inflow and outflow of substance B in the system
-
-    delta_c : float
-        current difference of inflow and outflow of substance C in the system
+    This class is a container for all data collected during simulation, such
+    as permeability, channelization etc. Part of the data
+    is saved in params.txt file, the rest is plotted and saved as figures.
     """
-    t = []
-    pressure = []
-    order = []
-    participation_ratio = []
-    participation_ratio_nom = []
-    participation_ratio_denom = []
-    cb_out = []
-    cc_out = []
-    delta_b = 0.
-    delta_c = 0.
-    dissolved_v = 0.
-    dissolved_v_list = []
+    t: list = []
+    "elapsed time of the simulation"
+    perm: list = []
+    "permeability between inlet and outlet"
+    order: list = []
+    "order parameter ((N - sum(q^2)^2/sum(q^4)) / (N - 1))"
+    channels_1: list = []
+    "channelization in slice 1 (defaultly 1/4 of system)"
+    channels_2: list = []
+    "channelization in slice 2 (defaultly 1/2 of system)"
+    channels_3: list = []
+    "channelization in slice 3 (defaultly 3/4 of system)"
     slices: list = []
-    slices_d: list = []
-    slices_s: list = []
     "channelization for slices through the whole system in a given time"
     slice_times: list = []
     "list of times of checking slice channelization"
+    diams: list = []
+    labels: list = []
+    diams_slices: list = []
+    flux_slices: list = []
+    concentration_slices: list = []
 
-    def __init__(self, sid: SimInputData, edges: Edges):
+    def __init__(self, sid: SimInputData, graph: Graph):
         self.dirname = sid.dirname
-        self.vol_init = np.sum(edges.diams ** 2 * edges.lens)
+        # set positions of 3 default slices measured vs time
+        pos_x = np.array(list(nx.get_node_attributes(graph, 'x').values()), \
+            dtype = float)
+        self.slice_x1 = float((np.min(pos_x) + np.average(pos_x)) / 2)
+        self.slice_x2 = float(np.average(pos_x))
+        self.slice_x3 = float((np.max(pos_x) + np.average(pos_x)) / 2)
 
-    def save_data(self) -> None:
-        """ Save data to text file.
+    def collect(self, sid: SimInputData, graph: Graph, inc: Incidence, \
+        edges: Edges, pressure: np.ndarray) -> None:
+        """ Collect data from different vectors.
+
+        This function extracts information such as permeability, channelization
+        etc. and saves them in the data class.
+
+        Parameters
+        -------
+        sid : SimInputData class object
+            all config parameters of the simulation
+
+        inc : Incidence class object
+            matrices of incidence
+
+        edges : Edges class object
+            all edges in network and their parameters
+
+        graph : Graph class object
+            network and all its properties
+
+        pressure : numpy ndarray
+            vector of current pressure
+        """
+        # simulation time
+        self.t.append(sid.old_t)
+        # permeability (dimensionless)
+        self.perm.append(1 / np.max(pressure))
+        # flow focusing parameter
+        self.order.append((np.sum(edges.flow != 0) \
+            - np.sum(np.abs(edges.fracture_lens * edges.flow) ** 2) ** 2 \
+            / np.sum(np.abs(edges.fracture_lens * edges.flow) ** 4)) \
+            / (np.sum(edges.flow != 0) - 1))
+        # channelization
+        # self.channels_1.append(self.check_channelization(graph, inc, edges, \
+        #     self.slice_x1)[1])
+        # self.channels_2.append(self.check_channelization(graph, inc, edges, \
+        #     self.slice_x2)[1])
+        # self.channels_3.append(self.check_channelization(graph, inc, edges, \
+        #     self.slice_x3)[1])
+        
+    def plot(self) -> None:
+        """ Save all data and plot them.        
+        """
+        self.save()
+        self.plot_params()
+        self.plot_channelization()
+
+    def save(self) -> None:
+        """ Saves data to text file.
 
         This function saves the collected data to text file params.txt in
         columns. If the simulation is continued from saved parameters, new data
         is appended to that previously collected.
         """
+        # save basic data to params.txt
         is_saved = False
         while not is_saved: # prevents problems with opening text file
             try:
-                file = open(self.dirname + '/params.txt', 'w', \
+                file = open(self.dirname + '/params.txt', 'a', \
                     encoding = "utf-8")
-                np.savetxt(file, np.array([self.t, self.pressure, self.participation_ratio, self.cb_out, \
-                    self.cc_out], dtype = float).T)
+                np.savetxt(file, np.array([self.t, self.perm, self.order], \
+                    dtype = float).T)
                 file.close()
                 is_saved = True
             except PermissionError:
@@ -93,7 +145,7 @@ class Data():
         is_saved = False
         while not is_saved: # prevents problems with opening text file
             try:
-                file = open(self.dirname + '/profiles.txt', 'w', \
+                file = open(self.dirname + '/slices.txt', 'a', \
                     encoding = "utf-8")
                 np.savetxt(file, self.slices)
                 file.close()
@@ -101,97 +153,23 @@ class Data():
             except PermissionError:
                 pass
 
-    def load_data(self) -> None:
-        data = np.loadtxt(self.dirname + '/params.txt').T
-        self.t, self.pressure, self.participation_ratio, self.cb_out, \
-            self.cc_out = list(data[0]), list(data[1]), list(data[2]), list(data[3]), list(data[4])
-        self.slices = list(np.loadtxt(self.dirname + '/slices.txt'))
+    def check(self, edges: Edges) -> None:
+        """ Check if flow in the system is valid.
 
-    def check_data(self, edges: Edges) -> None:
-        """ Check the key physical parameters of the simulation.
-
-        This function calculates and checks if basic physical properties of the
-        simulation are valied, i.e. if inflow is equal to outflow.
+        This function calculates and prints inflow and outflow to check if they
+        are equal.
 
         Parameters
         -------
         edges : Edges class object
             all edges in network and their parameters
-            flow - flow in edges
-            inlet - edges connected to inlet nodes
-            outlet - edges connected to outlet nodes
         """
-        Q_in = np.sum(edges.inlet * np.abs(edges.flow))
-        Q_out = np.sum(edges.outlet * np.abs(edges.flow))
+        Q_in = np.sum(edges.inlet * np.abs(edges.fracture_lens * edges.flow))
+        Q_out = np.sum(edges.outlet * np.abs(edges.fracture_lens * edges.flow))
         print('Q_in =', Q_in, 'Q_out =', Q_out)
-        if np.abs(Q_in - Q_out) > 1:
-            raise ValueError('Flow not matching!')
-        # delta = np.abs((np.abs(inc.incidence.T < 0) @ (np.abs(edges.flow) \
-        #     * edges.inlet) - np.abs(inc.incidence.T > 0) @ (np.abs(edges.flow) \
-        #     * edges.outlet)) @ cb * sid.dt)
 
-
-    def collect_data(self, sid: SimInputData, inc: Incidence, edges: Edges, \
-        p: np.ndarray, cb: np.ndarray, cc: np.ndarray) -> None:
-        """ Collect data from different vectors.
-
-        This function extracts information such as permeability, quantity of
-        substances flowing out of the system etc. and saves them in the data
-        class.
-
-        Parameters
-        -------
-        sid : SimInputData class object
-            all config parameters of the simulation
-            old_t - total time of simulation
-            dt - current timestep
-
-        inc : Incidence class object
-            matrices of incidence
-            incidence - connections of all edges with all nodes
-
-        edges : Edges class object
-            all edges in network and their parameters
-            flow - flow in edges
-            inlet - edges connected to inlet nodes
-            outlet - edges connected to outlet nodes
-
-        p : numpy ndarray
-            vector of current pressure
-
-        cb : numpy ndarray
-            vector of current substance B concentration
-
-        cc : numpy ndarray
-            vector of current substance C concentration
-        """
-        self.t.append(sid.old_t)
-        
-        self.pressure.append(np.max(p))
-        self.order.append((sid.ne - np.sum(edges.flow ** 2) ** 2 \
-            / np.sum(edges.flow ** 4)) / (sid.ne - 1))
-        pi = np.sum(edges.diams ** 2 * np.abs(edges.flow)) ** 2 / np.sum(edges.diams ** 2 \
-            * np.abs(edges.flow) ** 2) / sid.nsq
-        pi_prime = np.sum(edges.diams ** 2) / sid.nsq
-        self.participation_ratio_nom.append(pi)
-        self.participation_ratio_denom.append(pi_prime)
-        self.participation_ratio.append(pi / pi_prime)
-        # calculate the difference between inflow and outflow of each substance
-        delta = np.abs((np.abs(inc.incidence.T < 0) @ (np.abs(edges.flow) \
-            * edges.inlet) - np.abs(inc.incidence.T > 0) @ (np.abs(edges.flow) \
-            * edges.outlet)) @ cb * sid.dt)
-        self.delta_b += delta
-        self.cb_out.append(self.delta_b)
-        delta = np.abs((np.abs(inc.incidence.T < 0) @ (np.abs(edges.flow) \
-            * edges.inlet) - np.abs(inc.incidence.T > 0) @ (np.abs(edges.flow) \
-            * edges.outlet)) @ cc * sid.dt)
-        self.delta_c += delta
-        self.cc_out.append(self.delta_c)
-        self.dissolved_v = (np.sum(edges.diams ** 2 * edges.lens) - self.vol_init) / self.vol_init
-        self.dissolved_v_list.append(self.dissolved_v)
-
-    def plot_data(self) -> None:
-        """ Plot data from text file.
+    def plot_params(self) -> None:
+        """ Plots data from text file.
 
         This function loads the data from text file params.txt and plots them
         to file params.png.
@@ -199,53 +177,48 @@ class Data():
         f = open(self.dirname + '/params.txt', 'r', encoding = "utf-8")
         data = np.loadtxt(f)
         n_data = data.shape[1]
+        # first column is time
         t = data[:, 0]
         plt.figure(figsize = (15, 5))
         plt.suptitle('Parameters')
         spec = gridspec.GridSpec(ncols = n_data - 1, nrows = 1)
         for i_data in range(n_data - 1):
+            # TO DO: name data columns
             plt.subplot(spec[i_data]).set_title(f'Data {i_data}')
-            #plt.plot(t, data[:, i_data + 1] / data[0, i_data + 1])
             plt.plot(t, data[:, i_data + 1])
-            plt.yscale('log')
             plt.xlabel('simulation time')
         plt.savefig(self.dirname + '/params.png')
         plt.close()
 
-    def check_channelization(self, graph: Graph, inc: Incidence, edges: Edges, \
-        slice_x: float) -> tuple[int, float]:
-        """ Calculate channelization parameter for a slice of the network.
+    def plot_channelization(self) -> None:
+        """ Plot channelization data from text file.
 
-        This function calculates the channelization parameter for a slice of
-        the network perpendicular to the main direction of the flow. It checks
-        how many edges take half of the total flow going through the slice. The
-        function returns the exact number of edges and that number divided by
-        the total number of edges in a given slice (so the percentage of edges
-        taking half of the total flow in the slice).
-
-        Parameters
-        -------
-        graph : Graph class object
-            network and all its properties
-
-        inc : Incidence class object
-            matrices of incidence
-
-        edges : Edges class object
-            all edges in network and their parameters
-
-        slice_x : float
-            position of the slice
-
-        Returns
-        -------
-        int
-            number of edges taking half of the flow in the slice
-
-        float
-            percentage of edges taking half of the flow in the slice
+        This function loads the data from text file params.txt and plots those
+        corresponding to channelization vs permeability.
         """
-        pos_x = np.array(list(nx.get_node_attributes(graph, 'pos').values()))[:,0]
+        f = open(self.dirname+'/params.txt', 'r')
+        data = np.loadtxt(f)
+        n_data = data.shape[1]
+        t = data[:, 0]
+        fig, ax1 = plt.subplots()
+        ax1.set_xlabel('simulation time')
+        ax2 = ax1.twinx()
+        ax1.set_yscale('log')
+        ax1.set_ylabel('permeability')
+        ax2.set_ylabel('channelization')
+        ax1.plot(t, data[:, 1], 'k', '-', label = r'$\kappa$')
+        for i_data in range(3, n_data):
+            ax2.plot(t, data[:, i_data], label = f'slice {i_data - 2} / 4')
+        ax2.legend()    
+        plt.savefig(self.dirname + '/channelization.png')
+        plt.close()
+
+
+    def check_channelization(self, graph: Graph, inc: Incidence, edges: Edges, \
+        concentration: np.ndarray, slice_x: float) -> tuple[int, float]:
+        """
+        """
+        pos_x = np.array(list(nx.get_node_attributes(graph, 'x').values()))
         # find edges crossing the given slice and their orientation - if edge
         # crosses the slice from left to right, it is marked with 1, if from
         # right to left - -1, if it doesn't cross - 0
@@ -255,152 +228,194 @@ class Data():
             * np.abs(inc.incidence @ (pos_x <= slice_x))
         # sort edges from maximum flow to minimum (taking into account
         # their orientation)
-        slice_flow = np.array(sorted(slice_edges * np.abs(edges.flow), reverse = True))
+        slice_flow = np.array(sorted(slice_edges * edges.fracture_lens \
+            * np.abs(edges.flow), reverse = True))
+        edge_number = np.sum(slice_flow != 0)
         fraction_flow = 0
         total_flow = np.sum(slice_flow)
         # calculate how many edges take half of the flow
         for i, edge_flow in enumerate(slice_flow):
             fraction_flow += edge_flow
             if fraction_flow > total_flow / 2:
-                flow_50 = i + 1
+                flow_edge = i + 1
                 break
-        slice_diams = np.array(sorted(slice_edges * np.abs(edges.diams), reverse = True))
-        fraction_diams = 0
-        total_diams = np.sum(slice_diams)
+        slice_apertures = np.array(sorted(np.abs(slice_edges) \
+            * edges.apertures, reverse = True))
+        fraction_apertures = 0
+        total_apertures = np.sum(slice_apertures)
         # calculate how many edges take half of the flow
-        for i, edge_diam in enumerate(slice_diams):
-            fraction_diams += edge_diam
-            if fraction_diams > total_diams / 2:
-                diams_50 = i + 1
+        for i, edge_aperture in enumerate(slice_apertures):
+            fraction_apertures += edge_aperture
+            if fraction_apertures > total_apertures / 2:
+                aperture_edge = i + 1
                 break
-        slice_surface = np.array(sorted(slice_edges * np.abs(edges.diams ** 2), reverse = True))
-        fraction_surface = 0
-        total_surface = np.sum(slice_surface)
+        concentration_in = np.abs((spr.diags(edges.flow) @ inc.incidence > 0)) \
+            @ concentration
+        slice_concentration = np.array(sorted(slice_edges \
+            * concentration_in * edges.apertures * edges.fracture_lens, reverse = True))
+        fraction_concentration = 0
+        total_concentration = np.sum(slice_concentration)
         # calculate how many edges take half of the flow
-        for i, edge_surface in enumerate(slice_surface):
-            fraction_surface += edge_surface
-            if fraction_surface > total_surface / 2:
-                surface_50 = i + 1
-                break
-        return (flow_50, np.sum(slice_flow != 0), diams_50, np.sum(slice_diams != 0), surface_50, np.sum(surface_50 != 0))
+        if total_concentration > 0:
+            for i, edge_aperture in enumerate(slice_concentration):
+                fraction_concentration += edge_aperture
+                if fraction_concentration > total_concentration / 2:
+                    concentration_edge = i + 1
+                    break
+        else:
+            concentration_edge = edge_number
+        slice_flux = np.array(sorted(slice_edges \
+            * np.abs(edges.flow) * edges.fracture_lens * concentration_in, reverse = True))
+        fraction_flux = 0
+        total_flux = np.sum(slice_flux)
+        # calculate how many edges take half of the flow
+        if total_flux > 0:
+            for i, edge_aperture in enumerate(slice_flux):
+                fraction_flux += edge_aperture
+                if fraction_flux > total_flux / 2:
+                    flux_edge = i + 1
+                    break
+        else:
+            flux_edge = edge_number
+        return flow_edge, aperture_edge, flux_edge, concentration_edge, edge_number
 
-    def check_init_slice_channelization(self, graph: Graph, inc: Incidence, \
-        edges: Edges) -> None:
-        pos_x = np.array(list(nx.get_node_attributes(graph, 'pos').values()))[:,0]
+    def check_init_channelization(self, graph: Graph, inc, \
+        edges, concentration) -> None:
+        pos_x = np.array(list(nx.get_node_attributes(graph, 'x').values()))
+        # slices = np.linspace(np.min(pos_x), np.max(pos_x), 120)[10:-10]
         slices = np.linspace(np.min(pos_x), np.max(pos_x), 102)[1:-1]
         channels_tab = []
-        diams_tab = []
-        surface_tab = []
         for x in slices:
-            res = self.check_channelization(graph, inc, edges, x)
-            channels_tab.append(res[1])
-            diams_tab.append(res[3])
-            surface_tab.append(res[5])
+            res = self.check_channelization(graph, inc, edges, concentration, x)[4]
+            channels_tab.append(res)
         self.slices.append(channels_tab)
-        self.slices_d.append(diams_tab)
-        self.slices_s.append(surface_tab)
+        self.diams_slices.append(channels_tab)
+        self.flux_slices.append(channels_tab)
+        self.concentration_slices.append(channels_tab)
 
-    def check_slice_channelization(self, graph: Graph, inc: Incidence, \
-        edges: Edges, time: float) -> None:
-        pos_x = np.array(list(nx.get_node_attributes(graph, 'pos').values()))[:,0]
+    def check_slice_channelization(self, graph: Graph, inc, \
+        edges, concentration) -> None:
+        pos_x = np.array(list(nx.get_node_attributes(graph, 'x').values()))
+        # slices = np.linspace(np.min(pos_x), np.max(pos_x), 120)[10:-10]
         slices = np.linspace(np.min(pos_x), np.max(pos_x), 102)[1:-1]
         channels_tab = []
-        diams_tab = []
-        surface_tab = []
+        d_channels_tab = []
+        f_channels_tab = []
+        c_channels_tab = []
         for x in slices:
-            res = self.check_channelization(graph, inc, edges, x)
+            res = self.check_channelization(graph, inc, edges, concentration, x)
             channels_tab.append(res[0])
-            diams_tab.append(res[2])
-            surface_tab.append(res[4])
+            d_channels_tab.append(res[1])
+            f_channels_tab.append(res[2])
+            c_channels_tab.append(res[3])
         self.slices.append(channels_tab)
-        self.slices_d.append(diams_tab)
-        self.slices_s.append(surface_tab)
-        self.slice_times.append("{0}".format(str(round(time, 1) if time % 1 else int(time))))
+        self.diams_slices.append(d_channels_tab)
+        self.flux_slices.append(f_channels_tab)
+        self.concentration_slices.append(c_channels_tab)
 
-    def plot_slice_channelization(self, graph: Graph) -> None:
+    def plot_diams_histogram(self, nbins) -> None:
+        plt.figure(figsize = (15, 15))
+        plt.title('diameter distribution')
+        plt.xlabel('normalized diameter', fontsize = 50)
+        plt.ylabel('probability density', fontsize = 50)
+        bx1 = create_bins(self.diams[0] / np.average(self.diams[0]), nbins, spacing = 'linear')
+        colors = ['black', 'C0', 'C1', 'C2', 'C3', 'C4']
+        for i, data in enumerate(self.diams):
+            if i == 0 or i == 2 or i == 4:
+                bx11, pdf = create_pdf(data / np.average(data), nbins, spacing = 'linear', x = bx1)
+                plt.plot(bx11, pdf, "o", alpha = 1, markersize=12, label = self.labels[i], color = colors[i])
+                plt.yscale('log')
+            else:
+                plt.plot([], [], ' ', label=' ')
+        #legend = ax3.legend(loc='center right', bbox_to_anchor=(1.05, 0.5), prop={'size': 40}, frameon=False, handlelength = 0.2, borderpad = 0, handletextpad = 0.4)
+        legend = plt.legend(loc='lower center', prop={'size': 40}, mode = 'expand', ncol = 5, frameon=False, handlelength = 0.2, borderpad = 0, handletextpad = 0.4)
+        for legobj in legend.legend_handles:
+            legobj.set_markersize(24.0)
+        plt.savefig(self.dirname + f'/aperture_hist.png', bbox_inches="tight", transparent = False)
+        plt.close()
+
+    def plot_slice_channelization(self, graph: Graph, data_type) -> None:
         """ Plots slice data from text file.
 
         This function loads the data from text file slices.txt and plots them
         to files slices.png, slices_no_div.png, slices_norm.png.
         """
-        pos_x = np.array(list(nx.get_node_attributes(graph, 'pos').values()))[:,0]
+        pos_x = np.array(list(nx.get_node_attributes(graph, 'x').values()))
+        # slices = np.linspace(np.min(pos_x), np.max(pos_x), 120)[10:-10]
         slices = np.linspace(np.min(pos_x), np.max(pos_x), 102)[1:-1]
+        
+        
+        colors = ['C0', 'C1', 'C2', 'C3']
+        plt.figure(figsize = (15, 10))
         edge_number  = np.array(self.slices[0])
-        plt.figure(figsize = (10, 10))
-        for i, channeling in enumerate(self.slices[1:]):
-            plt.plot(slices, np.array(channeling) / edge_number, \
-                    label = self.slice_times[i])
-        plt.xlabel('x')
-        plt.ylabel('channeling [%]')
-        plt.legend(loc='center left', bbox_to_anchor=(1, 0.5))
-        plt.savefig(self.dirname + '/slices.png')
-        plt.close()
-        plt.figure(figsize = (10, 10))
-        for i, channeling in enumerate(self.slices[1:]):
-            plt.plot(slices, np.array(channeling) / np.array(self.slices[1]), \
-                label = self.slice_times[i])
-        plt.xlabel('x')
-        plt.ylabel('channeling [initial]')
-        plt.legend(loc='center left', bbox_to_anchor=(1, 0.5))
-        plt.savefig(self.dirname + '/slices_norm.png')
-        plt.close()
-        plt.figure(figsize = (10, 10))
-        for i, channeling in enumerate(self.slices[1:]):
-            plt.plot(slices, channeling, label = self.slice_times[i])
-        plt.xlabel('x')
-        plt.ylabel('channeling [edge number]')
-        plt.legend(loc='center left', bbox_to_anchor=(1, 0.5))
-        plt.savefig(self.dirname + '/slices_no_div.png')
+        if data_type == 'flow':
+            slice_data = self.slices
+            plt.ylabel('flow focusing index', fontsize = 50)
+            save_name = 'profile'
+        if data_type == 'aperture':
+            slice_data = self.diams_slices
+            plt.ylabel('aperture focusing index', fontsize = 50)
+            save_name = 'aperture_profile'
+        if data_type == 'flux':
+            slice_data = self.flux_slices
+            plt.ylabel('flux focusing index', fontsize = 50)
+            save_name = 'flux_profile'
+        if data_type == 'concentration':
+            slice_data = self.concentration_slices
+            plt.ylabel('concentration focusing index', fontsize = 47)
+            save_name = 'concentration_profile'
+        
+        plt.plot([], [], ' ', label=' ')
+        plt.plot([], [], ' ', label=' ')
+        plt.plot([], [], ' ', label=' ')
+        plt.plot(slices, np.array((edge_number - 2 * np.array(slice_data[1])) \
+            / edge_number), linewidth = 5, color = 'black', label = '0.0')
+        for i, channeling in enumerate(slice_data[2:]):
+            plt.plot(slices, (edge_number - 2 * np.array(channeling)) \
+                / edge_number, label = self.labels[i+1], linewidth = 5, color = colors[i])
+        plt.ylim(0, 1.05)
+        plt.xlabel('x', fontsize = 60, style = 'italic')
+        # ax2.xaxis.label.set_color('white')
+        # ax2.tick_params(axis = 'x', colors='white')
+        #plt.xticks([],[])
+        plt.subplots_adjust(wspace=0, hspace=0)
+        plt.margins(tight = True)
+        #plt.ylabel('aperture variations index', fontsize = 50)
+        #plt.yticks([],[])
+        plt.yticks([0, 0.5, 1],['0', '0.5', '1'])
+        handles, labels = plt.gca().get_legend_handles_labels()
+        order = [0,4,1,5,2,6,3,7]
+
+        legend = plt.legend([handles[idx] for idx in order],[labels[idx] for idx in order], loc="lower center", mode = "expand", ncol = 4, prop={'size': 40}, handlelength = 1, frameon=False, borderpad = 0, handletextpad = 0.4)
+        for legobj in legend.legend_handles:
+            legobj.set_linewidth(10.0)
+        #spine_color = 'blue'
+        # for spine in ax1.spines.values():
+        #     spine.set_linewidth(5)
+        #     spine.set_edgecolor(spine_color)
+        # for spine in ax2.spines.values():
+        #     spine.set_linewidth(5)
+        #     spine.set_edgecolor(spine_color)
+        # save file in the directory
+        plt.savefig(self.dirname + "/" + save_name + ".png", bbox_inches="tight")
         plt.close()
 
-    def plot_slice_channelization_v2(self, sid: SimInputData, graph: Graph) -> None:
-        """ Plots slice data from text file.
+    def collect_initial_data(self, sid, graph, inc, edges, concentration):
+            if sid.flow_focusing_profile:
+                self.check_init_channelization(graph, inc, edges, concentration)
+                self.check_slice_channelization(graph, inc, edges, concentration)
+            self.diams.append(edges.apertures.copy())
+            self.labels.append(f'{sid.dissolved_v:.2f}')
 
-        This function loads the data from text file slices.txt and plots them
-        to files slices.png, slices_no_div.png, slices_norm.png.
-        """
-        pos_x = np.array(list(nx.get_node_attributes(graph, 'pos').values()))[:,0]
-        slices = np.linspace(np.min(pos_x), np.max(pos_x), 102)[1:-1]
-        edge_number  = np.array(self.slices[0])
-        i_start = 5
-        i_division = sid.dissolved_v_max // sid.track_every // 5
-        plt.figure(figsize = (10, 10))
-        for i, channeling in enumerate(self.slices[1:]):
-            if i < i_start:
-                plt.plot(slices, (edge_number - 2 * np.array(channeling)) / edge_number, \
-                        label = self.slice_times[i])
-        plt.xlabel('x')
-        plt.ylabel('flow focusing index')
-        plt.ylim(0, 1)
-        plt.legend(loc='center left', bbox_to_anchor=(1, 0.5))
-        plt.savefig(self.dirname + '/slices_start.png')
-        plt.close()
-        plt.figure(figsize = (10, 10))
-        for i, channeling in enumerate(self.slices[1:]):
-            if i % i_division == 0:
-                plt.plot(slices, (edge_number - 2 * np.array(channeling)) / edge_number, \
-                        label = self.slice_times[i])
-        plt.xlabel('x')
-        plt.ylabel('flow focusing index')
-        plt.ylim(0, 1)
-        plt.legend(loc='center left', bbox_to_anchor=(1, 0.5))
-        plt.savefig(self.dirname + '/slices.png')
-        plt.close()
+    def collect_data(self, sid, graph, inc, edges, concentration):
+            if sid.flow_focusing_profile:
+                self.check_slice_channelization(graph, inc, edges, concentration)
+            self.diams.append(edges.apertures.copy())
+            self.labels.append(f'{sid.dissolved_v:.2f}')
 
-    def plot_participation(self, sid: SimInputData):
-        plt.figure(figsize = (10, 10))
-        plt.title('Participation ratio')
-        ax_p = plt.subplot()
-        ax_p.set_title('Participation ratio')
-        ax_p.set_ylim(0, 1)
-        ax_p.set_xlim(0, sid.dissolved_v_max / self.vol_init)
-        ax_p.set_xlabel('dissolved v')
-        ax_p.set_ylabel('participation ratio')
-        ax_p2 = ax_p.twinx()
-        x = np.linspace(0, sid.dissolved_v_max / self.vol_init, len(self.participation_ratio))
-        ax_p2.plot(x, self.participation_ratio_nom, label = "pi", color='green', linestyle='dashed')
-        ax_p2.plot(x, self.participation_ratio_denom, label = "pi'", color='red', linestyle='dashed')
-        ax_p.plot(x, self.participation_ratio)
-        ax_p2.legend()
-        plt.savefig(self.dirname + '/participation_ratio.pdf')
-        plt.close()
+    def plot_data(self, graph):
+        self.plot_slice_channelization(graph, 'flow')
+        self.plot_slice_channelization(graph, 'aperture')
+        self.plot_slice_channelization(graph, 'flux')
+        self.plot_slice_channelization(graph, 'concentration')
+        self.plot_diams_histogram(100)

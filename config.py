@@ -3,138 +3,82 @@
 This module contains all parameters set before the simulation. Class
 SimInputData is used in nearly all functions. Most of the parameters (apart
 from VARIOUS section) are set by the user before starting the simulation.
-Most notable parameters are: n - network size, iters/tmax - simulation length,
-Da_eff, G, K, Gamma - dissolution/precipitation parameters, include_cc - turn
-on precipitation, load - build a new network or load a previous one.
+Most notable parameters are: iters/tmax - simulation length, Da_eff, G - 
+dissolution parameters.
 """
-
-import numpy as np
 
 
 class SimInputData:
-    ''' Configuration class for the whole simulation.
-    '''
+    """ Configuration class for the whole simulation.
+    """
     # GENERAL
-    n: int = 50
-    "network size"
     iters: int = 10000000
     "maximum number of iterations"
-    tmax: float = 100000.
+    tmax: float = 10000000.
     "maximum time"
-    dissolved_v_max: float = 10
-    "maximum dissolved pore volume"
-    plot_every: int = 1
-    "frequency of plotting the results"
-    track_every: int = 1
-    "frequency of checking channelization"
-    track_list = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
-    "times of checking channelization"
+    save_every: int = 10000
+    "frequency (in iterations) of plotting the results"
+    collect_every: int = 10
+    "frequency (in iterations) of collecting data"
+    track_every: int = 0.1
+    "frequency (in time) of performing tracking and slice check"
+    load_name: str = 'samples/carbonate_x01'
+    "name of loaded network"
+    dissolved_v_max = 1
+    track_list = [1, 2, 5, 10]
+    dissolved_v = 0
 
+
+    flow_focusing_profile = True
+    aperture_focusing_profile = True
     # DISSOLUTION & PRECIPITATION
-    Da_eff: float = 0.5
+    Da_eff: float = 0.0002
     "effective Damkohler number"
     G: float = 5
     "diffusion to reaction ratio"
     Da: float = Da_eff * (1 + G)
     "Damkohler number"
-    K: float = 0.5
-    "precipitation to dissolution reaction rate"
-    Gamma: float = 2.
-    "precipitation to dissolution acid capacity number"
-    merge_length: float = 100.
-    "diameter scale to length scale ratio for merging"
 
     # INCLUDE
     include_adt: bool = True
     "include adaptive timestep"
-    include_cc: bool = False
-    "include precipitation"
-    include_merging: bool = True
-    "include pore merging"
+    include_breakthrough: bool = False
+    ("stop simulation when network is dissolved (i.e. diameter of edge \
+     connected to the outlet grew b_break times)")
 
     # INITIAL CONDITIONS
-    qin: float = 1.
-    "characteristic flow for inlet edge"
-    cb_in: float = 1.
-    "inlet B concentration"
-    cc_in: float = 0.
-    "inlet C concentration"
+    q_in: float = 1.
+    "characteristic flow for inlet edge (dimensionless)"
+    concentration_in: float = 1.
+    "inlet solvent concentration (dimensionless)"
+    b_break: float = 4.
+    ("minimal ratio of aperture of outlet fracture to its initial aperture for \
+     network to be dissolved")
 
     # TIME
     dt: float = 0.01
     "initial timestep (if no adaptive timestep, timestep for whole simulation)"
-    growth_rate: float = 0.01
+    growth_rate: float = 0.05
     ("maximum percentage growth of an edges (used for finding adaptive \
      timestep)")
-    dt_max: float = 5.
+    dt_max: float = 10000.
     "maximum timestep (for adaptive)"
 
-    # DIAMETERS
-    noise: str = 'file_lognormal_k'
-    ("type of noise in diameters distribution: 'gaussian', 'lognormal', \
-    'klognormal', 'file_lognormal_d', 'file_lognormal_k'")
-    noise_filename: str = 'n100lam10r04.dat'
-    "name of file with initial diameters if noise == file_"
-    d0: float = 1.
-    "initial dimensionless mean diameter"
-    sigma_d0: float = 0.1
-    "initial diameter standard deviation"
-    dmin: float = 0
-    "minimum diameter"
-    dmax: float = 1000.
-    "maximum diameter"
-    d_break: float = 4.
-    "minimal diameter of outlet edge for network to be dissolved"
-
-    # DRAWING
-    figsize: float = 10.
-    "figure size"
-    qdrawconst: float = 0.3
-    "constant for improving flow drawing"
-    ddrawconst: float = 0.1
-    "constant for improving diameter drawing"
-    draw_th_q: float = 3
-    "threshold for drawing of flow"
-    draw_th_d: float = 3
-    "threshold for drawing of diameters"
-
-    # INITIALIZATION
-    load: int = 0
-    ("type of loading: 0 - build new network based on config and start new \
-     simulation, 1 - load previous network from load_name and continue \
-     simulation, 2 - load template network from load_name and start new \
-     simulation")
-    load_name: str = 'rect100/G5.00Daeff0.05/0'
-    "name of loaded network"
-
-    # GEOMETRY
-    geo: str = "rect" # WARNING - own is deprecated
-    ("type of geometry: 'rect' - rectangular, 'own' - custom inlet and outlet \
-     nodes, set in in/out_nodes_own")
-    periodic: str = 'top'
-    ("periodic boundary condition: 'none' - no PBC, 'top' - up and down, \
-     'side' - left and right, 'all' - PBC everywhere")
-    in_nodes_own: np.ndarray = np.array([[20, 50]]) / 100 * n
-    "custom outlet for 'own' geometry"
-    out_nodes_own: np.ndarray = np.array([[80, 50], [70, 25], [70, 75]]) \
-        / 100 * n
-    "custom outlet for 'own' geometry"
-
     # VARIOUS
-    ne: int = 0
+    n_nodes: int = 0
+    "number of nodes (updated later)"
+    n_edges: int = 0
     "number of edges (updated later)"
-    ntr: int = 0
-    "number of triangles (updated later)"
-    nsq: int = n ** 2
-    "number of nodes"
+    b0: float = 1.
+    "initial mean aperture (updated later)"
+    l0: float = 1.
+    "initial mean fracture length (updated later)"
+    w0: float = 1.
+    "initial mean fracture width (updated later)" 
     old_iters: int = 0
     "total iterations of simulation"
     old_t: float = 0.
     "total time of simulation"
-    Q_in = 1.
-    "total inlet flow (updated later)"
-    dirname: str = geo + str(n) + '/' + f'G{G:.2f}Daeff{Da_eff:.2f}'
+    #dirname: str = f'{load_name}/G{G:.2f}Daeff{Da_eff:.2f}'
+    dirname: str = f'{load_name}/G{G:.4f}Daeff{Da_eff:.4f}'
     "directory of simulation"
-    initial_merging: int = 5
-    "number of initial merging iterations"
-    
