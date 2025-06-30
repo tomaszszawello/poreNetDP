@@ -15,31 +15,32 @@ class SimInputData:
     ''' Configuration class for the whole simulation.
     '''
     # GENERAL
-    n: int = 4
+    n: int = 100
     "network size along y (transverse to the flow)"
-    m: int = 4
+    m: int = 50
     "network size along x (parallel to the flow)"
     iters: int = 1000000
     "maximum number of iterations"
-    tmax: float = 10000000.
+    tmax: float = 50.
     "maximum time"
-    dissolved_v_max: float = 20
+    dissolved_v_max: float = 100
     "maximum dissolved pore volume"
     plot_every: int = 100000
     "frequency of plotting the results"
-    track_every: int = dissolved_v_max / 10
+    track_every: int = tmax / 10 #dissolved_v_max / 10
     "frequency of checking channelization"
     track_list = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
+    #track_list = [1, 2, 5, 10]
     "times of checking channelization"
 
     # DISSOLUTION & PRECIPITATION
-    Da_L = 100
-    Pe_L = 1
+    Da_L = 200
+    Pe_L = 20
     load_name: str = 'diffusion/Pe1000.00Da1000.00/1/template/71'
     # Da: float = 100#0.67 * 10 ** -1
     # "effective Damkohler number"
     # Pe = 100.
-    phi = 0.01
+    phi = 0.4
     #chi0 = (1 - (1 - phi) ** (1/3)) / np.sqrt(3)
     #chi0 = (1 / (1 - phi) ** (1/3) - 1) / np.sqrt(3)
     chi0 = 4 * np.sqrt(phi) / np.pi
@@ -59,7 +60,7 @@ class SimInputData:
     #V_tot = (1 / chi0) ** 2 * np.sqrt(6) / 6 / np.pi
     V_tot = (1 / chi0) ** 2 * 3 / 4 / np.pi
 
-    debug = True
+    debug = False
 
     K: float = 0.5
     "precipitation to dissolution reaction rate"
@@ -123,7 +124,7 @@ class SimInputData:
     "minimum diameter"
     dmax: float = n
     "maximum diameter"
-    d_break: float = 10.
+    d_break: float = 4.
     "minimal diameter of outlet edge for network to be dissolved"
 
     # DRAWING

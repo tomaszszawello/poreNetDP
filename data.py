@@ -56,6 +56,7 @@ class Data():
     """
     t = []
     pressure = []
+    porosity = []
     order = []
     participation_ratio = []
     participation_ratio_nom = []
@@ -93,7 +94,7 @@ class Data():
             try:
                 file = open(self.dirname + '/params.txt', 'w', \
                     encoding = "utf-8")
-                np.savetxt(file, np.array([self.t, self.pressure, self.participation_ratio, self.cb_out, \
+                np.savetxt(file, np.array([self.t, self.dissolved_v_list, self.pressure, self.porosity, self.participation_ratio, self.cb_out, \
                     self.cc_out], dtype = float).T)
                 file.close()
                 is_saved = True
@@ -238,10 +239,19 @@ class Data():
         # delta = np.abs((np.abs(inc.incidence.T < 0) @ (np.abs(edges.flow) \
         #     * edges.inlet) - np.abs(inc.incidence.T > 0) @ (np.abs(edges.flow) \
         #     * edges.outlet)) @ cb * sid.dt)
-        print(f'J_in: {self.J_in}, J_out: {self.J_out}')
-        delta = (self.J_in - self.J_out) * sid.dt
+        if sid.include_diffusion:
+            print(f'J_in: {self.J_in}, J_out: {self.J_out}')
+            delta = (self.J_in - self.J_out) * sid.dt
+        else:
+            # delta = np.abs((np.abs(inc.incidence.T < 0) @ (np.abs(edges.flow) \
+            #     * edges.inlet) - np.abs(inc.incidence.T > 0) @ (np.abs(edges.flow) \
+            #     * edges.outlet)) @ cb * sid.dt)
+            delta = np.abs(np.abs(1 * ( inc.incidence.T @ spr.diags(edges.flow) > 0) @ (np.abs(edges.flow) \
+                 * edges.inlet)) @ cb - np.abs(1 * ( inc.incidence.T @ spr.diags(edges.flow) < 0) @ (np.abs(edges.flow) \
+                 * edges.outlet)) @ cb) * sid.dt / 2
         vol_dissolved = np.sum(edges.diams ** 2 * edges.lens) - self.vol_init
         vol_a = np.sum(vols.vol_a_0 - vols.vol_a)
+        self.porosity.append(1 - np.sum(vols.vol_a) / np.sum(vols.vol_max))
         self.delta_b += delta
         # delta2 = np.abs((np.abs(inc.incidence.T < 0) @ (np.abs(edges.flow) \
         #         * edges.inlet) - np.abs(inc.incidence.T > 0) @ (np.abs(edges.flow) \
@@ -516,8 +526,8 @@ class Data():
             else:
                 order.append(len(handles) // 2 + i)
         legend = plt.legend([handles[idx] for idx in order],[labels[idx] for idx in order], loc="lower center", mode = "expand", ncol = 4, prop={'size': 40}, handlelength = 1, frameon=False, borderpad = 0, handletextpad = 0.4)
-        # for legobj in legend.legend_handles:
-        #     legobj.set_linewidth(10.0)
+        for legobj in legend.legendHandles:
+            legobj.set_linewidth(10.0)
         #spine_color = 'blue'
         # for spine in ax1.spines.values():
         #     spine.set_linewidth(5)
@@ -528,3 +538,24 @@ class Data():
         # save file in the directory
         plt.savefig(self.dirname + "/profile.png", bbox_inches="tight")
         plt.close()
+
+    def plot_things(self, sid: SimInputData):
+        plt.figure(figsize = (15, 10))
+        plt.title('Permeability')
+        plt.plot(self.t, self.pressure[0] / self.pressure, linewidth = 5, color = 'black')
+        plt.xlabel(r'simulation time', fontsize = 50)
+        #plt.subplots_adjust(wspace=0, hspace=0)
+        plt.margins(tight = True)
+        plt.ylabel(r'$\kappa / \kappa_0$', fontsize = 50)
+        plt.savefig(self.dirname + '/permeability.png', bbox_inches="tight")
+        plt.close()
+        plt.figure(figsize = (15, 10))
+        plt.title('Porosity')
+        plt.plot(self.t, self.porosity, linewidth = 5, color = 'black')
+        plt.xlabel(r'simulation time', fontsize = 50)
+        #plt.subplots_adjust(wspace=0, hspace=0)
+        plt.margins(tight = True)
+        plt.ylabel(r'$\phi$', fontsize = 50)
+        plt.savefig(self.dirname + '/porosity.png', bbox_inches="tight")
+        plt.close()
+    

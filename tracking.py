@@ -319,7 +319,7 @@ def plot_tracking(data: Data, nbins) -> None:
         # #ax3.set_ylim(ymin, ymax)
     #legend = ax3.legend(loc='center right', bbox_to_anchor=(1.05, 0.5), prop={'size': 40}, frameon=False, handlelength = 0.2, borderpad = 0, handletextpad = 0.4)
     legend = ax1.legend(loc='lower center', prop={'size': 40}, mode = 'expand', ncol = 5, frameon=False, handlelength = 0.2, borderpad = 0, handletextpad = 0.4)
-    for legobj in legend.legend_handles:
+    for legobj in legend.legendHandles:
         legobj.set_markersize(24.0)
     plt.savefig(data.dirname + f'/track.png', bbox_inches="tight")
     plt.close()

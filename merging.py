@@ -694,7 +694,7 @@ def solve_merging_vols(sid: SimInputData, inc: Incidence, graph: Graph, vols: Vo
             inc.boundary = spr.diags(graph.in_vec + graph.out_vec)
             diag = inc.merge.diagonal()
             inc.merge -= spr.diags(diag)
-            #fix_lonely_triangles(sid, inc, graph, edges, triangles, vols)
+            fix_lonely_triangles(sid, inc, graph, edges, triangles, vols)
             edges.triangles = np.array(np.sum(vols.triangles, axis = 1))[:, 0]
             
             #inc.merge = diag_edges @ inc.merge @ diag_edges

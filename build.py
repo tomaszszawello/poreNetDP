@@ -21,6 +21,8 @@ from data import Data
 from utils import make_dir
 from volumes import Volumes
 
+import numpy as np
+
 def build() -> tuple[SimInputData, In.Incidence, De.Graph, In.Edges, Volumes, Ne.Triangles, Data]:
     ''' Initialize main classes used in simulation based on config file.
 
@@ -67,6 +69,7 @@ def build() -> tuple[SimInputData, In.Incidence, De.Graph, In.Edges, Volumes, Ne
         
         In.create_matrices(sid, graph, inc, edges)
         vols = Volumes(sid, inc, edges, triangles)
+        edges.diams = np.sqrt(vols.triangles @ ((vols.vol_max - vols.vol_a - vols.vol_e) / np.array(np.sum(vols.triangles.T, axis = 1))[:, 0]) / edges.lens)
         data = Data(sid, edges)
         Sv.save('/template.dill', sid, graph, inc, edges, triangles, vols)
         Sv.save_config(sid)

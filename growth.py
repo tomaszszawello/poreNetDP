@@ -75,7 +75,10 @@ def update_diameters(sid: SimInputData, inc: Incidence, edges: Edges, \
                 change = solve_d_diff_pe_fix(sid, inc, edges, cb)
             #change = solve_d(sid, inc, edges, cb)
         else:
-            change = solve_d(sid, inc, edges, cb)
+            if sid.include_volumes:
+                change = solve_d_vol(sid, inc, edges, vols, cb)
+            else:
+                change = solve_d(sid, inc, edges, cb)
     breakthrough = False
     if sid.include_adt:
         #change_rate = change / edges.diams
@@ -377,3 +380,13 @@ def solve_dp(sid: SimInputData, inc: Incidence, edges: Edges, cb: np.ndarray, \
     shrink_cc = np.array(np.ma.fix_invalid(shrink_cc, fill_value = 0))
     change = (growth - shrink_cb - shrink_cc)
     return change
+
+def solve_d_vol(sid, inc, edges, vols, cb):
+    growth_matrix = np.abs((spr.diags(edges.flow) @ inc.incidence > 0))
+    cb_growth = growth_matrix @ cb # choose upstream concentration of B for the
+    # calculation of growth
+    exp_b = np.exp(-np.abs(sid.Da / (1 + sid.G * edges.diams) * \
+                edges.diams * edges.lens / edges.flow))
+    growth = cb_growth * np.abs(edges.flow) / sid.Da * (1 - exp_b)
+    growth = np.array(np.ma.fix_invalid(growth, fill_value = 0.))
+    return growth
