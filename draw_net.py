@@ -215,8 +215,8 @@ def draw_flow_profile(sid: SimInputData, graph: Graph, edges: Edges, \
     order = [0,4,1,5,2,6,3,7]
 
     legend = plt.legend([handles[idx] for idx in order],[labels[idx] for idx in order], loc="lower center", mode = "expand", ncol = 4, prop={'size': 40}, handlelength = 1, frameon=False, borderpad = 0, handletextpad = 0.4)
-    # for legobj in legend.legend_handles:
-    #     legobj.set_linewidth(10.0)
+    for legobj in legend.legend_handles:
+        legobj.set_linewidth(10.0)
     plt.savefig(sid.dirname + "/" + name, bbox_inches="tight")
     plt.close()
 
@@ -497,38 +497,61 @@ import matplotlib.pyplot as plt
 from matplotlib.collections import PolyCollection
 import matplotlib as mpl
 
-def draw_triangles(sid, triangles, graph, volumes, name):
+def draw_triangles(sid, triangles, edges, graph, vols, name):
 
     pos = nx.get_node_attributes(graph, 'pos')
     verts1 = []
-    scale1 = (1 - triangles.boundary) * volumes.vol_a / volumes.vol_max
+    verts2 = []
+    vol_max = vols.vol_max #vols.vol_a + vols.vol_e + vols.triangles.T @ (edges.diams ** 2 * edges.lens / edges.triangles)
+    scale1 = (1 - triangles.boundary) * (vols.vol_a + vols.vol_e) / vol_max
+    scale2 = (1 - triangles.boundary) * vols.vol_a / (vols.vol_a + vols.vol_e)
+    scale2 = np.array(np.ma.fix_invalid(scale2, fill_value = 0))
     for i, nodes in enumerate(triangles.tlist):
         n1, n2, n3 = nodes
         pi = triangles.centers[i]
         scalei = scale1[i]
-        p1 = (pos[n1] - pi) * scalei + pi
+        p10 = (pos[n1] - pi) * scalei + pi
         p2 = (pos[n2] - pi) * scalei + pi
         p3 = (pos[n3] - pi) * scalei + pi
-        verts1.append((p1, p2, p3))
+        p11 = p10 + (p2 - p10) * (1 - scale2[i])
+        verts1.append((p11, p2, p3))
+        p12 = p10 + (p2 - p10) * scale2[i]
+        verts2.append((p12, p2, p3))
         
     
     plt.figure(figsize=(sid.figsize * sid.m / sid.n, sid.figsize))
     spec = gridspec.GridSpec(ncols = 2, nrows = 1, width_ratios=[100, 1])
     # draw first panel for the network
     ax = plt.subplot(spec[0])
+    # ax.set_facecolor("black")  
     # Make the collection and add it to the plot.
     # coll = PolyCollection(verts2, facecolors = 'c')
     # #coll.set_sizes(z, dpi = 300)
     # #coll.set_alpha(volumes.vol_a / volumes.vol_max)
     # ax.add_collection(coll)
+
+
+    edges.boundary_list += (edges.boundary_list == 0) * (triangles.incidence @ triangles.boundary > 0)
     plt.axis('equal')
-    coll2 = PolyCollection(verts1, facecolors = 'black')
+    coll1 = PolyCollection(verts1, facecolors = 'royalblue')
+    #coll1 = PolyCollection(verts1, facecolors = 'gold')
+    coll2 = PolyCollection(verts2, facecolors = 'red')
+    #coll2 = PolyCollection(verts2, facecolors = '#001370')
+    ax.add_collection(coll1)
     ax.add_collection(coll2)
+    
     ax.set_xlim(0, sid.m)
     ax.set_ylim(0, sid.n)
     #ax.autoscale_view()
     plt.axis('off')
-
+    # qs4 = (1 - edges.boundary_list) * edges.diams \
+    #     * (edges.diams > edges.diams_initial * 1.5)
+    # nx.draw_networkx_edges(graph, pos, edges.edge_list, edge_color = 'white', \
+    #     width = sid.ddrawconst * np.array(qs4))
+    qs = (1 - edges.boundary_list) * np.abs(edges.flow)
+    draw_const = 3 * sid.qdrawconst
+    nx.draw_networkx_edges(graph, pos, edges.edge_list, edge_color = 'k', \
+        width = draw_const * np.array(qs))
     # Add a colorbar for the PolyCollection
     #fig.colorbar(coll, ax=ax)
     plt.subplots_adjust(wspace=0, hspace=0)
@@ -639,4 +662,150 @@ def uniform_hist(sid: SimInputData, graph: Graph, edges: Edges, vols: Volumes, \
     plt.yscale("log")
     # save file in the directory
     plt.savefig(sid.dirname + "/" + name)
+    plt.close()
+
+
+from matplotlib.colors import LinearSegmentedColormap
+
+# bright endpoints that stay vivid on a dark slide / projector
+cmap_custom = LinearSegmentedColormap.from_list(
+    "cyan_magenta_bright",
+    ["red",   # 0.0 → full-saturation cyan
+     "grey"]   # 1.0 → full-saturation magenta
+)
+
+def draw_colored_edges(sid: SimInputData, graph: Graph, edges: Edges, \
+    vols: Volumes, name: str) -> None:
+    """ Draw the network with diameters/flow as edge width.
+
+    """
+    # draw first panel for the network
+    plt.figure(figsize=(sid.figsize, sid.figsize))
+    spec = gridspec.GridSpec(ncols = 2, nrows = 1, width_ratios=[100, 1])
+    pos = nx.get_node_attributes(graph, 'pos')
+    ax1 = plt.subplot(spec[0])
+    plt.axis('equal')
+    plt.xlim(0, sid.n)
+    plt.ylim(0, sid.n)
+    # draw inlet and outlet nodes
+    x_in, y_in = [], []
+    for node in graph.in_nodes:
+        x_in.append(pos[node][0])
+        y_in.append(pos[node][1])
+    x_out, y_out = [], []
+    for node in graph.out_nodes:
+        x_out.append(pos[node][0])
+        y_out.append(pos[node][1])
+    plt.scatter(x_in, y_in, s = 1000 / sid.n, facecolors = 'white', \
+        edgecolors = 'black')
+    plt.scatter(x_out, y_out, s = 1000 / sid.n, facecolors = 'black', \
+        edgecolors = 'white')
+    qs1 = (1 - edges.boundary_list) * edges.diams_initial * 0.9 \
+        * (edges.diams <= edges.diams_initial / 5)
+    qs2 = (1 - edges.boundary_list) * edges.diams_initial * 0.9 \
+        * (edges.diams <= edges.diams_initial * 0.9) \
+        * (edges.diams > edges.diams_initial / 5)
+    qs3 = (1 - edges.boundary_list) * edges.diams \
+        * (edges.diams <= edges.diams_initial * 1.1) \
+        * (edges.diams > edges.diams_initial * 0.9)
+    qs4 = (1 - edges.boundary_list) * edges.diams \
+        * (edges.diams > edges.diams_initial * 1.1)
+    colors = np.clip(edges.diams / edges.diams_initial, 0, 1) #1 - (vols.triangles @ (vols.vol_e / vols.vol_max)) / edges.triangles
+    nx.draw_networkx_edges(graph, pos, edges.edge_list, edge_color = colors, \
+        edge_cmap=cmap_custom, edge_vmin=0, edge_vmax=1, width = sid.ddrawconst * np.array(qs1))
+    nx.draw_networkx_edges(graph, pos, edges.edge_list, edge_color = colors, \
+        edge_cmap=cmap_custom, edge_vmin=0, edge_vmax=1, width = sid.ddrawconst * np.array(qs2))
+    nx.draw_networkx_edges(graph, pos, edges.edge_list, edge_color = colors, \
+        edge_cmap=cmap_custom, edge_vmin=0, edge_vmax=1, width = sid.ddrawconst * np.array(qs3))
+    nx.draw_networkx_edges(graph, pos, edges.edge_list, edge_color = 'k', \
+        width = sid.ddrawconst * np.array(qs4))
+    #nx.draw_networkx_nodes(graph, pos, node_color = cd)
+    plt.subplots_adjust(wspace=0, hspace=0)
+    # save file in the directory
+    plt.savefig(sid.dirname + "/" + name, bbox_inches="tight")
+    plt.close()
+
+def draw(sid: SimInputData, graph: Graph, edges: Edges, \
+    name: str, plot_type: str, cd) -> None:
+    """ Draw the network with diameters/flow as edge width.
+
+    This function plots the network with one of parameters as edge width, as
+    well as some histograms of key data.
+
+    Parameters
+    -------
+    sid : SimInputData
+        all config parameters of the simulation
+        figsize - size of the plot (~resolution)
+        ddrawconst - scaling parameter to improve visibility when drawing
+        diameters
+        qdrawconst - scaling parameter to improve visibility when drawing flow
+        dirname - directory of the simulation
+
+    graph : Graph class object
+        network and all its properties
+        in_nodes - list of inlet nodes
+        out_nodes - list of outlet nodes
+
+    edges : Edges class object
+        all edges in network and their parameters
+        diams - diameters of edges
+        diams_initial - initial diameters of edges
+        flow - flow in edges
+        boundary_list - edges assuring PBC (to be excluded from drawing)
+
+    name : str
+        name of the saved file with the plot
+
+    data : str
+        parameter taken as edge width (diameter or flow)
+    """
+    # draw first panel for the network
+    plt.figure(figsize=(sid.figsize, sid.figsize))
+    spec = gridspec.GridSpec(ncols = 2, nrows = 1, width_ratios=[100, 1])
+    pos = nx.get_node_attributes(graph, 'pos')
+    ax1 = plt.subplot(spec[0])
+    plt.axis('equal')
+    plt.xlim(0, sid.n)
+    plt.ylim(0, sid.n)
+    # draw inlet and outlet nodes
+    x_in, y_in = [], []
+    for node in graph.in_nodes:
+        x_in.append(pos[node][0])
+        y_in.append(pos[node][1])
+    x_out, y_out = [], []
+    for node in graph.out_nodes:
+        x_out.append(pos[node][0])
+        y_out.append(pos[node][1])
+    plt.scatter(x_in, y_in, s = 1000 / sid.n, facecolors = 'white', \
+        edgecolors = 'black')
+    plt.scatter(x_out, y_out, s = 1000 / sid.n, facecolors = 'black', \
+        edgecolors = 'white')
+    if plot_type == 'q':
+        qs = (1 - edges.boundary_list) * np.abs(edges.flow)
+        nx.draw_networkx_edges(graph, pos, edges.edge_list, edge_color = 'k', \
+            width = sid.qdrawconst * np.array(qs))
+    else:
+        qs1 = (1 - edges.boundary_list) * edges.diams_initial * 0.9 \
+            * (edges.diams <= edges.diams_initial / 5)
+        qs2 = (1 - edges.boundary_list) * edges.diams_initial * 0.9 \
+            * (edges.diams <= edges.diams_initial * 0.9) \
+            * (edges.diams > edges.diams_initial / 5)
+        qs3 = (1 - edges.boundary_list) * edges.diams \
+            * (edges.diams <= edges.diams_initial * 1.5) \
+            * (edges.diams > edges.diams_initial * 0.9)
+        qs4 = (1 - edges.boundary_list) * edges.diams \
+            * (edges.diams > edges.diams_initial * 1.5)
+        nx.draw_networkx_edges(graph, pos, edges.edge_list, edge_color = 'r', \
+            width = sid.ddrawconst * np.array(qs1))
+        nx.draw_networkx_edges(graph, pos, edges.edge_list, edge_color = 'y', \
+            width = sid.ddrawconst * np.array(qs2))
+        nx.draw_networkx_edges(graph, pos, edges.edge_list, edge_color = 'grey', \
+            width = sid.ddrawconst * np.array(qs3))
+        nx.draw_networkx_edges(graph, pos, edges.edge_list, edge_color = 'k', \
+            width = sid.ddrawconst * np.array(qs4))
+    #nx.draw_networkx_nodes(graph, pos, node_color = cd)
+    plt.subplots_adjust(wspace=0, hspace=0)
+    # save file in the directory
+    plt.savefig(sid.dirname + "/" + name, bbox_inches="tight")
     plt.close()

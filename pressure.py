@@ -100,6 +100,7 @@ def solve_flow(sid: SimInputData, inc: Incidence, graph: Graph, edges: Edges, \
     # flow
     q_in = np.abs(np.sum(edges.diams ** 4 / edges.lens * (inc.inlet \
         @ pressure)))
+    print(q_in)
     pressure *= sid.Q_in / q_in
     # update flow
     edges.flow = edges.diams ** 4 / edges.lens * (inc.incidence @ pressure)

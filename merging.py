@@ -413,7 +413,8 @@ def solve_merging_vols(sid: SimInputData, inc: Incidence, graph: Graph, vols: Vo
     """ Find edges which should be merged.
 
     """
-    while np.sum(1 * (vols.triangles @ (vols.vol_a == 0))):
+    #while np.sum(1 * (vols.triangles @ (vols.vol_a == 0))):
+    while np.sum(1 * (vols.triangles @ (vols.vol_a + vols.vol_e == 0))):
     #if True:
         print(np.sum(1 * (vols.triangles @ (vols.vol_a == 0))))
         pos = nx.get_node_attributes(graph, 'pos')
@@ -445,9 +446,9 @@ def solve_merging_vols(sid: SimInputData, inc: Incidence, graph: Graph, vols: Vo
                 if edge_i in skip_list:
                     flag = 1
                     print('already merged')
-                if edges.diams[edge_i] == 0:
-                    print('diam = 0')
-                    flag = 1
+                # if edges.diams[edge_i] == 0:
+                #     print('diam = 0')
+                #     flag = 1
             if flag:
                 continue
             edge_list_sorted = sorted(edge_list_tri, key=lambda i: (edges.inlet[i], edges.outlet[i], edges.diams[i]), reverse=True)

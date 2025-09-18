@@ -21,6 +21,8 @@ from data import Data
 from utils import make_dir
 from volumes import Volumes
 
+import numpy as np
+
 def build() -> tuple[SimInputData, In.Incidence, De.Graph, In.Edges, Volumes, Ne.Triangles, Data]:
     ''' Initialize main classes used in simulation based on config file.
 
@@ -60,14 +62,20 @@ def build() -> tuple[SimInputData, In.Incidence, De.Graph, In.Edges, Volumes, Ne
         inc.triangles = triangles.incidence
         Ne.set_geometry(sid, graph)
         
-        for i, nodes in enumerate(triangles.tlist):
-            n1, n2, n3 = nodes
-            if n1 in graph.in_nodes or n2 in graph.in_nodes or n3 in graph.in_nodes:
-                triangles.boundary[i] = 1
+        # for i, nodes in enumerate(triangles.tlist):
+        #     n1, n2, n3 = nodes
+        #     if n1 in graph.in_nodes and n2 in graph.in_nodes and n3 in graph.in_nodes:
+        #         triangles.boundary[i] = 1
         
         In.create_matrices(sid, graph, inc, edges)
         vols = Volumes(sid, inc, edges, triangles)
+        edges.diams = np.sqrt(vols.triangles @ ((vols.vol_max - vols.vol_a - vols.vol_e) / np.array(np.sum(vols.triangles.T, axis = 1))[:, 0]) / edges.lens)
+        edges.diams_initial = np.copy(edges.diams)
+        print(np.average(edges.diams))
         data = Data(sid, edges)
+        sid.ne = len(edges.edge_list)
+        sid.ntr = len(triangles.tlist)
+
         Sv.save('/template.dill', sid, graph, inc, edges, triangles, vols)
         Sv.save_config(sid)
     # 1 - load config and network from data saved at the end of previous
@@ -94,6 +102,7 @@ def build() -> tuple[SimInputData, In.Incidence, De.Graph, In.Edges, Volumes, Ne
         sid.ne = sid2.ne
         sid.ntr = sid2.ntr
         sid.dirname = sid2.dirname + '/template'
+        edges.diams_initial = np.copy(edges.diams)
         make_dir(sid)
         data = Data(sid, edges)
         Sv.save_config(sid)

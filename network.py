@@ -243,6 +243,10 @@ class Edges():
     ("vector scaling the effective reaction parameter for reaction B \
     (defaultly equal 1, but could be < 1 when there is not enough volume to \
     dissolve, for the reaction to proceed as usual)")
+    alpha_c : np.ndarray
+    ("vector scaling the effective reaction parameter for reaction B \
+    (defaultly equal 1, but could be < 1 when there is not enough volume to \
+    dissolve, for the reaction to proceed as usual)")
     def __init__(self, diams, lens, flow, edge_list, boundary_list, triangles = np.array([])):
         self.diams = diams
         self.lens = lens
@@ -256,7 +260,8 @@ class Edges():
         self.B = np.zeros_like(diams)
         self.diams_draw = diams.copy()
         self.triangles = triangles
-        self.alpha_b = np.zeros_like(diams)
+        self.alpha_b = np.ones_like(diams)
+        self.alpha_c = np.ones_like(diams)
 
 def build_delaunay_net(sid: SimInputData, inc: Incidence) \
     -> tuple(Graph, Edges, Triangles):

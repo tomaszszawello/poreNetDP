@@ -60,10 +60,14 @@ class Data():
     participation_ratio = []
     participation_ratio_nom = []
     participation_ratio_denom = []
+    porosity = []
+    replaced = []
     cb_out = []
     cc_out = []
     delta_b = 0.
     delta_c = 0.
+    delta_d = 0.
+    delta_d_list = []
     dissolved_v = 0.
     dissolved_v_list = []
     slices: list = []
@@ -76,6 +80,10 @@ class Data():
     concentrations: list = []
     reactive_breakthrough_times: list = []
     track_times: list = []
+    vol_dissolved = 0.
+    vol_precipitated = 0.
+    vol_dissolved_list = []
+    vol_precipitated_list = []
 
     def __init__(self, sid: SimInputData, edges: Edges):
         self.dirname = sid.dirname
@@ -93,8 +101,8 @@ class Data():
             try:
                 file = open(self.dirname + '/params.txt', 'w', \
                     encoding = "utf-8")
-                np.savetxt(file, np.array([self.t, self.pressure, self.participation_ratio, self.cb_out, \
-                    self.cc_out], dtype = float).T)
+                np.savetxt(file, np.array([self.t, self.dissolved_v_list, self.pressure, self.porosity, self.replaced, self.cb_out, \
+                    self.cc_out, self.vol_dissolved_list, self.vol_precipitated_list, self.delta_d_list], dtype = float).T)
                 file.close()
                 is_saved = True
             except PermissionError:
@@ -110,24 +118,25 @@ class Data():
                 is_saved = True
             except PermissionError:
                 pass
-        is_saved = False
-        while not is_saved: # prevents problems with opening text file
-            try:
-                file = open(self.dirname + '/track.txt', 'w', \
-                    encoding = "utf-8")
-                np.savetxt(file, self.breakthrough_times)
-                file.close()
-                file = open(self.dirname + '/c_track.txt', 'w', \
-                    encoding = "utf-8")
-                np.savetxt(file, self.concentrations)
-                file.close()
-                file = open(self.dirname + '/r_track.txt', 'w', \
-                    encoding = "utf-8")
-                np.savetxt(file, self.reactive_breakthrough_times)
-                file.close()
-                is_saved = True
-            except PermissionError:
-                pass
+    
+        # is_saved = False
+        # while not is_saved: # prevents problems with opening text file
+        #     try:
+        #         file = open(self.dirname + '/track.txt', 'w', \
+        #             encoding = "utf-8")
+        #         np.savetxt(file, self.breakthrough_times)
+        #         file.close()
+        #         file = open(self.dirname + '/c_track.txt', 'w', \
+        #             encoding = "utf-8")
+        #         np.savetxt(file, self.concentrations)
+        #         file.close()
+        #         file = open(self.dirname + '/r_track.txt', 'w', \
+        #             encoding = "utf-8")
+        #         np.savetxt(file, self.reactive_breakthrough_times)
+        #         file.close()
+        #         is_saved = True
+        #     except PermissionError:
+        #         pass
 
     def load_data(self) -> None:
         data = np.loadtxt(self.dirname + '/params.txt').T
@@ -160,7 +169,7 @@ class Data():
 
 
     def collect_data(self, sid: SimInputData, inc: Incidence, edges: Edges, vols, \
-        p: np.ndarray, cb: np.ndarray, cc: np.ndarray) -> None:
+        p: np.ndarray, cb: np.ndarray, cc: np.ndarray, cd: np.ndarray) -> None:
         """ Collect data from different vectors.
 
         This function extracts information such as permeability, quantity of
@@ -193,7 +202,7 @@ class Data():
         cc : numpy ndarray
             vector of current substance C concentration
         """
-        self.t.append(sid.old_t)
+        self.t.append(sid.old_t + sid.dt)
 
         self.pressure.append(np.max(p))
         self.order.append((sid.ne - np.sum(edges.flow ** 2) ** 2 \
@@ -238,10 +247,19 @@ class Data():
         # delta = np.abs((np.abs(inc.incidence.T < 0) @ (np.abs(edges.flow) \
         #     * edges.inlet) - np.abs(inc.incidence.T > 0) @ (np.abs(edges.flow) \
         #     * edges.outlet)) @ cb * sid.dt)
-        print(f'J_in: {self.J_in}, J_out: {self.J_out}')
-        delta = (self.J_in - self.J_out) * sid.dt
+        if sid.include_diffusion:
+            print(f'J_in: {self.J_in}, J_out: {self.J_out}')
+            delta = (self.J_in - self.J_out) * sid.dt
+        else:
+            # delta = np.abs((np.abs(inc.incidence.T < 0) @ (np.abs(edges.flow) \
+            #     * edges.inlet) - np.abs(inc.incidence.T > 0) @ (np.abs(edges.flow) \
+            #     * edges.outlet)) @ cb * sid.dt)
+            delta = np.abs(np.abs(1 * ( inc.incidence.T @ spr.diags(edges.flow) > 0) @ (np.abs(edges.flow) \
+                 * edges.inlet)) @ cb - np.abs(1 * ( inc.incidence.T @ spr.diags(edges.flow) < 0) @ (np.abs(edges.flow) \
+                 * edges.outlet)) @ cb) * sid.dt
         vol_dissolved = np.sum(edges.diams ** 2 * edges.lens) - self.vol_init
         vol_a = np.sum(vols.vol_a_0 - vols.vol_a)
+        print(f'Zero volume: {np.sum(vols.vol_a == 0)}')
         self.delta_b += delta
         # delta2 = np.abs((np.abs(inc.incidence.T < 0) @ (np.abs(edges.flow) \
         #         * edges.inlet) - np.abs(inc.incidence.T > 0) @ (np.abs(edges.flow) \
@@ -249,16 +267,34 @@ class Data():
         # print(f'Delta2: {delta2}')
         # print(f'Delta3: {(J_in - J_out2) * sid.dt}')
         # print(f'Delta4: {(J_in - J_out3) * sid.dt}')
-        print(f'Used concentration: {self.delta_b}, Dissolved volume: {sid.Da * vol_dissolved / 2}, Dissolved volume A: {sid.Da * vol_a / 2}')
-        print(f'c - V: {(self.delta_b - sid.Da * vol_dissolved / 2) / self.delta_b}, c - V_A: {(self.delta_b - sid.Da * vol_a / 2) / self.delta_b}, V - V_A {(vol_dissolved - vol_a) / vol_dissolved}')
+        print(f'Used concentration: {self.delta_b}, Dissolved volume: {sid.Da * vol_dissolved}, Dissolved volume A: {sid.Da * vol_a}')
+        #print(f'c - V: {(self.delta_b - sid.Da * vol_dissolved / 2) / self.delta_b}, c - V_A: {(self.delta_b - sid.Da * vol_a / 2) / self.delta_b}, V - V_A {(vol_dissolved - vol_a) / vol_dissolved}')
+        #print(f'c - V: {(self.delta_b - sid.Da * vol_dissolved)}, c - V_A: {(self.delta_b - sid.Da * vol_a)}, V - V_A {(vol_dissolved - vol_a)}')
         self.cb_out.append(self.delta_b)
-        delta = np.abs((np.abs(inc.incidence.T < 0) @ (np.abs(edges.flow) \
-            * edges.inlet) - np.abs(inc.incidence.T > 0) @ (np.abs(edges.flow) \
-            * edges.outlet)) @ cc * sid.dt)
-        self.delta_c += delta
+        delta_c = np.abs(np.abs(1 * ( inc.incidence.T @ spr.diags(edges.flow) > 0) @ (np.abs(edges.flow) \
+                 * edges.inlet)) @ cc - np.abs(1 * ( inc.incidence.T @ spr.diags(edges.flow) < 0) @ (np.abs(edges.flow) \
+                 * edges.outlet)) @ cc) * sid.dt
+        self.delta_c += delta_c
+        delta_d = np.abs(np.abs(1 * ( inc.incidence.T @ spr.diags(edges.flow) > 0) @ (np.abs(edges.flow) \
+                 * edges.inlet)) @ cd - np.abs(1 * ( inc.incidence.T @ spr.diags(edges.flow) < 0) @ (np.abs(edges.flow) \
+                 * edges.outlet)) @ cd) * sid.dt
+        self.delta_d += delta_d
+        self.delta_d_list.append(self.delta_d)
+        # self.injected_d += np.abs(np.abs(1 * ( inc.incidence.T @ spr.diags(edges.flow) > 0) @ (np.abs(edges.flow) \
+        #          * edges.inlet)) @ cd) * sid.dt
+        # self.injected_list.append(self.injected_d)
+        print(f'Delta c_B: {self.delta_b}, Delta c_C: {self.delta_c}, Delta c_D: {self.delta_d}')
+        print(f'Delta c_B + Delta c_C - Delta c_D: {(delta - delta_c - delta_d)}')
+        # if np.abs(delta - delta_c - delta_d) > 1e-3:
+        #     raise ValueError
         self.cc_out.append(self.delta_c)
-        self.dissolved_v = (np.sum(edges.diams ** 2 * edges.lens) - self.vol_init) / self.vol_init
+        self.dissolved_v = np.sum(vols.vol_a) / np.sum(vols.vol_max)
         self.dissolved_v_list.append(self.dissolved_v)
+        self.porosity.append(1 - np.sum(vols.vol_a + vols.vol_e) / np.sum(vols.vol_max))
+        self.replaced.append(np.sum(vols.vol_e) / np.sum(vols.vol_max))
+        self.vol_dissolved_list.append(self.vol_dissolved)
+        self.vol_precipitated_list.append(self.vol_precipitated)
+        
 
     def plot_data(self) -> None:
         """ Plot data from text file.
@@ -516,8 +552,8 @@ class Data():
             else:
                 order.append(len(handles) // 2 + i)
         legend = plt.legend([handles[idx] for idx in order],[labels[idx] for idx in order], loc="lower center", mode = "expand", ncol = 4, prop={'size': 40}, handlelength = 1, frameon=False, borderpad = 0, handletextpad = 0.4)
-        # for legobj in legend.legend_handles:
-        #     legobj.set_linewidth(10.0)
+        for legobj in legend.legend_handles:
+            legobj.set_linewidth(10.0)
         #spine_color = 'blue'
         # for spine in ax1.spines.values():
         #     spine.set_linewidth(5)
@@ -527,4 +563,55 @@ class Data():
         #     spine.set_edgecolor(spine_color)
         # save file in the directory
         plt.savefig(self.dirname + "/profile.png", bbox_inches="tight")
+        plt.close()
+
+    def plot_things(self, sid: SimInputData):
+        plt.figure(figsize = (15, 10))
+        x = sid.cb_in * np.array(self.t) * sid.Q_in / (2 * sid.Da * sid.ne * sid.phi / (1 - sid.phi))
+        plt.title('Permeability')
+        plt.plot(x, self.pressure[0] / self.pressure, linewidth = 5, color = 'black')
+        plt.yscale('log')
+        plt.xlabel(r'injected B $\nu_A / V^0_A$', fontsize = 50)
+        #plt.subplots_adjust(wspace=0, hspace=0)
+        plt.margins(tight = True)
+        plt.ylabel(r'$\kappa / \kappa_0$', fontsize = 50)
+        plt.savefig(self.dirname + '/permeability.png', bbox_inches="tight")
+        plt.close()
+        plt.figure(figsize = (15, 10))
+        plt.title('Porosity')
+        plt.plot(x, self.porosity, linewidth = 5, color = 'black')
+        plt.xlabel(r'injected B $\nu_A / V^0_A$', fontsize = 50)
+        #plt.subplots_adjust(wspace=0, hspace=0)
+        plt.margins(tight = True)
+        plt.ylabel(r'$\phi$', fontsize = 50)
+        plt.yscale('log')
+        plt.savefig(self.dirname + '/porosity.png', bbox_inches="tight")
+        plt.close()
+        plt.figure(figsize = (15, 10))
+        plt.title('Mineral evolution')
+        plt.plot(x, self.dissolved_v_list, linewidth = 5, color = 'black', label = 'A')
+        # plt.xlabel(r'$\Delta V_A / V^\text{init}_A$', fontsize = 50)
+        # #plt.subplots_adjust(wspace=0, hspace=0)
+        # plt.margins(tight = True)
+        # plt.ylabel(r'injected B', fontsize = 50)
+        # plt.savefig(self.dirname + '/replaced.png', bbox_inches="tight")
+        # plt.close()
+        # plt.figure(figsize = (15, 10))
+        # plt.title('Replaced volume')
+        plt.plot(x, self.replaced, '--', linewidth = 5, color = 'black', label = 'E')
+        plt.ylabel(r'$\Delta V / V^\text{tot}$', fontsize = 50)
+        #plt.subplots_adjust(wspace=0, hspace=0)
+        plt.margins(tight = True)
+        plt.legend()
+        plt.xlabel(r'injected B $\nu_A / V^0_A$', fontsize = 50)
+        plt.savefig(self.dirname + '/replaced.png', bbox_inches="tight")
+        plt.close()
+        plt.figure(figsize = (15, 10))
+        plt.title('Reacted D')
+        plt.plot(sid.cb_in * np.array(self.t) * sid.Q_in / (2 * sid.Da * sid.ne * sid.phi / (1 - sid.phi)), np.array(self.delta_d_list) / (2 * sid.Da * sid.ne * sid.phi / (1 - sid.phi)), linewidth = 5, color = 'black')
+        plt.ylabel(r'reacted  D $\nu_A / V^0_A$', fontsize = 50)
+        #plt.subplots_adjust(wspace=0, hspace=0)
+        plt.margins(tight = True)
+        plt.xlabel(r'injected B $\nu_A / V^0_A$', fontsize = 50)
+        plt.savefig(self.dirname + '/reacted_d.png', bbox_inches="tight")
         plt.close()

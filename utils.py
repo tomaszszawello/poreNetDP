@@ -129,3 +129,47 @@ def make_dir(sid: SimInputData) -> None:
             i += 1
     if not os.path.isdir(sid.dirname):
         os.makedirs(sid.dirname)
+
+import numpy as np
+import scipy.sparse as sp
+from scipy.sparse.csgraph import connected_components
+
+def keep_largest_component(inc):
+    """
+    Parameters
+    ----------
+    inc : scipy.sparse.csc_matrix (n_nodes × n_edges)
+        Signed incidence matrix (+1/−1) of an undirected network.
+
+    Returns
+    -------
+    inc_pruned : csc_matrix
+        Copy of `inc` where rows (nodes) outside the largest
+        connected component have been zeroed.
+    keep_mask : ndarray, bool
+        True for nodes kept; False for zeroed rows.
+    """
+    # 1. Build an undirected node-adjacency matrix:  A = |inc| · |inc|ᵀ
+    A = abs(inc.incidence).astype(bool).astype(int)     # 0/1 matrix keeps multiplication cheap
+    G = A @ A.T
+    G.setdiag(0)                              # remove self-loops
+    G.eliminate_zeros()
+
+    # 2. Connected components of the node graph
+    ncomp, labels = connected_components(G, directed=False)
+
+    if ncomp <= 1:                            # already one component → return unchanged
+        return None
+
+    # 3. Largest component
+    largest = np.argmax(np.bincount(labels))
+    keep_mask = labels == largest
+
+    # 4. Zero rows outside that component
+    inc_pruned = inc.incidence.copy().tolil()           # easier row assignment
+    inc_pruned[~keep_mask, :] = 0             # zero unwanted nodes
+    inc.incidence = inc_pruned.tocsc()
+    inlet_pruned = inc.inlet.copy().tolil()
+    inlet_pruned[~keep_mask, :] = 0 
+    inc.inlet = inlet_pruned.tocsc()
+    return None
