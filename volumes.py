@@ -59,6 +59,7 @@ class Volumes():
         "assignment of edges to neighbouring triangles (updated later)"
         self.vol_a_prev = np.zeros(sid.ntr)
         "volume of substance A from the previous iteration (for merging)"
+        self.tri_contact = self.triangles.copy()
 
 
     def find_edge_surface(self, edges):

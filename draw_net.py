@@ -102,12 +102,13 @@ def draw_flow(sid: SimInputData, graph: Graph, edges: Edges, \
     plt.scatter(x_out, y_out, s = 1000 / sid.n, facecolors = 'black', \
         edgecolors = 'white')
     if plot_type == 'q':
-        qs = (1 - edges.boundary_list) * np.abs(edges.flow)
+        qs = (1 - edges.boundary_list) * np.abs(edges.flow) #/ edges.diams ** 2
         draw_const = sid.qdrawconst
     else:
         #qs = (1 - edges.boundary_list) * np.abs(edges.diams_draw - edges.diams_initial) * (edges.diams_initial > 0)
-        qs = (1 - edges.boundary_list) * edges.diams_draw * (edges.diams_draw - edges.diams_initial > 0.1) * (edges.diams_initial > 0)
+        #qs = (1 - edges.boundary_list) * edges.diams_draw * (edges.diams_draw - edges.diams_initial > 0.1) * (edges.diams_initial > 0)
         #qs = (1 - edges.boundary_list) * edges.diams_draw * (edges.diams_initial > 0)
+        qs = (1 - edges.boundary_list) * edges.diams
         draw_const = sid.ddrawconst
     nx.draw_networkx_edges(graph, pos, edges.edge_list, edge_color = 'k', \
         width = draw_const * np.array(qs))
@@ -215,7 +216,7 @@ def draw_flow_profile(sid: SimInputData, graph: Graph, edges: Edges, \
     order = [0,4,1,5,2,6,3,7]
 
     legend = plt.legend([handles[idx] for idx in order],[labels[idx] for idx in order], loc="lower center", mode = "expand", ncol = 4, prop={'size': 40}, handlelength = 1, frameon=False, borderpad = 0, handletextpad = 0.4)
-    for legobj in legend.legendHandles:
+    for legobj in legend.legend_handles:
         legobj.set_linewidth(10.0)
     plt.savefig(sid.dirname + "/" + name, bbox_inches="tight")
     plt.close()
@@ -472,18 +473,20 @@ def draw_nodes(sid: SimInputData, graph: Graph, edges: Edges, cb, \
     qs = (1 - edges.boundary_list) * np.abs(edges.flow) * (edges.diams > 0)
     #qs = (1 - edges.boundary_list) * np.abs(edges.diams) * (edges.diams > 0)
     draw_const = sid.qdrawconst
-    nx.draw_networkx_edges(graph, pos, edges.edge_list, edge_color = 'k', \
-        width = 0.1 * draw_const * np.array(qs))
+
+    # nx.draw_networkx_edges(graph, pos, edges.edge_list, edge_color = 'k', \
+    #     width = draw_const * np.array(qs))
+
     #print(list(zip(edges.edge_list, np.arange(0, len(edges.edge_list)))))
     # for key, val in dict(zip(edges.edge_list, np.arange(0, len(edges.edge_list)))):
     #     print(key, val)
     # print(pos)
-    nx.draw_networkx_edge_labels(graph, pos, edge_labels=dict(zip(edges.edge_list, np.arange(0, len(edges.edge_list)))), font_size = 10)
+    #nx.draw_networkx_edge_labels(graph, pos, edge_labels=dict(zip(edges.edge_list, np.arange(0, len(edges.edge_list)))), font_size = 10)
     #pathcollection = nx.draw_networkx_nodes(graph, pos, nodelist = np.where(cb > 0)[0], node_color = cb[np.where(cb > 0)], node_size = 1000 / sid.n, vmin = 0, vmax = 1)
-    pathcollection = nx.draw_networkx_nodes(graph, pos, nodelist = np.where(cb > 0)[0], node_color = cb[np.where(cb > 0)], node_size = 1000 / sid.n)
+    pathcollection = nx.draw_networkx_nodes(graph, pos, node_color = cb + np.min(cb), node_size = 1000 / sid.n)
     # pathcollection = nx.draw_networkx_nodes(graph, pos, node_color = (cb + np.min(cb)) * (1 * (cb < 0) + 1 * (cb > 1)) , node_size = 20)
     plt.colorbar(pathcollection)
-    nx.draw_networkx_labels(graph, pos, labels=dict(zip(graph.nodes(), graph.nodes())), font_size=5)
+    #nx.draw_networkx_labels(graph, pos, labels=dict(zip(graph.nodes(), graph.nodes())), font_size=5)
     plt.scatter(x_in, y_in, s = 30, facecolors = 'white', edgecolors = 'black')
     plt.scatter(x_out, y_out, s = 30, facecolors = 'black', \
         edgecolors = 'white')
@@ -499,16 +502,27 @@ import matplotlib as mpl
 
 def draw_triangles(sid, triangles, graph, volumes, name):
 
-    pos = nx.get_node_attributes(graph, 'pos')
+    pos = np.array(list(nx.get_node_attributes(graph, 'pos').values()))
     verts1 = []
-    scale1 = (1 - triangles.boundary) * volumes.vol_a / volumes.vol_max
-    for i, nodes in enumerate(triangles.tlist):
-        n1, n2, n3 = nodes
-        pi = triangles.centers[i]
-        scalei = scale1[i]
-        p1 = (pos[n1] - pi) * scalei + pi
-        p2 = (pos[n2] - pi) * scalei + pi
-        p3 = (pos[n3] - pi) * scalei + pi
+    # scale1 = (1 - triangles.boundary) * volumes.vol_a / volumes.vol_max
+    # scale1 = np.array(np.ma.fix_invalid(scale1, fill_value = 0))
+    # for i, nodes in enumerate(triangles.tlist):
+    #     n1, n2, n3 = nodes
+    #     pi = triangles.centers[i]
+    #     scalei = scale1[i]
+    #     p1 = (pos[n1] - pi) * scalei + pi
+    #     p2 = (pos[n2] - pi) * scalei + pi
+    #     p3 = (pos[n3] - pi) * scalei + pi
+    #     verts1.append((p1, p2, p3))
+    scale1 = np.array(np.ma.fix_invalid((1 - triangles.boundary) * volumes.vol_a / volumes.vol_max,
+                                    fill_value=0.0))
+
+    for (n1, n2, n3), pi, s in zip(triangles.tlist, triangles.centers, scale1):
+        # current centroid from positions
+        C = (pos[n1] + pos[n2] + pos[n3]) / 3.0
+        p1 = (pos[n1] - C) * s + C
+        p2 = (pos[n2] - C) * s + C
+        p3 = (pos[n3] - C) * s + C
         verts1.append((p1, p2, p3))
         
     
@@ -526,8 +540,15 @@ def draw_triangles(sid, triangles, graph, volumes, name):
     ax.add_collection(coll2)
     ax.set_xlim(0, sid.m)
     ax.set_ylim(0, sid.n)
+    ax.set_xticks([])
+    ax.set_yticks([])
+    ax.tick_params(axis='both', which='both',
+                bottom=False, top=False, left=False, right=False,
+                labelbottom=False, labelleft=False)
     #ax.autoscale_view()
-    plt.axis('off')
+    plt.axis('equal')
+    ax.set_axis_on()
+    ax.tick_params(bottom=False, left = False)
 
     # Add a colorbar for the PolyCollection
     #fig.colorbar(coll, ax=ax)

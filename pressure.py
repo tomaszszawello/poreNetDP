@@ -106,3 +106,58 @@ def solve_flow(sid: SimInputData, inc: Incidence, graph: Graph, edges: Edges, \
     #p_continuity = p_matrix @ pressure * (1 - graph.in_vec - graph.out_vec)
     
     return pressure
+
+def solve_flow_constant_p(sid: SimInputData, inc: Incidence, graph: Graph, edges: Edges, \
+    pressure_b: spr.csc_matrix) -> np.ndarray:
+    """ Calculates pressure and flow.
+
+    Parameters
+    -------
+    sid : SimInputData class object
+        all config parameters of the simulation
+        qin - characteristic flow for inlet edge
+
+    inc : Incidence class object
+        matrices of incidence; here all of shape (ne x nsq)
+        incidence - incidence of all nodes and edges
+        middle - incidence of nodes and edges for all but inlet and outlet
+        boundary - incidence of nodes and edges for inlet and outlet
+        inlet - incidence of nodes and edges for inlet
+
+    graph : Graph class object
+        network and all its properties
+        in_nodes - inlet nodes
+
+    edges : Edges class object
+        all edges in network and their parameters
+        diams - diameters
+        lens - lengths
+
+    pressure_b : scipy sparse vector
+        result vector for pressure equation
+
+    Returns
+    -------
+    pressure : numpy ndarray
+        vector of pressure in nodes
+    """
+    # create matrix (nsq x nsq) for solving equations for pressure and flow
+    # to find pressure in each node
+    p_matrix = inc.incidence.T @ spr.diags(edges.diams ** 4 / edges.lens) \
+        @ inc.incidence
+    # for all inlet nodes we set the same pressure, for outlet nodes we set
+    # zero pressure; so for boundary nodes we zero the elements of p_matrix
+    # and add identity for those rows
+    p_matrix = p_matrix.multiply((1 - graph.in_vec - graph.out_vec)[:, np.newaxis]) + spr.diags(graph.in_vec + graph.out_vec)
+    diag = p_matrix.diagonal()
+    diag_old = diag.copy()
+    # fix for nodes with no connections
+    diag += 1 * (diag == 0)
+    p_matrix += spr.diags(diag - diag_old)
+    # solve matrix @ pressure = pressure_b
+    pressure = solve_equation(p_matrix, pressure_b)
+    # update flow
+    edges.flow = edges.diams ** 4 / edges.lens * (inc.incidence @ pressure)
+    #p_continuity = p_matrix @ pressure * (1 - graph.in_vec - graph.out_vec)
+    
+    return pressure

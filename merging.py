@@ -488,7 +488,12 @@ def solve_merging_vols(sid: SimInputData, inc: Incidence, graph: Graph, vols: Vo
                     vols.triangles[edge, merge_triangles[tr_i]] = 0
                 print('something wrong with nodes', n1, n2, n3, n4)
                 continue
-            if np.abs(pos[merge_node][0] - pos[zero_node][0]) > 1:
+            # if np.abs(pos[merge_node][0] - pos[zero_node][0]) > 1:
+            #     for edge in edge_list_tri:
+            #         vols.triangles[edge, merge_triangles[tr_i]] = 0
+            #     print('too far away')
+            #     continue
+            if np.abs(pos[merge_node][1] - pos[zero_node][1]) > 1:
                 for edge in edge_list_tri:
                     vols.triangles[edge, merge_triangles[tr_i]] = 0
                 print('too far away')
@@ -696,6 +701,7 @@ def solve_merging_vols(sid: SimInputData, inc: Incidence, graph: Graph, vols: Vo
             inc.merge -= spr.diags(diag)
             fix_lonely_triangles(sid, inc, graph, edges, triangles, vols)
             edges.triangles = np.array(np.sum(vols.triangles, axis = 1))[:, 0]
+            inc.tail, inc.head = extract_tail_head(inc.incidence)
             
             #inc.merge = diag_edges @ inc.merge @ diag_edges
             #fix_merging(sid, inc, graph, edges)
@@ -809,9 +815,15 @@ def fix_lonely_triangles(sid: SimInputData, inc: Incidence, graph: Graph, \
             for node in nodes:
                 edge_list = sorted(inc.incidence.T[node].nonzero()[1], key=lambda i: edges.diams[i], reverse=True)
                 if edge_list:
-                    if edges.diams[edge_list[0]] > diams_max:
-                        edge_i = edge_list[0]
-                        diams_max = edges.diams[edge_i]
+                    if vols.triangles[edge_i, tr] != 1:
+                        if edges.diams[edge_list[0]] > diams_max:
+                            edge_i = edge_list[0]
+                            diams_max = edges.diams[edge_i]
+                    else:
+                        if len(edge_list) > 1:
+                            if edges.diams[edge_list[1]] > diams_max:
+                                edge_i = edge_list[1]
+                                diams_max = edges.diams[edge_i]
             if edge_i:
                 vols.triangles[edge_i, tr] = 1
                 flag = 0
@@ -820,7 +832,20 @@ def fix_lonely_triangles(sid: SimInputData, inc: Incidence, graph: Graph, \
             
                 
         print("Lonely triangles connected")
-        #raise ValueError('Alone...')
+
+def extract_tail_head(B):
+    B = B.tocsr()
+    tail = np.empty(B.shape[0], int)
+    head = np.empty(B.shape[0], int)
+    for e in range(B.shape[0]):
+        s, t = B.indptr[e], B.indptr[e+1]
+        cols = B.indices[s:t]; vals = B.data[s:t]
+        tail[e] = cols[vals == -1][0]
+        head[e] = cols[vals == +1][0]
+    return tail, head
+
+
+    #raise ValueError('Alone...')
 
 # def solve_merging_vols(sid: SimInputData, inc: Incidence, graph: Graph, vols: Volumes, \
 #     edges: Edges, merging_type: str = 'standard'):

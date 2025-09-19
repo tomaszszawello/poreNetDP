@@ -57,6 +57,10 @@ class Incidence():
     plot: spr.csr_matrix = spr.csr_matrix(0)
     "matrix for plotting diameters with merging (ne x ne)"
     merge_vec: np.ndarray
+    head: np.ndarray
+    tail: np.ndarray
+
+
 
 def create_matrices(sid: SimInputData, graph: Graph, inc: Incidence, \
     edges: Edges) -> None:
@@ -104,6 +108,7 @@ def create_matrices(sid: SimInputData, graph: Graph, inc: Incidence, \
     reg_nodes = [] # list of regular nodes (not inlet or outlet)
     in_edges = np.zeros(sid.ne)
     out_edges = np.zeros(sid.ne)
+    head, tail = [], []
     for i, e in enumerate(edges.edge_list):
         n1, n2 = e
         data.append(-1)
@@ -112,6 +117,8 @@ def create_matrices(sid: SimInputData, graph: Graph, inc: Incidence, \
         data.append(1)
         row.append(i)
         col.append(n2)
+        head.append(n2)
+        tail.append(n1)        
         # middle matrix has 1 in coordinates of all connected regular nodes
         # so it can be later multiplied elementwise by any other matrix for
         # which we want to set specific boundary condition for inlet and outlet
@@ -179,5 +186,7 @@ def create_matrices(sid: SimInputData, graph: Graph, inc: Incidence, \
     inc.plot = spr.csr_matrix(spr.diags(np.ones(sid.ne)))
     # we calculate how many triangles each edge has as neighbors (1 or 2)
     inc.merge_vec = np.zeros(sid.nsq + 2 * sid.ne)
+    inc.head = np.array(head)
+    inc.tail = np.array(tail)
     edges.inlet = in_edges
     edges.outlet = out_edges

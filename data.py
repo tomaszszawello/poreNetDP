@@ -150,11 +150,12 @@ class Data():
             inlet - edges connected to inlet nodes
             outlet - edges connected to outlet nodes
         """
-        Q_in = np.sum(edges.inlet * np.abs(edges.flow))
-        Q_out = np.sum(edges.outlet * np.abs(edges.flow))
+        Q_in = np.sum(edges.inlet * edges.flow)
+        Q_out = np.sum(edges.outlet * edges.flow)
         print('Q_in =', Q_in, 'Q_out =', Q_out)
-        if np.abs(Q_in - Q_out) > 1:
-            raise ValueError('Flow not matching!')
+        # if np.abs(np.abs(Q_in) - np.abs(Q_out)) > 1:
+        #     raise ValueError('Flow not matching!')
+        
         # delta = np.abs((np.abs(inc.incidence.T < 0) @ (np.abs(edges.flow) \
         #     * edges.inlet) - np.abs(inc.incidence.T > 0) @ (np.abs(edges.flow) \
         #     * edges.outlet)) @ cb * sid.dt)
@@ -239,6 +240,8 @@ class Data():
         # delta = np.abs((np.abs(inc.incidence.T < 0) @ (np.abs(edges.flow) \
         #     * edges.inlet) - np.abs(inc.incidence.T > 0) @ (np.abs(edges.flow) \
         #     * edges.outlet)) @ cb * sid.dt)
+        
+        
         if sid.include_diffusion:
             print(f'J_in: {self.J_in}, J_out: {self.J_out}')
             delta = (self.J_in - self.J_out) * sid.dt
@@ -269,6 +272,8 @@ class Data():
         self.cc_out.append(self.delta_c)
         self.dissolved_v = (np.sum(edges.diams ** 2 * edges.lens) - self.vol_init) / self.vol_init
         self.dissolved_v_list.append(self.dissolved_v)
+        # if self.delta_b - sid.Da * vol_a / 2 > 1e-5:
+        #     raise ValueError("Mass lost")
 
     def plot_data(self) -> None:
         """ Plot data from text file.
@@ -338,6 +343,7 @@ class Data():
         slice_flow = np.array(sorted(slice_edges * np.abs(edges.flow), reverse = True))
         fraction_flow = 0
         total_flow = np.sum(slice_flow)
+        #print(total_flow)
         # calculate how many edges take half of the flow
         for i, edge_flow in enumerate(slice_flow):
             fraction_flow += edge_flow
@@ -526,7 +532,7 @@ class Data():
             else:
                 order.append(len(handles) // 2 + i)
         legend = plt.legend([handles[idx] for idx in order],[labels[idx] for idx in order], loc="lower center", mode = "expand", ncol = 4, prop={'size': 40}, handlelength = 1, frameon=False, borderpad = 0, handletextpad = 0.4)
-        for legobj in legend.legendHandles:
+        for legobj in legend.legend_handles:
             legobj.set_linewidth(10.0)
         #spine_color = 'blue'
         # for spine in ax1.spines.values():

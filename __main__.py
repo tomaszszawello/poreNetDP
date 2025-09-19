@@ -14,7 +14,8 @@ import dissolution as Di
 import diffusion as Dif
 import draw_net as Dr
 import growth as Gr
-import merging as Me
+import merging_chat as Me
+import electroosmosis as Osm
 import precipitation as Pi
 import pressure as Pr
 import save as Sv
@@ -50,32 +51,58 @@ import scipy.sparse as spr
 # runs until we reach iteration limit or time limit or network is dissolved
 while t < tmax and i < iters and data.dissolved_v < sid.dissolved_v_max and not breakthrough:
     print((f'Iter {i + 1}/{iters} Time {t:.2f}/{tmax:.2f} \
-        Dissolved {t:.2f}/{sid.dissolved_v_max:.2f}'))
+        Dissolved {data.dissolved_v:.2f}/{sid.dissolved_v_max:.2f}'))
+    print(np.sum(vols.vol_a), np.sum(vols.vol_a_0))
     print(np.max(edges.diams))
     # initialize vectors
+    #
     pressure_b = Pr.create_vector(sid, graph)
+    if sid.include_electroosmosis:
+        #cosm_b = Osm.create_vector(sid, graph)
+        #cosm = Osm.solve_diffusion(sid, inc, graph, edges, cosm_b)
+
+        if i == 0:
+            cosm = sid.cosm_in * np.ones(sid.nsq) * (1 - graph.out_vec) + sid.cosm_out * graph.out_vec
+            #pressure = np.ones(sid.nsq) * (1 - graph.in_vec - graph.out_vec) #np.zeros(sid.nsq) #
+            pressure = np.ones(sid.nsq) * (1  - graph.in_vec - graph.out_vec) + 0 * graph.in_vec
+            cosm, pressure = Osm.solve_diffusion_nr_merge(sid, inc, edges, graph, cosm, pressure)
+            #cosm, pressure = Osm.solve_diffusion_scipy2(sid, inc, edges, graph, cosm, pressure)
+        else:
+            cosm, pressure = Osm.solve_diffusion_nr_merge(sid, inc, edges, graph, cosm, pressure)
+            #cosm, pressure = Osm.solve_diffusion_scipy2(sid, inc, edges, graph, cosm, pressure)
+    else:
+        #pressure = Pr.solve_flow_constant_p(sid, inc, graph, edges, pressure_b)
+        pressure = Pr.solve_flow(sid, inc, graph, edges, pressure_b)
+    
+
     if sid.include_diffusion:
-        cb_b = Dif.create_vector(sid, graph)
+        cb_b = Dif.create_vector_danckwerts(sid, inc, graph, edges)
+        #cb_b = Dif.create_vector(sid, graph)
     else:
         cb_b = Di.create_vector(sid, graph)
+    print(np.where(edges.triangles > 2))
     # find pressure and update flow in edges
     print ('Solving pressure')
-
+    #Osm.find_flow(sid, inc, edges, cosm)
+    #print(edges.flow)
+    #print(pressure)
+    #print(cosm)
     #Me.fix_connections(sid, inc, graph, edges)
-    pressure = Pr.solve_flow(sid, inc, graph, edges, pressure_b)
+    #pressure = Pr.solve_flow(sid, inc, graph, edges, pressure_b)
     #data.check_data(edges)
-    Q_in = np.sum(edges.inlet * np.abs(edges.flow))
-    Q_out = np.sum(edges.outlet * np.abs(edges.flow))
+    Q_in = np.sum(edges.inlet * edges.flow)
+    Q_out = np.sum(edges.outlet * edges.flow)
     print('Q_in =', Q_in, 'Q_out =', Q_out)
-
+    #print(edges.flow)
+    print(np.sum(vols.vol_a == 0), np.min(vols.vol_a))
     # find B concentration
     print ('Solving concentration')
     #print(np.sum((edges.flow == 0) * (edges.diams > 0)))
     # find C concentration
     if sid.include_diffusion:
         if sid.include_volumes:
-            #cb = Dif.solve_vol_nr(sid, inc, graph, edges, vols, cb_b, data)
-            cb = Dif.solve_diffusion_vol(sid, inc, graph, edges, vols, cb_b, data)
+            cb = Dif.solve_vol_scaling_chat(sid, inc, graph, edges, vols, cb_b, data)
+            #cb = Dif.solve_diffusion_vol(sid, inc, graph, edges, vols, cb_b, data)
         else:
             cb = Dif.solve_diffusion_pe_fix(sid, inc, graph, edges, cb_b)
     else:
@@ -111,22 +138,26 @@ while t < tmax and i < iters and data.dissolved_v < sid.dissolved_v_max and not 
         Dr.draw_flow(sid, graph, edges, f'q_{t:.1f}.jpg', 'q')
         Dr.draw_flow(sid, graph, edges, f'd_{t:.1f}.jpg', 'd')
         Dr.draw_triangles(sid, triangles, graph, vols, f'tri_{t:.1f}.jpg')
-        Dr.uniform_hist(sid, graph, edges, vols, cb, f'dreal_{t:.1f}.jpg', 'd')
-        #Dr.draw_nodes(sid, graph, edges, cb, f'c_{t:.1f}.jpg', 'q')
+        #Dr.uniform_hist(sid, graph, edges, vols, cb, f'dreal_{t:.1f}.jpg', 'd')
+        #Dr.draw_nodes(sid, graph, edges, cosm, f'c_{t:.1f}.jpg', 'q')
+        #Dr.draw_nodes(sid, graph, edges, pressure, f'p_{t:.1f}.jpg', 'q')
         # save_VTK(sid, graph, edges, pressure, cb, \
         #     f'network_{t:.1f}.vtk')
     else:
-        #if data.dissolved_v // sid.track_every > iterator_dissolved:
-        if t // sid.track_every > iterator_dissolved:
+        if data.dissolved_v // sid.track_every > iterator_dissolved:
+        #if t // sid.track_every > iterator_dissolved:
             print('Drawing')
             iterator_dissolved += 1
             if iterator_dissolved in sid.track_list:
-                Dr.draw_flow(sid, graph, edges, \
-                    f'q_{t:.1f}.jpg', 'q')
+                #Dr.draw_flow(sid, graph, edges, \
+                #    f'q_{t:.1f}.jpg', 'q')
+                Dr.draw_flow(sid, graph, edges, f'q_{t:.1f}.jpg', 'q')
                 Dr.draw_flow(sid, graph, edges, f'd_{t:.1f}.jpg', 'd')
                 Dr.draw_triangles(sid, triangles, graph, vols, f'tri_{t:.1f}.jpg')
-                Dr.uniform_hist(sid, graph, edges, vols, cb, f'dreal_{t:.1f}.jpg', 'd')
+                #Dr.uniform_hist(sid, graph, edges, vols, cb, f'dreal_{t:.1f}.jpg', 'd')
+                #Dr.draw_nodes(sid, graph, edges, cosm, f'c_{t:.1f}.jpg', 'q')
                 #Dr.draw_nodes(sid, graph, edges, cb, f'c_{t:.1f}.jpg', 'q')
+                #Dr.draw_nodes(sid, graph, edges, pressure, f'p_{t:.1f}.jpg', 'q')
                 # save_VTK(sid, graph, edges, pressure, cb, \
                 #     f'network_{t:.1f}.vtk')
                 data.check_data(edges)
@@ -140,6 +171,7 @@ while t < tmax and i < iters and data.dissolved_v < sid.dissolved_v_max and not 
     breakthrough, dt_next = Gr.update_diameters(sid, inc, edges, vols, cb, cc)
     # if breakthrough:
     #     break
+    
     data.collect_data(sid, inc, edges, vols, pressure, cb, cc)
     # merge edges
     if sid.include_merging:
@@ -156,11 +188,11 @@ while t < tmax and i < iters and data.dissolved_v < sid.dissolved_v_max and not 
     # update physical parameters in data
 
     i, t = update_iterators(sid, i, t, dt_next)
-    if np.abs(Q_in - Q_out) > 1:
+    #if np.abs(Q_in - Q_out) > 1:
         #Dr.draw_nodes(sid, graph, edges, cb, f'c_{t:.1f}.jpg', 'q')
         #Sv.save('/save.dill', sid, graph, inc, edges)
-        Dr.draw_flow(sid, graph, edges, f'd_{t:.1f}.jpg', 'd')
-        raise ValueError('Flow not matching!')
+        #Dr.draw_flow(sid, graph, edges, f'd_{t:.1f}.jpg', 'd')
+    #    raise ValueError('Flow not matching!')
     #if i == 308:
     #    Sv.save('/save.dill', sid, graph, inc, edges, triangles, vols)
     # if np.sum((np.array((inc.merge != 0).sum(axis = 0))[0] == 0) * (edges.diams != 0)):
@@ -180,7 +212,7 @@ if i != 1 and sid.load != 1 and not sid.debug:
     # save_VTK(sid, graph, edges, pressure, cb, \
     #     f'network_{t:.1f}.vtk')
 
-    data.save_data()
+    #data.save_data()
     data.plot_profile(graph)
     #Tr.plot_tracking(data, 100)
     # Dr.draw_flow_profile(sid, graph, edges, data, \
@@ -188,7 +220,9 @@ if i != 1 and sid.load != 1 and not sid.debug:
     Dr.draw_flow(sid, graph, edges, f'q_{t:.1f}.jpg', 'q')
     Dr.draw_flow(sid, graph, edges, f'd_{t:.1f}.jpg', 'd')
     Dr.draw_triangles(sid, triangles, graph, vols, f'tri_{t:.1f}.jpg')
-    Dr.uniform_hist(sid, graph, edges, vols, cb, f'dreal_{t:.1f}.jpg', 'd')
+    #Dr.draw_nodes(sid, graph, edges, cosm, f'c_{t:.1f}.jpg', 'q')
+    #Dr.uniform_hist(sid, graph, edges, vols, cb, f'dreal_{t:.1f}.jpg', 'd')
     #Dr.draw_nodes(sid, graph, edges, cb, f'c_{t:.1f}.jpg', 'q')
+    np.savetxt(sid.dirname + '/tau_h.txt', np.array([np.sum(np.abs(edges.flow) * edges.lens) / (np.abs(Q_in) * sid.m)]))
     Sv.save('/save.dill', sid, graph, inc, edges, triangles, vols)
-    data.plot_things(sid)
+    #data.plot_things(sid)
