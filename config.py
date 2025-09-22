@@ -15,16 +15,16 @@ class SimInputData:
     ''' Configuration class for the whole simulation.
     '''
     # GENERAL
-    n: int = 10
+    n: int = 50
     "network size along y (transverse to the flow)"
-    m: int = 10
+    m: int = 50
     "network size along x (parallel to the flow)"
     iters: int = 1000000
     "maximum number of iterations"
     tmax: float = 2000000000.
     "maximum time"
     phi = 0.01
-    dissolved_v_max: float = 0.1 / phi
+    dissolved_v_max: float = 0.3 / phi
     "maximum dissolved pore volume"
     plot_every: int = 100000
     "frequency of plotting the results"
@@ -35,7 +35,7 @@ class SimInputData:
     "times of checking channelization"
 
     # DISSOLUTION & PRECIPITATION
-    Da_L = 1.
+    Da_L = 1
     Pe_L = 1.
     # Da: float = 100#0.67 * 10 ** -1
     # "effective Damkohler number"
@@ -46,16 +46,16 @@ class SimInputData:
     chi0 = 4 * np.sqrt(phi) / np.pi
     Sh = 4
     include_diffusion = True
-    Da = 2 #Da_L * np.pi * chi0 / (m)
+    Da = Da_L * np.pi * chi0 / (m)
     #Pe = Pe_L * 2 / (np.pi * chi0 ** 2)
-    Pe = 100 #Pe_L * 4 / (np.pi * chi0 ** 2)
+    Pe = 1 #Pe_L * 4 / (np.pi * chi0 ** 2)
     
 
-    M = 0.5
-    cosm_in = 1.05
-    cosm_out = 0.95
+    M = 0.1
+    cosm_in = 1.25
+    cosm_out = 0.75
 
-    G: float = 0.5#Da * Pe / Sh * chi0 ** 2 / 4
+    G: float = Da * Pe / Sh * chi0 ** 2 / 4
     "diffusion to reaction ratio"
     Da_eff: float = Da / (1 + G)
     "Damkohler number"
@@ -95,7 +95,7 @@ class SimInputData:
     "include pore merging"
     include_volumes: bool = True
     "include pore volume tracking"
-    include_electroosmosis: bool = False
+    include_electroosmosis: bool = True
 
     # INITIAL CONDITIONS
     qin: float = 1.
@@ -108,7 +108,7 @@ class SimInputData:
     # TIME
     dt: float = 0.000001
     "initial timestep (if no adaptive timestep, timestep for whole simulation)"
-    growth_rate: float = 0.01
+    growth_rate: float = 0.05
     ("maximum percentage growth of an edges (used for finding adaptive \
      timestep)")
     dt_max: float = 50000.
@@ -121,8 +121,8 @@ class SimInputData:
     noise: str = 'file_lognormal_k'
     ("type of noise in diameters distribution: 'gaussian', 'lognormal', \
     'klognormal', 'file_lognormal_d', 'file_lognormal_k'")
-    #noise_filename: str = 'n200lam20r1.dat' #'n200lam20r1.dat'
-    noise_filename: str = 'n100m300lam30r01.dat' #'n200lam20r1.dat'
+    noise_filename: str = 'n200lam20r1.dat' #'n200lam20r1.dat'
+    #noise_filename: str = 'n100m300lam30r01.dat' #'n200lam20r1.dat'
     "name of file with initial diameters if noise == file_"
     d0: float = 1.
     "initial dimensionless mean diameter"
@@ -140,7 +140,7 @@ class SimInputData:
     "figure size"
     qdrawconst: float = 50 / n
     "constant for improving flow drawing"
-    ddrawconst: float = 10#2400 / n * chi0 #10 / n
+    ddrawconst: float = 1 #2400 / n * chi0 #10 / n
     "constant for improving diameter drawing"
     draw_th_q: float = 0.1
     "threshold for drawing of flow"
@@ -148,13 +148,13 @@ class SimInputData:
     "threshold for drawing of diameters"
 
     # INITIALIZATION
-    load: int = 3
+    load: int = 2
     ("type of loading: 0 - build new network based on config and start new \
      simulation, 1 - load previous network from load_name and continue \
      simulation, 2 - load template network from load_name and start new \
      simulation")
-    #load_name: str = 'electro/Pe0.10Da100.00/0'
-    load_name: str = 'paper_diff/Pe1.00Da1.00/0'#/template/13'
+    load_name: str = 'electro/Pe1.00Da1.00/5'
+    #load_name: str = 'paper_diff/Pe1.00Da1.00/0'#/template/13'
     
     "name of loaded network"
 
@@ -185,7 +185,7 @@ class SimInputData:
     Q_in = 1.
     "total inlet flow (updated later)"
     #dirname: str = geo + str(n) + '/' + f'G{G:.2f}Daeff{Da_eff:.2f}'
-    dirname: str = 'exp/' + f'Pe{Pe_L:.2f}Da{Da_L:.2f}'
+    dirname: str = 'electro/' + f'Pe{Pe_L:.2f}Da{Da_L:.2f}'
     "directory of simulation"
     initial_merging: int = 5
     "number of initial merging iterations"

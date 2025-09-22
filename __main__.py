@@ -66,9 +66,11 @@ while t < tmax and i < iters and data.dissolved_v < sid.dissolved_v_max and not 
             #pressure = np.ones(sid.nsq) * (1 - graph.in_vec - graph.out_vec) #np.zeros(sid.nsq) #
             pressure = np.ones(sid.nsq) * (1  - graph.in_vec - graph.out_vec) + 0 * graph.in_vec
             cosm, pressure = Osm.solve_diffusion_nr_merge(sid, inc, edges, graph, cosm, pressure)
+            #cosm, pressure = Osm.solve_diffusion_jfnk(sid, inc, edges, graph, cosm, pressure)#Osm.solve_diffusion_nr_scipy(sid, inc, edges, graph, cosm, pressure)
             #cosm, pressure = Osm.solve_diffusion_scipy2(sid, inc, edges, graph, cosm, pressure)
         else:
             cosm, pressure = Osm.solve_diffusion_nr_merge(sid, inc, edges, graph, cosm, pressure)
+            #cosm, pressure = Osm.solve_diffusion_jfnk(sid, inc, edges, graph, cosm, pressure)#Osm.solve_diffusion_nr_scipy(sid, inc, edges, graph, cosm, pressure)
             #cosm, pressure = Osm.solve_diffusion_scipy2(sid, inc, edges, graph, cosm, pressure)
     else:
         #pressure = Pr.solve_flow_constant_p(sid, inc, graph, edges, pressure_b)
@@ -80,7 +82,7 @@ while t < tmax and i < iters and data.dissolved_v < sid.dissolved_v_max and not 
         #cb_b = Dif.create_vector(sid, graph)
     else:
         cb_b = Di.create_vector(sid, graph)
-    print(np.where(edges.triangles > 2))
+    #print(np.where(edges.triangles > 2))
     # find pressure and update flow in edges
     print ('Solving pressure')
     #Osm.find_flow(sid, inc, edges, cosm)
@@ -94,7 +96,7 @@ while t < tmax and i < iters and data.dissolved_v < sid.dissolved_v_max and not 
     Q_out = np.sum(edges.outlet * edges.flow)
     print('Q_in =', Q_in, 'Q_out =', Q_out)
     #print(edges.flow)
-    print(np.sum(vols.vol_a == 0), np.min(vols.vol_a))
+    #print(np.sum(vols.vol_a == 0), np.min(vols.vol_a))
     # find B concentration
     print ('Solving concentration')
     #print(np.sum((edges.flow == 0) * (edges.diams > 0)))

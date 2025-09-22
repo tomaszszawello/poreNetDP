@@ -9,7 +9,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 import scipy.sparse as spr
 
-from scipy.optimize import newton_krylov
+from scipy.optimize import root, newton_krylov
 from scipy.sparse.linalg import LinearOperator
 
 def create_vector(sid: SimInputData, graph: Graph):
@@ -594,3 +594,375 @@ def solve_diffusion_nr2(sid: SimInputData, inc: Incidence, edges: Edges, graph: 
     c_edge = np.abs(inc.incidence) @ cosm / 2
     edges.flow = edges.diams ** 4 / edges.lens * (inc.incidence @ pressure) + sid.M * edges.diams ** 2 / edges.lens / c_edge * (inc.incidence @ cosm)
     return cosm, pressure
+
+def solve_diffusion_nr_scipy(sid: SimInputData, inc: Incidence, edges: Edges, graph: Graph, cosm, pressure):
+    # --- basics & masks (once) ---
+    # make sure merged zeros are coalesced
+    inc.incidence.sum_duplicates()
+    inc.incidence.eliminate_zeros()
+
+    N = inc.incidence.shape[1]
+    E = inc.incidence.shape[0]
+
+    # active edges/nodes (non-empty rows/cols in incidence)
+    edge_active = (inc.incidence.getnnz(axis=1) > 0).astype(float)  # (E,)
+    node_active = (inc.incidence.getnnz(axis=0) > 0).astype(float)  # (N,)
+    Me = spr.diags(edge_active)                                     # E×E
+    Mn = spr.diags(node_active)                                     # N×N
+
+    # row-mask for internal concentration equations (keep your style)
+    # (you can still separate c/p masks later if desired)
+    base_mask = (1 - graph.in_vec - graph.out_vec) * node_active    # (N,)
+    Mrow = spr.diags(base_mask)                                     # N×N
+
+    Babs = abs(inc.incidence)   # for edge-averages
+    eps = 1e-15
+
+    cosm_prev = np.zeros_like(cosm)
+    pressure_prev = np.zeros_like(pressure)
+
+    z0 = np.concatenate([cosm, pressure])
+
+    def F(z):
+        c = np.maximum(z[:sid.nsq], eps)
+        p = z[sid.nsq:]
+
+        # --- edge differences / averages (no tail/head) ---
+        dc   = inc.incidence @ c                    # Δc  (E,)
+        dp   = inc.incidence @ p                    # Δp  (E,)
+        cbar = np.maximum(0.5 * (Babs @ c), eps)    # c̄  (E,)
+
+        # --- coefficients per edge ---
+        K = sid.M / sid.Pe  * edges.diams**2 / edges.lens
+        C =          edges.diams**4 / edges.lens
+        G = 1 / sid.Pe * edges.diams**2 / edges.lens   # your naming
+
+        # --- edge fluxes (masked) ---
+        Q = -K * (dc / cbar) - C * dp
+        J = -(K + G) * dc    - C * cbar * dp
+
+        # mask out inactive edges in residuals
+        Rq = inc.incidence.T @ (Me @ Q)     # solvent
+        Rj = inc.incidence.T @ (Me @ J)     # solute
+
+        # keep only internal-node rows (your style)
+        fq = (Mrow @ Rq)
+        fj = (Mrow @ Rj)
+        f  = np.concatenate([fq, fj])
+        return -f
+
+    def jac(z):
+        c = np.maximum(z[:sid.nsq], eps)
+        p = z[sid.nsq:]
+
+        # --- edge differences / averages (no tail/head) ---
+        dc   = inc.incidence @ c                    # Δc  (E,)
+        dp   = inc.incidence @ p                    # Δp  (E,)
+        cbar = np.maximum(0.5 * (Babs @ c), eps)    # c̄  (E,)
+
+        # --- coefficients per edge ---
+        K = sid.M / sid.Pe  * edges.diams**2 / edges.lens
+        C =          edges.diams**4 / edges.lens
+        G = 1 / sid.Pe * edges.diams**2 / edges.lens   # your naming
+
+        # --- edge fluxes (masked) ---
+        Q = -K * (dc / cbar) - C * dp
+        J = -(K + G) * dc    - C * cbar * dp
+
+        inv_cbar         = 1.0 / cbar
+        dc_over_cbar2    = dc / (cbar**2)
+
+        # ∂Q/∂c  = -diag(K/c̄) B + diag(0.5 K Δc/c̄²) |B|
+        Qdc_edge = -spr.diags(K * inv_cbar) @ inc.incidence \
+                   + spr.diags(0.5 * K * dc_over_cbar2) @ Babs
+
+        # ∂Q/∂p  = -diag(C) B
+        Qdp_edge = -spr.diags(C) @ inc.incidence
+
+        # ∂J/∂c  = -diag(K+G) B - diag(0.5 C Δp) |B|
+        Jdc_edge = -spr.diags(K + G) @ inc.incidence \
+                   - spr.diags(0.5 * C * dp) @ Babs
+
+        # ∂J/∂p  = -diag(C c̄) B
+        Jdp_edge = -spr.diags(C * cbar) @ inc.incidence
+
+        # node blocks with edge mask + row mask
+        dfq_dc = Mrow @ (inc.incidence.T @ (Me @ Qdc_edge))
+        dfq_dp = Mrow @ (inc.incidence.T @ (Me @ Qdp_edge))
+        djc_dc = Mrow @ (inc.incidence.T @ (Me @ Jdc_edge))
+        djc_dp = Mrow @ (inc.incidence.T @ (Me @ Jdp_edge))
+
+        d_matrix = spr.vstack([
+            spr.hstack([dfq_dc, dfq_dp]),
+            spr.hstack([djc_dc, djc_dp]),
+        ]).tocsr()
+
+        # --- your existing Dirichlet-row identity trick (unchanged) ---
+        in_vec = np.concatenate((graph.in_vec + graph.out_vec,
+                                 graph.in_vec + graph.out_vec))
+        d_matrix = d_matrix.multiply(1 - in_vec[:, None]) + spr.diags(in_vec)
+        # (optional) generic diagonal rescue; you can drop this once BC rows are set properly
+        diag_c = d_matrix.diagonal()
+        diag_c = diag_c * (diag_c != 0) + 1 * (diag_c == 0)
+        d_matrix = d_matrix.multiply(1 - (diag_c == 0)[:, None])
+        d_matrix += spr.diags(diag_c - d_matrix.diagonal())
+        return d_matrix.toarray()
+
+    z = root(F, z0, method='hybr', jac=jac, tol=1e-8).x
+    #z = root(F, z0, method='krylov', options={'fatol': 1e-9, 'maxiter': 60}).x
+    cosm = np.maximum(z[:sid.nsq], eps)
+    pressure = z[sid.nsq:]
+    print(np.sum(F(z)))
+    print(cosm)
+    print(pressure)
+    # --- final flows on active edges only (recompute safely) ---
+    c = np.maximum(cosm, eps)
+    dc   = inc.incidence @ c
+    dp   = inc.incidence @ pressure
+    cbar = np.maximum(0.5 * (Babs @ c), eps)
+    K = sid.M / sid.Pe  * edges.diams**2 / edges.lens
+    C =          edges.diams**4 / edges.lens
+    Q = -K * (dc / cbar) - C * dp
+    #print(np.linalg.norm(cosm - cosm_prev), np.linalg.norm(pressure - pressure_prev))
+    #print(np.sum(np.abs(f)))
+    edges.flow = (Me @ -Q)  # zero on inactive edges
+    return cosm, pressure
+
+def solve_diffusion_nr_scipy(sid, inc, edges, graph, cosm, pressure):
+    # --- geometry (fixed) ---
+    B = inc.incidence.tocsr(copy=True)
+    B.sum_duplicates(); B.eliminate_zeros()
+    Babs = abs(B)
+
+    N = B.shape[1]
+    E = B.shape[0]
+    eps = 1e-15
+
+    edge_active = (B.getnnz(axis=1) > 0).astype(float)
+    Me = spr.diags(edge_active)
+
+    # ---- BC flags and values ----
+    # pressure BC at inlet/outlet -> 0
+    bc_p = (graph.in_vec + graph.out_vec).astype(bool)
+    p_bc_vals = np.zeros(N)
+
+    # concentration BC: inlet 1.05, outlet 0.95 (put your own arrays if they vary)
+    bc_c = (graph.in_vec + graph.out_vec).astype(bool)
+    c_bc_vals = cosm.copy()
+    c_bc_vals[graph.in_vec.astype(bool)] = 1.05
+    c_bc_vals[graph.out_vec.astype(bool)] = 0.95
+    c_bc_vals = np.maximum(c_bc_vals, eps)
+
+    # row masks for internal balance equations
+    mask_p = (~bc_p).astype(float)
+    mask_c = (~bc_c).astype(float)
+    Mrow_p = spr.diags(mask_p)
+    Mrow_c = spr.diags(mask_c)
+
+    # --- coefficients per edge (use your scaling) ---
+    K = (sid.M / sid.Pe) * edges.diams**2 / edges.lens
+    C =                    edges.diams**4 / edges.lens
+    G = (1.0 / sid.Pe)   * edges.diams**2 / edges.lens
+
+    z0 = np.concatenate([cosm, pressure])
+
+    def F(z):
+        c = np.maximum(z[:N], eps)
+        p = z[N:]
+
+        dc   = B @ c
+        dp   = B @ p
+        cbar = np.maximum(0.5 * (Babs @ c), eps)
+
+        Q = -K * (dc / cbar) - C * dp
+        J = -(K + G) * dc    - C * cbar * dp
+
+        Rq = B.T @ (Me @ Q)     # solvent node balance
+        Rj = B.T @ (Me @ J)     # solute node balance
+
+        fq = (Mrow_p @ Rq)
+        fj = (Mrow_c @ Rj)
+
+        # --- strong Dirichlet equations (this is the key) ---
+        fq[bc_p] = p[bc_p] - p_bc_vals[bc_p]
+        fj[bc_c] = c[bc_c] - c_bc_vals[bc_c]
+
+        return np.concatenate([fq, fj])
+
+    def jac(z):
+        c = np.maximum(z[:N], eps)
+        p = z[N:]
+
+        dc   = B @ c
+        dp   = B @ p
+        cbar = np.maximum(0.5 * (Babs @ c), eps)
+
+        inv_cbar      = 1.0 / cbar
+        dc_over_cbar2 = dc / (cbar**2)
+
+        Qdc_edge = -spr.diags(K * inv_cbar) @ B \
+                   + spr.diags(0.5 * K * dc_over_cbar2) @ Babs
+        Qdp_edge = -spr.diags(C) @ B
+        Jdc_edge = -spr.diags(K + G) @ B \
+                   - spr.diags(0.5 * C * dp) @ Babs
+        Jdp_edge = -spr.diags(C * cbar) @ B
+
+        dfq_dc = Mrow_p @ (B.T @ (Me @ Qdc_edge))
+        dfq_dp = Mrow_p @ (B.T @ (Me @ Qdp_edge))
+        djc_dc = Mrow_c @ (B.T @ (Me @ Jdc_edge))
+        djc_dp = Mrow_c @ (B.T @ (Me @ Jdp_edge))
+
+        Jmat = spr.vstack([
+            spr.hstack([dfq_dc, dfq_dp]),
+            spr.hstack([djc_dc, djc_dp]),
+        ]).tocsr()
+
+        # --- overwrite Dirichlet rows with identity ---
+        rows_p = np.where(bc_p)[0]            # pressure BC rows (top block)
+        rows_c = np.where(bc_c)[0] + N        # concentration BC rows (bottom block)
+        if rows_p.size:
+            Jmat[rows_p, :] = 0.0
+            Jmat[rows_p, rows_p] = 1.0
+        if rows_c.size:
+            Jmat[rows_c, :] = 0.0
+            Jmat[rows_c, rows_c] = 1.0
+
+        return Jmat.toarray()   # required by method='hybr'
+
+    #sol = root(F, z0, method='hybr', jac=jac, tol=1e-8)
+    sol = root(F, z0, method='krylov', tol=1e-8)
+    z = sol.x
+    cosm = z[:N]
+    pressure = z[N:]
+    print(cosm)
+    print(pressure)
+    c = np.maximum(cosm, eps)
+    dc   = inc.incidence @ c
+    dp   = inc.incidence @ pressure
+    cbar = np.maximum(0.5 * (Babs @ c), eps)
+    K = sid.M / sid.Pe  * edges.diams**2 / edges.lens
+    C =          edges.diams**4 / edges.lens
+    Q = -K * (dc / cbar) - C * dp
+    #print(np.linalg.norm(cosm - cosm_prev), np.linalg.norm(pressure - pressure_prev))
+    #print(np.sum(np.abs(f)))
+    edges.flow = (Me @ -Q)  # zero on inactive edges
+    return cosm, pressure
+
+import numpy as np
+import scipy.sparse as spr
+from scipy.optimize import newton_krylov
+from scipy.sparse.linalg import splu, LinearOperator
+
+def solve_diffusion_jfnk(sid, inc, edges, graph, cosm, pressure):
+    # --- geometry: freeze once ---
+    B = inc.incidence.tocsr(copy=True)
+    B.sum_duplicates(); B.eliminate_zeros()
+    Babs = abs(B)
+    N, E = B.shape[1], B.shape[0]
+    eps = 1e-15
+
+    # active edges
+    Me = spr.diags((B.getnnz(axis=1) > 0).astype(float))
+
+    # --- BC flags/values ---
+    # pressure BCs (set p=0 at inlet/outlet or your preferred values)
+    bc_p = graph.in_vec + graph.out_vec
+    p_bc_vals = np.zeros(N)
+
+    # concentration BCs (example: inlet 1.05, outlet 0.95; adapt to your arrays)
+    bc_c = graph.in_vec + graph.out_vec
+    c_bc_vals = cosm.copy()
+    c_bc_vals[graph.in_vec.astype(bool)] = 1.05
+    c_bc_vals[graph.out_vec.astype(bool)] = 0.95
+    c_bc_vals = np.maximum(c_bc_vals, eps)
+
+    # internal-row masks (separate!)
+    Mrow_p = spr.diags(1-bc_p)
+    Mrow_c = spr.diags(1 - bc_c)
+
+    # --- coefficients (consistent scaling) ---
+    K = (sid.M / sid.Pe) * edges.diams**2 / edges.lens
+    C =                    edges.diams**4 / edges.lens
+    G = (1.0 / sid.Pe)   * edges.diams**2 / edges.lens
+    # tiny floor on G helps conditioning if it vanishes
+    if not np.any(G > 0):
+        G = G + 1e-12 * (np.median(np.abs(K[K!=0])) if np.any(K!=0) else 1.0)
+
+    # mild block scaling so the two residual blocks have similar magnitude
+    s_q = max(1e-12, np.median(np.abs(C)) + np.median(np.abs(K)))
+    s_j = max(1e-12, np.median(np.abs(G)) + np.median(np.abs(K)))
+
+    # --- residual: includes BC equations ---
+    def F(z):
+        c = np.maximum(z[:N], eps)
+        p = z[N:]
+
+        dc   = B @ c
+        dp   = B @ p
+        cbar = np.maximum(0.5 * (Babs @ c), eps)
+
+        Q = -K * (dc / cbar) - C * dp
+        J = -(K + G) * dc    - C * cbar * dp
+
+        Rq = B.T @ (Me @ Q)            # solvent balance at nodes
+        Rj = B.T @ (Me @ J)            # solute balance at nodes
+
+        fq = Mrow_p @ Rq
+        fj = Mrow_c @ Rj
+
+        # Strong Dirichlet equations: pin BCs exactly
+        fq[bc_p.astype(bool)] = (p[bc_p.astype(bool)] - p_bc_vals[bc_p.astype(bool)])
+        fj[bc_c.astype(bool)] = (c[bc_c.astype(bool)] - c_bc_vals[bc_c.astype(bool)])
+
+        # scale blocks for better Krylov conditioning
+        return np.concatenate([fq / s_q, fj / s_j])
+
+    # --- sparse block preconditioner M^{-1} ≈ diag((B^T C B)^{-1}, (B^T G B)^{-1}) ---
+    Ap = (B.T @ (Me @ spr.diags(C)) @ B).tocsr()   # pressure-like block
+    Aw = (B.T @ (Me @ spr.diags(G)) @ B).tocsr()   # concentration-like block
+
+    # make BC rows identity in the preconditioner (so pinned rows are easy)
+    # if np.any(bc_p):
+    #     rows = np.where(bc_p)[0]
+    #     Ap[rows, :] = 0.0; Ap[rows, rows] = 1.0
+    # if np.any(bc_c):
+    #     rows = np.where(bc_c)[0]
+    #     Aw[rows, :] = 0.0; Aw[rows, rows] = 1.0
+    Ap = Ap.multiply(1 - bc_p[:, None]) + spr.diags(bc_p)
+    Aw = Aw.multiply(1 - bc_c[:, None]) + spr.diags(bc_c)
+    # small diagonal bump for numerical stability
+    Ap = (Ap + 1e-10 * spr.eye(N, format='csr')).tocsc()
+    Aw = (Aw + 1e-10 * spr.eye(N, format='csr')).tocsc()
+
+    lu_p = splu(Ap)
+    lu_w = splu(Aw)
+
+    def apply_M(v):
+        # inverse of the block-diagonal preconditioner, including block scaling
+        vt = v[:N] * (1.0 / s_q)
+        vb = v[N:] * (1.0 / s_j)
+        yt = lu_p.solve(vt)
+        yb = lu_w.solve(vb)
+        return np.concatenate([yt, yb])
+
+    Mlin = LinearOperator((2*N, 2*N), matvec=apply_M)
+
+    # --- initial guess (keep BCs consistent) ---
+    z0 = np.concatenate([np.maximum(cosm, eps), pressure])
+    z0[:N][bc_c.astype(bool)] = c_bc_vals[bc_c.astype(bool)]
+    z0[N:][bc_p.astype(bool)] = p_bc_vals[bc_p.astype(bool)]
+
+    # --- Newton–Krylov (Jacobian-free) ---
+    z = newton_krylov(F, z0, f_tol=1e-9, maxiter=80,
+                      inner_M=Mlin, line_search='armijo')
+
+    c = np.maximum(z[:N], eps)
+    p = z[N:]
+    dc   = inc.incidence @ c
+    dp   = inc.incidence @ p
+    cbar = np.maximum(0.5 * (Babs @ c), eps)
+    K = sid.M / sid.Pe  * edges.diams**2 / edges.lens
+    C =          edges.diams**4 / edges.lens
+    Q = -K * (dc / cbar) - C * dp
+    edges.flow = (Me @ -Q)
+    return c, p
