@@ -111,30 +111,31 @@ class Data():
                 is_saved = True
             except PermissionError:
                 pass
-        is_saved = False
-        while not is_saved: # prevents problems with opening text file
-            try:
-                file = open(self.dirname + '/track.txt', 'w', \
-                    encoding = "utf-8")
-                np.savetxt(file, self.breakthrough_times)
-                file.close()
-                file = open(self.dirname + '/c_track.txt', 'w', \
-                    encoding = "utf-8")
-                np.savetxt(file, self.concentrations)
-                file.close()
-                file = open(self.dirname + '/r_track.txt', 'w', \
-                    encoding = "utf-8")
-                np.savetxt(file, self.reactive_breakthrough_times)
-                file.close()
-                is_saved = True
-            except PermissionError:
-                pass
+        # is_saved = False
+        # while not is_saved: # prevents problems with opening text file
+        #     try:
+        #         file = open(self.dirname + '/track.txt', 'w', \
+        #             encoding = "utf-8")
+        #         np.savetxt(file, self.breakthrough_times)
+        #         file.close()
+        #         file = open(self.dirname + '/c_track.txt', 'w', \
+        #             encoding = "utf-8")
+        #         np.savetxt(file, self.concentrations)
+        #         file.close()
+        #         file = open(self.dirname + '/r_track.txt', 'w', \
+        #             encoding = "utf-8")
+        #         np.savetxt(file, self.reactive_breakthrough_times)
+        #         file.close()
+        #         is_saved = True
+        #     except PermissionError:
+        #         pass
 
     def load_data(self) -> None:
         data = np.loadtxt(self.dirname + '/params.txt').T
-        self.t, self.pressure, self.participation_ratio, self.cb_out, \
-            self.cc_out = list(data[0]), list(data[1]), list(data[2]), list(data[3]), list(data[4])
-        self.slices = list(np.loadtxt(self.dirname + '/slices.txt'))
+        self.t, self.dissolved_v_list, self.pressure, self.porosity, self.participation_ratio, self.cb_out, \
+                    self.cc_out = list(data[0]), list(data[1]), list(data[2]), list(data[3]), list(data[4]), list(data[5]), list(data[6])
+        self.dissolved_v = self.dissolved_v_list[-1]
+        #self.slices = list(np.loadtxt(self.dirname + '/slices.txt'))
 
     def check_data(self, edges: Edges) -> None:
         """ Check the key physical parameters of the simulation.

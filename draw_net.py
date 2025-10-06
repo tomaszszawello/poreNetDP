@@ -108,7 +108,8 @@ def draw_flow(sid: SimInputData, graph: Graph, edges: Edges, \
         #qs = (1 - edges.boundary_list) * np.abs(edges.diams_draw - edges.diams_initial) * (edges.diams_initial > 0)
         #qs = (1 - edges.boundary_list) * edges.diams_draw * (edges.diams_draw - edges.diams_initial > 0.1) * (edges.diams_initial > 0)
         #qs = (1 - edges.boundary_list) * edges.diams_draw * (edges.diams_initial > 0)
-        qs = (1 - edges.boundary_list) * edges.diams
+        #qs = (1 - edges.boundary_list) * edges.diams
+        qs = (1 - edges.boundary_list) * edges.diams * (edges.diams > 3 * edges.diams_initial)
         draw_const = sid.ddrawconst
     nx.draw_networkx_edges(graph, pos, edges.edge_list, edge_color = 'k', \
         width = draw_const * np.array(qs))
@@ -540,20 +541,20 @@ def draw_triangles(sid, triangles, graph, volumes, name):
     ax.add_collection(coll2)
     ax.set_xlim(0, sid.m)
     ax.set_ylim(0, sid.n)
-    ax.set_xticks([])
-    ax.set_yticks([])
-    ax.tick_params(axis='both', which='both',
-                bottom=False, top=False, left=False, right=False,
-                labelbottom=False, labelleft=False)
-    #ax.autoscale_view()
-    plt.axis('equal')
-    ax.set_axis_on()
-    ax.tick_params(bottom=False, left = False)
-
+    # ax.set_xticks([])
+    # ax.set_yticks([])
+    # ax.tick_params(axis='both', which='both',
+    #             bottom=False, top=False, left=False, right=False,
+    #             labelbottom=False, labelleft=False)
+    # #ax.autoscale_view()
+    # plt.axis('equal')
+    # ax.set_axis_on()
+    # ax.tick_params(bottom=False, left = False)
+    plt.axis('off')
     # Add a colorbar for the PolyCollection
     #fig.colorbar(coll, ax=ax)
     plt.subplots_adjust(wspace=0, hspace=0)
-    plt.savefig(sid.dirname + "/" + name, bbox_inches="tight")
+    plt.savefig(sid.dirname + "/" + name, bbox_inches="tight", dpi = 600)
     plt.close()
 
 def uniform_hist(sid: SimInputData, graph: Graph, edges: Edges, vols: Volumes, \

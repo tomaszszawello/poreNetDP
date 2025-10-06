@@ -18,11 +18,12 @@ def create_vector_danckwerts(sid: SimInputData, inc: Incidence, graph: Graph, ed
     """ Create vector result for B concentration calculation.
     """
     F = spr.diags(edges.flow)
-    zero_carrier = spr.diags(((edges.flow == 0) & (edges.diams > 0)).astype(float))
+    Z = spr.diags(((edges.flow == 0) & (edges.diams > 0)).astype(float))
     A_pos = ((F @ inc.incidence) > 0)
-    Z_pos = ((zero_carrier @ inc.incidence) > 0)
-    upstream   = A_pos.maximum(Z_pos).astype(float)
-    qc_in = -sid.Pe * (upstream.T @ np.abs(edges.flow)) * graph.in_vec
+    Z_pos = ((Z @ inc.incidence) > 0)
+    upstream = A_pos.maximum(Z_pos).astype(float)  # edges x nodes (1 where node is upstream)
+    # Positive source: sum over upstream edges attached to inlet nodes
+    qc_in = sid.Pe * (upstream.T @ np.abs(edges.flow)) * graph.in_vec  # shape: nsq
     return np.concatenate([sid.cb_0 * qc_in, np.zeros(2 * sid.ne)])
 
 def solve_diffusion(sid: SimInputData, inc: Incidence, graph: Graph, edges: Edges, cb_vector):
@@ -1325,7 +1326,7 @@ def solve_vol_scaling_chat(sid: SimInputData, inc: Incidence, graph: Graph,
         lam_minus_val = sid.Pe / (2.0 * edges.diams ** 2) * (lam_root - np.abs(edges.flow))
         lam_minus_val = np.array(np.ma.fix_invalid(lam_minus_val, fill_value = 0))
 
-        lam_plus_zero = (lam_plus_val > sid.diffusion_exp_limit).astype(float)
+        lam_plus_zero = (lam_plus_val * edges.lens > sid.diffusion_exp_limit).astype(float)
         lam_plus_val  = lam_plus_val  * (1.0 - lam_plus_zero)
         lam_minus_val = lam_minus_val * (1.0 - lam_plus_zero)
 
@@ -1351,7 +1352,7 @@ def solve_vol_scaling_chat(sid: SimInputData, inc: Incidence, graph: Graph,
         # flux blocks
         flux_a = (sid.Pe * spr.diags(np.abs(edges.flow)) @ exp_plus2 @ downstream
                   + spr.diags(lam_plus_val * edges.diams ** 2) @ upstream
-                  - exp_plus @ spr.diags(lam_plus_val * edges.diams ** 2) @ downstream).multiply(
+                  - exp_plus2 @ spr.diags(lam_plus_val * edges.diams ** 2) @ downstream).multiply(
                       (1.0 - lam_plus_zero)[:, np.newaxis])
         flux_b = (sid.Pe * spr.diags(np.abs(edges.flow)) @ exp_minus2 @ downstream
                   - spr.diags(lam_minus_val * edges.diams ** 2) @ upstream
@@ -1363,12 +1364,12 @@ def solve_vol_scaling_chat(sid: SimInputData, inc: Incidence, graph: Graph,
                             edges.diams * edges.lens * inv_abs_flow)
         flux_b += sid.Pe * spr.diags(np.abs(edges.flow)) @ spr.diags(lam_plus_zero * exp_pe_fix) @ downstream
 
-        flux_a_in = flux_a.T#.multiply((1.0 - graph.in_vec)[:, np.newaxis])
-        flux_b_in = flux_b.T#.multiply((1.0 - graph.in_vec)[:, np.newaxis])
+        flux_a_in = -flux_a.T#.multiply((1.0 - graph.in_vec)[:, np.newaxis])
+        flux_b_in = -flux_b.T#.multiply((1.0 - graph.in_vec)[:, np.newaxis])
 
-        flow_fix_pe = -sid.Pe * downstream.T @ np.abs(edges.flow)
+        flow_fix_pe = sid.Pe * downstream.T @ np.abs(edges.flow)
         flow_fix_pe = flow_fix_pe * (1.0 - graph.in_vec)
-        flow_fix_pe -= sid.Pe * upstream.T @ np.abs(edges.flow) * graph.in_vec
+        flow_fix_pe += sid.Pe * upstream.T @ np.abs(edges.flow) * graph.in_vec
 
         zero_flow_fix = ((edges.flow == 0) & (alpha_edge == 0)).astype(float)
         exp_plus_eff_diag = exp_plus_diag.copy()
@@ -1467,5 +1468,13 @@ def solve_vol_scaling_chat(sid: SimInputData, inc: Incidence, graph: Graph,
     # simple sanity
     if np.any(cb < -1e-2):
         print(np.where(cb < 0)[0], cb[np.where(cb < 0)[0]])
+        F = spr.diags(edges.flow)
+        Z = spr.diags(((edges.flow == 0) & (edges.diams > 0)).astype(float))
+        A_pos = ((F @ inc.incidence) > 0)
+        Z_pos = ((Z @ inc.incidence) > 0)
+        upstream = A_pos.maximum(Z_pos).astype(float)  # edges x nodes (1 where node is upstream)
+        # Positive source: sum over upstream edges attached to inlet nodes
+        qc_in = sid.Pe * (upstream.T @ np.abs(edges.flow))
+        print(qc_in[np.where(cb < 0)[0]])
         raise ValueError("Negative concentration detected")
     return cb
