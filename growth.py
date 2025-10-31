@@ -78,7 +78,7 @@ def update_diameters(sid: SimInputData, inc: Incidence, edges: Edges, \
             if sid.include_volumes:
                 change = solve_d_vol(sid, inc, edges, vols, cb)
             else:
-                change = solve_d(sid, inc, edges, cb)
+                change, change2 = solve_d(sid, inc, edges, cb)
     breakthrough = False
     if sid.include_adt:
         #change_rate = change / edges.diams
@@ -156,11 +156,13 @@ def solve_d(sid: SimInputData, inc: Incidence, edges: Edges, cb: np.ndarray) \
     # create list of concentrations which should be used for growth of each
     # edge (upstream one)
     cb_in = np.abs((spr.diags(edges.flow) @ inc.incidence > 0)) @ cb
-    change = cb_in * np.abs(edges.flow) / (sid.Da * edges.lens \
-        * edges.diams) * (1 - np.exp(-sid.Da / (1 + sid.G * edges.diams) \
+    # change = cb_in * np.abs(edges.flow) / (sid.Da * edges.lens \
+    #     * edges.diams) * (1 - np.exp(-sid.Da / (1 + sid.G * edges.diams) \
+    #     * edges.diams * edges.lens / np.abs(edges.flow)))
+    change = cb_in * np.abs(edges.flow) / sid.Da * (1 - np.exp(-sid.Da / (1 + sid.G * edges.diams) \
         * edges.diams * edges.lens / np.abs(edges.flow)))
     change = np.array(np.ma.fix_invalid(change, fill_value = 0))
-    return change
+    return change, change
 
 def solve_d_diff(sid: SimInputData, inc: Incidence, edges: Edges, cb: np.ndarray) \
     -> np.ndarray:

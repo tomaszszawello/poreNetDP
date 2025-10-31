@@ -108,13 +108,13 @@ def draw_flow(sid: SimInputData, graph: Graph, edges: Edges, \
         #qs = (1 - edges.boundary_list) * np.abs(edges.diams_draw - edges.diams_initial) * (edges.diams_initial > 0)
         #qs = (1 - edges.boundary_list) * edges.diams_draw * (edges.diams_draw - edges.diams_initial > 0.1) * (edges.diams_initial > 0)
         #qs = (1 - edges.boundary_list) * edges.diams_draw * (edges.diams_initial > 0)
-        #qs = (1 - edges.boundary_list) * edges.diams
-        qs = (1 - edges.boundary_list) * edges.diams * (edges.diams > 3 * edges.diams_initial)
+        qs = (1 - edges.boundary_list) * edges.diams
+        #qs = (1 - edges.boundary_list) * edges.diams * (edges.diams > 3 * edges.diams_initial)
         draw_const = sid.ddrawconst
     nx.draw_networkx_edges(graph, pos, edges.edge_list, edge_color = 'k', \
         width = draw_const * np.array(qs))
     plt.subplots_adjust(wspace=0, hspace=0)
-    plt.savefig(sid.dirname + "/" + name, bbox_inches="tight")
+    plt.savefig(sid.dirname + "/" + name, bbox_inches="tight", dpi = 600)
     plt.close()
 
 def draw_flow_profile(sid: SimInputData, graph: Graph, edges: Edges, \
@@ -505,6 +505,7 @@ def draw_triangles(sid, triangles, graph, volumes, name):
 
     pos = np.array(list(nx.get_node_attributes(graph, 'pos').values()))
     verts1 = []
+    verts2 = []
     # scale1 = (1 - triangles.boundary) * volumes.vol_a / volumes.vol_max
     # scale1 = np.array(np.ma.fix_invalid(scale1, fill_value = 0))
     # for i, nodes in enumerate(triangles.tlist):
@@ -517,14 +518,22 @@ def draw_triangles(sid, triangles, graph, volumes, name):
     #     verts1.append((p1, p2, p3))
     scale1 = np.array(np.ma.fix_invalid((1 - triangles.boundary) * volumes.vol_a / volumes.vol_max,
                                     fill_value=0.0))
+    scale2 = np.array(np.ma.fix_invalid((1 - triangles.boundary) * volumes.vol_e / volumes.vol_max,
+                                    fill_value=0.0))
 
-    for (n1, n2, n3), pi, s in zip(triangles.tlist, triangles.centers, scale1):
+    for (n1, n2, n3), pi, s1, s2 in zip(triangles.tlist, triangles.centers, scale1, scale2):
         # current centroid from positions
         C = (pos[n1] + pos[n2] + pos[n3]) / 3.0
-        p1 = (pos[n1] - C) * s + C
-        p2 = (pos[n2] - C) * s + C
-        p3 = (pos[n3] - C) * s + C
+        p1 = (pos[n1] - C) * s1 + C
+        p2 = (pos[n2] - C) * s1 + C
+        p3 = (pos[n3] - C) * s1 + C
         verts1.append((p1, p2, p3))
+        if s1 == 0:
+            C = (pos[n1] + pos[n2] + pos[n3]) / 3.0
+            p1 = (pos[n1] - C) * s2 + C
+            p2 = (pos[n2] - C) * s2 + C
+            p3 = (pos[n3] - C) * s2 + C
+            verts2.append((p1, p2, p3))
         
     
     plt.figure(figsize=(sid.figsize * sid.m / sid.n, sid.figsize))
@@ -537,7 +546,9 @@ def draw_triangles(sid, triangles, graph, volumes, name):
     # #coll.set_alpha(volumes.vol_a / volumes.vol_max)
     # ax.add_collection(coll)
     plt.axis('equal')
-    coll2 = PolyCollection(verts1, facecolors = 'black')
+    coll1 = PolyCollection(verts1, facecolors = 'black')
+    ax.add_collection(coll1)
+    coll2 = PolyCollection(verts2, facecolors = 'black')
     ax.add_collection(coll2)
     ax.set_xlim(0, sid.m)
     ax.set_ylim(0, sid.n)

@@ -447,7 +447,7 @@ def build_delaunay_net(sid: SimInputData, inc: Incidence) \
     else:
         raise ValueError(f'Unknown noise type: {sid.noise}')
     lens = np.array(lens)
-    
+    diams = np.ones(sid.ne)
     diams /= np.average(diams)
     if sid.initial_pipe:
         diams += np.array(pipe_diams)

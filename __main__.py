@@ -195,8 +195,8 @@ while t < tmax and i < iters and data.dissolved_v < sid.dissolved_v_max and not 
         #Sv.save('/save.dill', sid, graph, inc, edges)
         #Dr.draw_flow(sid, graph, edges, f'd_{t:.1f}.jpg', 'd')
     #    raise ValueError('Flow not matching!')
-    #if i == 308:
-    #    Sv.save('/save.dill', sid, graph, inc, edges, triangles, vols)
+    # if i == 129:
+    #     Sv.save('/save.dill', sid, graph, inc, edges, triangles, vols)
     # if np.sum((np.array((inc.merge != 0).sum(axis = 0))[0] == 0) * (edges.diams != 0)):
 
     #     print((inc.merge != 0).sum(axis = 0))
@@ -214,7 +214,7 @@ if i != 1 and sid.load != 1 and not sid.debug:
     # save_VTK(sid, graph, edges, pressure, cb, \
     #     f'network_{t:.1f}.vtk')
 
-    #data.save_data()
+    data.save_data()
     data.plot_profile(graph)
     #Tr.plot_tracking(data, 100)
     # Dr.draw_flow_profile(sid, graph, edges, data, \
@@ -228,3 +228,5 @@ if i != 1 and sid.load != 1 and not sid.debug:
     np.savetxt(sid.dirname + '/tau_h.txt', np.array([np.sum(np.abs(edges.flow) * edges.lens) / (np.abs(Q_in) * sid.m)]))
     Sv.save('/save.dill', sid, graph, inc, edges, triangles, vols)
     #data.plot_things(sid)
+
+Dr.draw_triangles(sid, triangles, graph, vols, f'tri_final_{t:.1f}.jpg')

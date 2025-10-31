@@ -43,7 +43,14 @@ class Volumes():
         self.vol_d_min = self.triangles.T @ (sid.dmin ** 2 \
             * edges.lens / edges.triangles)
         "minimal volume that emptiness must take in each triangle"
-        self.vol_a = (1 - sid.phi) * triangles.volume
+        normal = np.random.randn(len(triangles.volume))
+        phi_var = np.exp(1+ sid.sigma_phi * normal)
+        phi_var /= np.average(phi_var)
+        
+        self.vol = (1 - np.clip(sid.phi * phi_var, 0.01, 0.9)) * triangles.volume
+        #self.vol = (1 - sid.phi) * triangles.volume
+        "total volume of rock in the triangle"
+        self.vol_a = self.vol.copy()
         "volume of substance A (dissolved) (ntr)"
         self.vol_a_0 = self.vol_a.copy()
         "initial volume of substance A"
@@ -60,7 +67,12 @@ class Volumes():
         self.vol_a_prev = np.zeros(sid.ntr)
         "volume of substance A from the previous iteration (for merging)"
         self.tri_contact = self.triangles.copy()
+        self.initialize_rocks(sid)
 
+    def initialize_rocks(self, sid):
+        inert = np.random.randint(0, sid.ntr, size=int(sid.inert_fraction * sid.ntr))
+        self.vol_a[inert] = 0
+        self.vol_e[inert] = self.vol[inert]
 
     def find_edge_surface(self, edges):
         surface = edges.diams

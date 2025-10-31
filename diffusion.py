@@ -1454,6 +1454,7 @@ def solve_vol_scaling_chat(sid: SimInputData, inc: Incidence, graph: Graph,
     # Actual dissolved per grain (clamped by capacity)
     qg = np.minimum(vols.vol_a, qg_hat)
     vols.vol_a = np.maximum(vols.vol_a - qg, 0.0)
+    vols.vol = vols.vol_a + vols.vol_e
 
     # Outputs
     edges.alpha = alpha
