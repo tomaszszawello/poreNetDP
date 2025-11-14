@@ -548,7 +548,7 @@ def draw_triangles(sid, triangles, graph, volumes, name):
     plt.axis('equal')
     coll1 = PolyCollection(verts1, facecolors = 'black')
     ax.add_collection(coll1)
-    coll2 = PolyCollection(verts2, facecolors = 'black')
+    coll2 = PolyCollection(verts2, facecolors = 'yellow')
     ax.add_collection(coll2)
     ax.set_xlim(0, sid.m)
     ax.set_ylim(0, sid.n)

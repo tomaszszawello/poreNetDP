@@ -15,16 +15,16 @@ class SimInputData:
     ''' Configuration class for the whole simulation.
     '''
     # GENERAL
-    n: int = 200
+    n: int = 100
     "network size along y (transverse to the flow)"
     m: int = 100
     "network size along x (parallel to the flow)"
-    iters: int = 1
+    iters: int = 10000000
     "maximum number of iterations"
     tmax: float = 2000000000.
     "maximum time"
-    phi = 0.4
-    dissolved_v_max: float = 0.8
+    phi = 0.23
+    dissolved_v_max: float = 1.
     "maximum dissolved pore volume"
     plot_every: int = 100000
     "frequency of plotting the results"
@@ -43,14 +43,15 @@ class SimInputData:
 
     #chi0 = (1 - (1 - phi) ** (1/3)) / np.sqrt(3)
     #chi0 = (1 / (1 - phi) ** (1/3) - 1) / np.sqrt(3)
-    chi0 = 4 * np.sqrt(phi) / np.pi
+    #chi0 = 4 * np.sqrt(phi) / np.pi
+    chi0 = 2 * np.sqrt(phi) / np.pi / np.sqrt(3)
     Sh = 4
     include_diffusion = True
-    Da = Da_L * np.pi * chi0 / (m)
+    Da = 2 #Da_L * np.pi * chi0 / (m)
     #Pe = Pe_L * 2 / (np.pi * chi0 ** 2)
-    Pe = Pe_L * 4 / (np.pi * chi0 ** 2)
+    Pe = 155 #Pe_L * 4 / (np.pi * chi0 ** 2)
     
-    inert_fraction = 0#.25
+    inert_fraction = 0.27
 
     M = 0.1
     cosm_in = 1.25
@@ -62,7 +63,7 @@ class SimInputData:
     "Damkohler number"
     # G = 50
     # Da_eff = 5
-    Da = Da_eff * (1 + G)
+    #Da = Da_eff * (1 + G)
     #V_tot = (1 / chi0) ** 2 * np.sqrt(6) / 6 / np.pi
     V_tot = (1 / chi0) ** 2 * 3 / 4 / np.pi
 
@@ -124,6 +125,7 @@ class SimInputData:
     'klognormal', 'file_lognormal_d', 'file_lognormal_k'")
     noise_filename: str = 'n200lam20r1.dat' #'n200lam20r1.dat'
     #noise_filename: str = 'n100m300lam30r01.dat' #'n200lam20r1.dat'
+    rock_filename: str = 'n200lam20r2.dat'
     "name of file with initial diameters if noise == file_"
     d0: float = 1.
     "initial dimensionless mean diameter"
@@ -150,7 +152,7 @@ class SimInputData:
     "threshold for drawing of diameters"
 
     # INITIALIZATION
-    load: int = 1
+    load: int = 0
     ("type of loading: 0 - build new network based on config and start new \
      simulation, 1 - load previous network from load_name and continue \
      simulation, 2 - load template network from load_name and start new \
@@ -188,7 +190,7 @@ class SimInputData:
     Q_in = 1.
     "total inlet flow (updated later)"
     #dirname: str = geo + str(n) + '/' + f'G{G:.2f}Daeff{Da_eff:.2f}'
-    dirname: str = 'linda/' + f'Pe{Pe_L:.2f}Da{Da_L:.2f}'
+    dirname: str = 'linda/' + f'Pe{Pe:.2f}Da{Da:.2f}'
     "directory of simulation"
     initial_merging: int = 5
     "number of initial merging iterations"

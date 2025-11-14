@@ -49,8 +49,9 @@ class Volumes():
         
         self.vol = (1 - np.clip(sid.phi * phi_var, 0.01, 0.9)) * triangles.volume
         #self.vol = (1 - sid.phi) * triangles.volume
+        self.initialize_rocks_from_file(sid, triangles)
         "total volume of rock in the triangle"
-        self.vol_a = self.vol.copy()
+        #self.vol_a = self.vol.copy()
         "volume of substance A (dissolved) (ntr)"
         self.vol_a_0 = self.vol_a.copy()
         "initial volume of substance A"
@@ -67,12 +68,26 @@ class Volumes():
         self.vol_a_prev = np.zeros(sid.ntr)
         "volume of substance A from the previous iteration (for merging)"
         self.tri_contact = self.triangles.copy()
-        self.initialize_rocks(sid)
+        #self.initialize_rocks(sid)
+        
 
     def initialize_rocks(self, sid):
         inert = np.random.randint(0, sid.ntr, size=int(sid.inert_fraction * sid.ntr))
         self.vol_a[inert] = 0
         self.vol_e[inert] = self.vol[inert]
+
+    def initialize_rocks_from_file(self, sid, triangles):
+        mineral = np.loadtxt(sid.rock_filename)
+        threshold = np.quantile(mineral, 1 - sid.inert_fraction)
+        mineral_array = 1 * (mineral > threshold)
+        mineral_fraction = []
+        for n1, n2, n3 in triangles.tlist:
+            mineral_fraction.append((mineral_array[n1 // sid.n, n1 % sid.n] + \
+                mineral_array[n2 // sid.n, n2 % sid.n] + mineral_array[n3 // sid.n, n3 % sid.n]) / 3)
+        mineral_fraction = np.array(mineral_fraction)
+        self.vol_a = self.vol * (1 - mineral_fraction)
+        self.vol_e = self.vol * mineral_fraction
+
 
     def find_edge_surface(self, edges):
         surface = edges.diams
