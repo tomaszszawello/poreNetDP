@@ -23,11 +23,19 @@ from network import Edges, Graph
 from incidence import Incidence
 from volumes import Volumes
 
-font = {'family' : 'Times New Roman',
-        'weight' : 'normal',
-        'size'   : 50}
+# font = {'family' : 'Liberation Serif',
+#         'weight' : 'normal',
+#         'size'   : 50}
 
-matplotlib.rc('font', **font)
+# matplotlib.rc('font', **font)
+matplotlib.rcParams.update({
+    # use the serif family
+    "font.family": "serif",
+    # and make its candidate list start with Liberation Serif
+    "font.serif": ["Liberation Serif", "Nimbus Roman No9 L", "DejaVu Serif"],
+    # (optional) make math text look like Times/serif too
+    "mathtext.fontset": "stix",   # or "dejavuserif"
+})
 
 def draw_flow(sid: SimInputData, graph: Graph, edges: Edges, \
     name: str, plot_type: str) -> None:

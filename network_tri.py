@@ -282,27 +282,33 @@ def build_delaunay_net(sid: SimInputData, inc: Incidence) \
     graph : Graph class object
         network and all its properties
     """
-    points_left = np.linspace([0, 0], [0, sid.n - 1], sid.n) + \
-        np.array([0, 0.5])
-    points_right = np.linspace([0, 0], [0, sid.n - 1], sid.n) + \
-        np.array([sid.m, 0.5])
-    points_top = np.random.uniform(0.5, sid.m - 0.5, (sid.m, 2)) * \
-        np.array([1, 0]) + np.random.uniform(0, 1, (sid.m, 2)) * \
-        np.array([0, 1])
-    points_bottom = np.random.uniform(0.5, sid.m - 0.5, (sid.m, 2)) * \
-        np.array([1, 0]) + np.array([0, sid.n]) - \
-        np.random.uniform(0, 1, (sid.m, 2)) * np.array([0, 1])
-    points_middle = np.random.uniform(0.5, sid.m - 0.5, \
-        ((sid.m - 2) * (sid.n - 2) - 4, 2)) * np.array([1, 0]) + np.random.uniform(1, \
-        sid.n - 1, ((sid.m - 2) * (sid.n - 2) - 4, 2)) * np.array([0, 1])
-    points = np.concatenate((points_middle, points_left, points_right, \
-        points_top, points_bottom))
-    points = np.array(sorted(points, key = lambda elem: (elem[0], elem[1])))
+    dx = 1
+    # vertical spacing for a triangular lattice
+    #dy = np.sqrt(3) / 2 * dx
+
+    # y-coordinates for each row (use linspace to span 0 … n)
+    #y_vals = np.linspace(0, dy * (sid.n - 1), sid.n)
+    y_vals = np.linspace(0, sid.n, sid.n)
+
+    pts = []
+    for j, y in enumerate(y_vals):
+        # even rows start at x = 0 … n
+        # odd rows are shifted by half a step (periodic wrap handled by clipping)
+        x_shift = 0.0 if j % 2 == 0 else dx / 2
+        x_vals = np.linspace(0, sid.n - 1, sid.n) + x_shift
+
+        # clip any points that fall slightly outside [0, n] due to the shift
+        x_vals = x_vals[(x_vals >= 0) & (x_vals <= sid.n)]
+
+        # append the (x, y) pairs
+        pts.extend(zip(np.full_like(x_vals, y), x_vals))
+
+    points = np.array(sorted(pts, key = lambda elem: (elem[0], elem[1])))
 
     points_above_pbc = points.copy() + np.array([0, sid.n])
     points_below_pbc = points.copy() + np.array([0, -sid.n])
-    points_right_pbc =  points.copy() + np.array([sid.m, 0])
-    points_left_pbc = points.copy() + np.array([-sid.m, 0])
+    points_right_pbc =  points.copy() + np.array([sid.n, 0])
+    points_left_pbc = points.copy() + np.array([-sid.n, 0])
 
     if sid.periodic == 'none':
         pos = points

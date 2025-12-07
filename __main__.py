@@ -84,13 +84,14 @@ while t < tmax and i < iters and data.dissolved_v < sid.dissolved_v_max and not 
             cb = Dif.solve_diffusion_pe_fix(sid, inc, graph, edges, cb_b)
     else:
         if sid.include_volumes:
-            cb = Di.solve_dissolution_nr(sid, inc, graph, edges, vols, cb_b)
+            cb = Di.solve_dissolution_safe(sid, inc, graph, edges, vols, cb_b)
         else:
             cb = Di.solve_dissolution(sid, inc, graph, edges, cb_b)
-    # if np.max(cb) > 1.1:
-    #     print(cb)
-    #     print(pressure)
-    #     raise ValueError
+    print('cb: ', np.min(cb), np.max(cb))
+    if np.max(cb) > 1.1:
+        print(cb)
+        print(pressure)
+        raise ValueError
     # node = 0
     # if len(np.where(cb < -1e-2)[0]):
     #     node = np.where(cb < -1e-2)[0][0]
@@ -110,15 +111,15 @@ while t < tmax and i < iters and data.dissolved_v < sid.dissolved_v_max and not 
     #     raise ValueError("cb")
     #cc, cd = Pi.create_vector_nr(sid, graph, inc, edges, cb)
     if sid.include_precipitation:
-        if t == 0:
+        if t == 0 or sid.load == 1:
             #cd = sid.cd_in* np.ones(sid.nsq)#sid.cd_in * (sid.cb_in - cb)
             #cc = 0.001 * np.ones(sid.nsq)#sid.cb_in - cb + sid.cc_in
-            cc, cd = Pi.create_vector_nr(sid, graph, inc, edges, cb)
-            cc2, cd2 = Pi.solve_precipitation_nr2_vxx(sid, inc, graph, edges, vols, cb, cc, cd)
-            print(f'cc: {np.min(cc2)}, {np.max(cc2)}, cd: {np.min(cd2)}, {np.max(cd2)}')
+            # cc, cd = Pi.create_vector_nr(sid, graph, inc, edges, cb)
+            # cc2, cd2 = Pi.solve_precipitation_nr2_vxx(sid, inc, graph, edges, vols, cb, cc, cd)
+            # print(f'cc: {np.min(cc2)}, {np.max(cc2)}, cd: {np.min(cd2)}, {np.max(cd2)}')
             cc, cd = Pi.create_vector_nr(sid, graph, inc, edges, cb)
             cc, cd = Pi.solve_precipitation_nr9_vxx(sid, inc, graph, edges, vols, cb, cc, cd)             
-            print(np.sum(np.abs(cc - cc2)), np.sum(np.abs(cd - cd2)))
+            #print(np.sum(np.abs(cc - cc2)), np.sum(np.abs(cd - cd2)))
             #np.savetxt('cc.txt', cc)
             #np.savetxt('cc2.txt', cc2)
         else:
@@ -139,6 +140,7 @@ while t < tmax and i < iters and data.dissolved_v < sid.dissolved_v_max and not 
         frac_part = int(100 * (t - int_part))
         name = f"{int_part:04d}_{frac_part:02d}.jpg"
         data.check_data(edges)
+        data.check_slice_porosity(graph, inc, edges, triangles, vols, int(t))
         #data.check_init_slice_channelization(graph, inc, edges)
         #data.check_slice_channelization(graph, inc, edges, t)
         #Tr.track(sid, graph, inc, edges, data, pressure)
@@ -176,6 +178,7 @@ while t < tmax and i < iters and data.dissolved_v < sid.dissolved_v_max and not 
             # save_VTK(sid, graph, edges, pressure, cb, \
             #     f'network_{data.dissolved_v:.2f}.vtk')
             data.check_data(edges)
+            data.check_slice_porosity(graph, inc, edges, triangles, vols, int(t))
             #data.check_slice_channelization(graph, inc, edges, \
             #    data.dissolved_v)
             data.save_data()
@@ -214,7 +217,7 @@ while t < tmax and i < iters and data.dissolved_v < sid.dissolved_v_max and not 
         Dr.draw_flow(sid, graph, edges, f'd_{data.dissolved_v:.2f}.jpg', 'd')
         raise ValueError('Flow not matching!')
 
-    # if i == 427:
+    # if i == 1110:
     #     Sv.save('/save.dill', sid, graph, inc, edges, triangles, vols)
     # if np.sum((np.array((inc.merge != 0).sum(axis = 0))[0] == 0) * (edges.diams != 0)):
 
@@ -236,6 +239,8 @@ if i != 1 and sid.load != 1 and not sid.debug:
         sid.qdrawconst = 0
     data.save_data()
     data.plot_things(sid)
+    data.check_slice_porosity(graph, inc, edges, triangles, vols, int(t))
+    data.plot_porosity_profile(graph)
     #data.plot_profile(graph)
     #Tr.plot_tracking(data, 100)
     # Dr.draw_flow_profile(sid, graph, edges, data, \

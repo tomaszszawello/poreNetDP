@@ -22,10 +22,11 @@ import numpy as np
 import scipy.sparse as spr
 
 from config import SimInputData
-from network import Edges, Graph
+from network import Edges, Graph, Triangles
 from incidence import Incidence
+from volumes import Volumes
 
-font = {'family' : 'Times New Roman',
+font = {'family' : 'Liberation Serif',
         'weight' : 'normal',
         'size'   : 50}
 
@@ -73,6 +74,7 @@ class Data():
     slices: list = []
     slices_d: list = []
     slices_s: list = []
+    slices_phi: list = []
     "channelization for slices through the whole system in a given time"
     slice_times: list = []
     "list of times of checking slice channelization"
@@ -118,7 +120,16 @@ class Data():
                 is_saved = True
             except PermissionError:
                 pass
-    
+        is_saved = False
+        while not is_saved: # prevents problems with opening text file
+            try:
+                file = open(self.dirname + '/profiles_phi.txt', 'w', \
+                    encoding = "utf-8")
+                np.savetxt(file, self.slices_phi)
+                file.close()
+                is_saved = True
+            except PermissionError:
+                pass
         # is_saved = False
         # while not is_saved: # prevents problems with opening text file
         #     try:
@@ -569,6 +580,7 @@ class Data():
         plt.figure(figsize = (15, 10))
         x = sid.cb_in * np.array(self.t) * sid.Q_in / (2 * sid.Da * sid.ne * sid.phi / (1 - sid.phi))
         plt.title('Permeability')
+        plt.grid()
         plt.plot(x, self.pressure[0] / self.pressure, linewidth = 5, color = 'black')
         plt.yscale('log')
         plt.xlabel(r'injected B $\nu_A / V^0_A$', fontsize = 50)
@@ -579,6 +591,7 @@ class Data():
         plt.close()
         plt.figure(figsize = (15, 10))
         plt.title('Porosity')
+        plt.grid()
         plt.plot(x, self.porosity, linewidth = 5, color = 'black')
         plt.xlabel(r'injected B $\nu_A / V^0_A$', fontsize = 50)
         #plt.subplots_adjust(wspace=0, hspace=0)
@@ -598,6 +611,7 @@ class Data():
         # plt.close()
         # plt.figure(figsize = (15, 10))
         # plt.title('Replaced volume')
+        plt.grid()
         plt.plot(x, self.replaced, '--', linewidth = 5, color = 'black', label = 'E')
         plt.ylabel(r'$\Delta V / V^\text{tot}$', fontsize = 50)
         #plt.subplots_adjust(wspace=0, hspace=0)
@@ -609,9 +623,59 @@ class Data():
         plt.figure(figsize = (15, 10))
         plt.title('Reacted D')
         plt.plot(sid.cb_in * np.array(self.t) * sid.Q_in / (2 * sid.Da * sid.ne * sid.phi / (1 - sid.phi)), np.array(self.delta_d_list) / (2 * sid.Da * sid.ne * sid.phi / (1 - sid.phi)), linewidth = 5, color = 'black')
+        plt.grid()
         plt.ylabel(r'reacted  D $\nu_A / V^0_A$', fontsize = 50)
         #plt.subplots_adjust(wspace=0, hspace=0)
         plt.margins(tight = True)
         plt.xlabel(r'injected B $\nu_A / V^0_A$', fontsize = 50)
         plt.savefig(self.dirname + '/reacted_d.png', bbox_inches="tight")
+        plt.close()
+
+    def check_porosity_profile(self, graph: Graph, inc: Incidence, edges: Edges, triangles: Triangles, \
+        vols: Volumes, slice_x: float) -> tuple[int, float]:
+        
+        pos_x = np.array(list(nx.get_node_attributes(graph, 'pos').values()))[:,0]
+        slice_triangles = ((triangles.node_incidence @ (pos_x >= slice_x)) \
+            * (triangles.node_incidence @ (pos_x <= slice_x))) > 0
+        slice_porosity = 1 - (np.sum(slice_triangles * (vols.vol_a + vols.vol_e))) / (np.sum(slice_triangles * vols.vol_max))
+        return slice_porosity, np.sum(slice_triangles)
+
+    def check_slice_porosity(self, graph: Graph, inc: Incidence, \
+        edges: Edges, triangles: Triangles, vols: Volumes, time) -> None:
+        pos_x = np.array(list(nx.get_node_attributes(graph, 'pos').values()))[:,0]
+        slices = np.linspace(np.min(pos_x), np.max(pos_x), 102)[1:-1]
+        channels_tab = []
+        for x in slices:
+            res = self.check_porosity_profile(graph, inc, edges, triangles, vols, x)
+            channels_tab.append(res[0])
+        self.slice_times.append(time)
+        self.slices_phi.append(channels_tab)
+
+    def plot_porosity_profile(self, graph: Graph) -> None:
+        """ Plots slice data from text file.
+
+        This function loads the data from text file slices.txt and plots them
+        to files slices.png, slices_no_div.png, slices_norm.png.
+        """
+        pos_x = np.array(list(nx.get_node_attributes(graph, 'pos').values()))[:,0]
+        # slices = np.linspace(np.min(pos_x), np.max(pos_x), 120)[10:-10]
+        slices = np.linspace(np.min(pos_x), np.max(pos_x), 102)[1:-1]
+        colors = ['C0', 'C1', 'C2', 'C3', 'C4', 'C5', 'C6', 'C7', 'C8', 'C9', 'C0', 'C1', 'C2', 'C3', 'C4', 'C5', 'C6', 'C7', 'C8', 'C9']
+        plt.figure(figsize = (15, 10))
+        for i, channeling in enumerate(self.slices_phi):
+            plt.plot(slices, self.slices_phi[i], label = self.slice_times[i], color = colors[i], linewidth = 5)
+        #plt.ylim(0, 1.05)
+        plt.xlabel('x', fontsize = 60, style = 'italic')
+        # ax2.xaxis.label.set_color('white')
+        # ax2.tick_params(axis = 'x', colors='white')
+        #plt.xticks([],[])
+        plt.subplots_adjust(wspace=0, hspace=0)
+        plt.margins(tight = True)
+        plt.ylabel('porosity', fontsize = 50)
+        #plt.yticks([],[])
+        plt.yticks([0, 0.5, 1],['0', '0.5', '1'])
+        legend = plt.legend(loc="lower center", mode = "expand", ncol = 4, prop={'size': 40}, handlelength = 1, frameon=False, borderpad = 0, handletextpad = 0.4)
+        for legobj in legend.legend_handles:
+            legobj.set_linewidth(10.0)
+        plt.savefig(self.dirname + "/porosity_profile.png", bbox_inches="tight")
         plt.close()

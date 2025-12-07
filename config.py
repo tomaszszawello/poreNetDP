@@ -15,9 +15,9 @@ class SimInputData:
     ''' Configuration class for the whole simulation.
     '''
     # GENERAL
-    n: int = 50
+    n: int = 100
     "network size along y (transverse to the flow)"
-    m: int = 50
+    m: int = 200
     "network size along x (parallel to the flow)"
     iters: int = 1000000
     "maximum number of iterations"
@@ -45,16 +45,16 @@ class SimInputData:
     #chi0 = (1 / (1 - phi) ** (1/3) - 1) / np.sqrt(3)
     chi0 = 4 * np.sqrt(phi) / np.pi
     Sh = 4
-    include_diffusion = True
+    include_diffusion = False
     #Da = Da_L * np.pi * chi0 / (m)
     #Pe = Pe_L * 2 / (np.pi * chi0 ** 2)
     Pe = Pe_L * 4 / (np.pi * chi0 ** 2)
     
     G: float = 5.#Da * Pe / Sh * chi0 ** 2 / 4
     "diffusion to reaction ratio"
-    Da_eff: float = 1.0 #Da / (1 + G)
+    Da_eff: float = 1. #Da / (1 + G)
     Da = Da_eff * (1 + G)
-    tmax = 500 * Da
+    tmax = 300 * Da
     track_every: int = tmax / 10
     "Damkohler number"
     # G = 50
@@ -64,9 +64,9 @@ class SimInputData:
     V_tot = (1 / chi0) ** 2 * 3  #/ np.pi  / 4
 
     debug = False
-    K: float = 1.1
+    K: float = 0.1
     "precipitation to dissolution reaction rate"
-    Gamma: float = 2.
+    Gamma: float = 0.49
     "precipitation to dissolution acid capacity number"
     merge_length: float = 1 / chi0
     "diameter scale to length scale ratio for merging"
@@ -80,12 +80,12 @@ class SimInputData:
     pipe_diam = 5
     pipe_width = 2
     phi_max = 1
-    min_perm = 1e-4
+    min_perm = 1e-3
 
     # INCLUDE
     include_adt: bool = True
     "include adaptive timestep"
-    include_precipitation: bool = False
+    include_precipitation: bool = True
     "include precipitation"
     include_merging: bool = False
     "include pore merging"
@@ -99,7 +99,7 @@ class SimInputData:
     "inlet B concentration"
     cc_in: float = 0.
     "inlet C concentration"
-    cd_in: float = 0.7
+    cd_in: float = 1.
     "inlet D concentration"
 
     # TIME
@@ -117,11 +117,11 @@ class SimInputData:
     Kp = 1#0.01
 
     # DIAMETERS
-    noise: str = 'file_lognormal_k'
+    noise: str = 'lognormal' #'file_lognormal_k'
     ("type of noise in diameters distribution: 'gaussian', 'lognormal', \
     'klognormal', 'file_lognormal_d', 'file_lognormal_k'")
-    #noise_filename: str = 'n200lam20r1.dat' #'n200lam20r1.dat'
-    noise_filename: str = 'n100lam10r1.dat' #'n200lam20r1.dat'
+    noise_filename: str = 'n200lam20r2.dat' #'n200lam20r1.dat'
+    #noise_filename: str = 'n100lam10r1.dat' #'n200lam20r1.dat'
     "name of file with initial diameters if noise == file_"
     d0: float = 1.
     "initial dimensionless mean diameter"
@@ -155,7 +155,8 @@ class SimInputData:
      simulation, 2 - load template network from load_name and start new \
      simulation")
     #load_name: str = 'diffusion/Pe0.00Da100.00/17'
-    load_name: str = 'singurindy/G5.00Daeff1.00/61'#/template/9'
+    load_name: str = 'singurindy/G5.00Daeff1.00/16'#/template/9'
+    #load_name: str = 'singurindy/G5.00Daeff0.50/14'#/template/9'
     
     "name of loaded network"
 

@@ -43,12 +43,26 @@ class Volumes():
         self.vol_d_min = self.triangles.T @ (sid.dmin ** 2 \
             * edges.lens / edges.triangles)
         "minimal volume that emptiness must take in each triangle"
-        
-        normal = np.random.randn(len(triangles.volume))
-        phi_var = np.exp(1+ sid.sigma_phi * normal)
-        phi_var /= np.average(phi_var)
-        
-        self.vol_a = (1 - np.clip(sid.phi * phi_var, 0.01, 0.9)) * triangles.volume
+        if sid.noise == 'file_lognormal_k':
+            raw = np.loadtxt(sid.noise_filename).T
+            z = (raw - raw.mean()) / raw.std()
+            z = np.clip(z, -1, 1)  # avoid extreme tails
+            phi = []
+            for n1, n2, n3 in triangles.tlist:
+                phi.append((z[n1 // sid.n, n1 % sid.n] + \
+                    z[n2 // sid.n, n2 % sid.n] + z[n3 // sid.n, n3 % sid.n]) / 3)
+            phi = np.array(phi)
+            phi_min = 0.01
+            phi_max = 0.99
+            phi_field = phi_min + (phi_max - phi_min) * (phi - phi.min()) / (phi.max() - phi.min())
+            self.vol_a = (1 - phi_field) * triangles.volume
+        elif sid.noise == 'lognormal':
+            normal = np.random.randn(len(triangles.volume))
+            phi_var = np.exp(1+ sid.sigma_phi * normal)
+            phi_var /= np.average(phi_var)            
+            self.vol_a = (1 - np.clip(sid.phi * phi_var, 0.01, 0.9)) * triangles.volume
+        else:
+             self.vol_a = (1 - sid.phi) * triangles.volume
         "volume of substance A (dissolved) (ntr)"
         self.vol_a_0 = self.vol_a.copy()
         "initial volume of substance A"
