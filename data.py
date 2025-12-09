@@ -75,6 +75,8 @@ class Data():
     slices_d: list = []
     slices_s: list = []
     slices_phi: list = []
+    slices_a: list = []
+    slices_e: list = []
     "channelization for slices through the whole system in a given time"
     slice_times: list = []
     "list of times of checking slice channelization"
@@ -432,7 +434,7 @@ class Data():
         self.slices.append(channels_tab)
         self.slices_d.append(diams_tab)
         self.slices_s.append(surface_tab)
-        self.slice_times.append("{0}".format(str(round(time, 1) if time % 1 else int(time))))
+        #self.slice_times.append("{0}".format(str(round(time, 1) if time % 1 else int(time))))
 
     def plot_slice_channelization(self, graph: Graph) -> None:
         """ Plots slice data from text file.
@@ -583,20 +585,20 @@ class Data():
         plt.grid()
         plt.plot(x, self.pressure[0] / self.pressure, linewidth = 5, color = 'black')
         plt.yscale('log')
-        plt.xlabel(r'injected B $\nu_A / V^0_A$', fontsize = 50)
+        plt.xlabel(r'injected B $\nu_\text{A} / V^0_\text{A}$', fontsize = 50)
         #plt.subplots_adjust(wspace=0, hspace=0)
         plt.margins(tight = True)
-        plt.ylabel(r'$\kappa / \kappa_0$', fontsize = 50)
-        plt.savefig(self.dirname + '/permeability.png', bbox_inches="tight")
+        plt.ylabel(r'$K / K_0$', fontsize = 50)
+        plt.savefig(self.dirname + '/conductivity.png', bbox_inches="tight")
         plt.close()
         plt.figure(figsize = (15, 10))
         plt.title('Porosity')
         plt.grid()
         plt.plot(x, self.porosity, linewidth = 5, color = 'black')
-        plt.xlabel(r'injected B $\nu_A / V^0_A$', fontsize = 50)
+        plt.xlabel(r'injected B $\nu_\text{A} / V^0_\text{A}$', fontsize = 50)
         #plt.subplots_adjust(wspace=0, hspace=0)
         plt.margins(tight = True)
-        plt.ylabel(r'$\phi$', fontsize = 50)
+        plt.ylabel(r'$\varphi$', fontsize = 50)
         plt.yscale('log')
         plt.savefig(self.dirname + '/porosity.png', bbox_inches="tight")
         plt.close()
@@ -617,17 +619,17 @@ class Data():
         #plt.subplots_adjust(wspace=0, hspace=0)
         plt.margins(tight = True)
         plt.legend()
-        plt.xlabel(r'injected B $\nu_A / V^0_A$', fontsize = 50)
+        plt.xlabel(r'injected B $\nu_\text{A} / V^0_\text{A}$', fontsize = 50)
         plt.savefig(self.dirname + '/replaced.png', bbox_inches="tight")
         plt.close()
         plt.figure(figsize = (15, 10))
         plt.title('Reacted D')
         plt.plot(sid.cb_in * np.array(self.t) * sid.Q_in / (2 * sid.Da * sid.ne * sid.phi / (1 - sid.phi)), np.array(self.delta_d_list) / (2 * sid.Da * sid.ne * sid.phi / (1 - sid.phi)), linewidth = 5, color = 'black')
         plt.grid()
-        plt.ylabel(r'reacted  D $\nu_A / V^0_A$', fontsize = 50)
+        plt.ylabel(r'reacted  D $\nu_\text{A} / V^0_\text{A}$', fontsize = 50)
         #plt.subplots_adjust(wspace=0, hspace=0)
         plt.margins(tight = True)
-        plt.xlabel(r'injected B $\nu_A / V^0_A$', fontsize = 50)
+        plt.xlabel(r'injected B $\nu_\text{A} / V^0_\text{A}$', fontsize = 50)
         plt.savefig(self.dirname + '/reacted_d.png', bbox_inches="tight")
         plt.close()
 
@@ -638,18 +640,24 @@ class Data():
         slice_triangles = ((triangles.node_incidence @ (pos_x >= slice_x)) \
             * (triangles.node_incidence @ (pos_x <= slice_x))) > 0
         slice_porosity = 1 - (np.sum(slice_triangles * (vols.vol_a + vols.vol_e))) / (np.sum(slice_triangles * vols.vol_max))
-        return slice_porosity, np.sum(slice_triangles)
+        slice_vol_a = (np.sum(slice_triangles * vols.vol_a)) / (np.sum(slice_triangles * vols.vol_max))
+        slice_vol_e = (np.sum(slice_triangles * vols.vol_e)) / (np.sum(slice_triangles * vols.vol_max))
+        return slice_porosity, np.sum(slice_triangles), slice_vol_a, slice_vol_e
 
     def check_slice_porosity(self, graph: Graph, inc: Incidence, \
         edges: Edges, triangles: Triangles, vols: Volumes, time) -> None:
         pos_x = np.array(list(nx.get_node_attributes(graph, 'pos').values()))[:,0]
         slices = np.linspace(np.min(pos_x), np.max(pos_x), 102)[1:-1]
-        channels_tab = []
+        channels_tab, vol_a_tab, vol_e_tab = [], [], []
         for x in slices:
             res = self.check_porosity_profile(graph, inc, edges, triangles, vols, x)
             channels_tab.append(res[0])
+            vol_a_tab.append(res[2])
+            vol_e_tab.append(res[3])
         self.slice_times.append(time)
         self.slices_phi.append(channels_tab)
+        self.slices_a.append(vol_a_tab)
+        self.slices_e.append(vol_e_tab)
 
     def plot_porosity_profile(self, graph: Graph) -> None:
         """ Plots slice data from text file.
@@ -678,4 +686,129 @@ class Data():
         for legobj in legend.legend_handles:
             legobj.set_linewidth(10.0)
         plt.savefig(self.dirname + "/porosity_profile.png", bbox_inches="tight")
+        plt.close()
+
+    def plot_vol_profile(self, graph: Graph) -> None:
+        """Plot profiles of phi, V_A and V_E in 3 subplots with common x-axis."""
+        pos_x = np.array(list(nx.get_node_attributes(graph, 'pos').values()))[:, 0]
+        slices = np.linspace(np.min(pos_x), np.max(pos_x), 102)[1:-1]
+
+        colors = ['black', 'C0', 'C1', 'C2', 'C3', 'C4', 'C5', 'C6', 'C7', 'C8', 'C9',
+                'C0', 'C1', 'C2', 'C3', 'C4', 'C5', 'C6', 'C7', 'C8', 'C9']
+
+        fig, axes = plt.subplots(
+            3, 1,
+            sharex=True,
+            figsize=(15, 12)
+        )
+
+        # 1) porosity phi
+        ax_phi = axes[0]
+        for i, phi in enumerate(self.slices_phi):
+            ax_phi.plot(
+                slices,
+                phi,
+                color=colors[i],
+                linewidth=5
+            )
+        ax_phi.set_ylabel(r'$\varphi$', fontsize = 50)
+        ax_phi.set_ylim(0, 2 * np.max(self.slices_phi[0]))
+
+        # legend = ax_phi.legend(
+        #     loc="lower center",
+        #     mode="expand",
+        #     ncol=4,
+        #     prop={'size': 40},
+        #     handlelength=1,
+        #     frameon=False,
+        #     borderpad=0,
+        #     handletextpad=0.4
+        # )
+        # for legobj in legend.legend_handles:
+        #     legobj.set_linewidth(10.0)
+
+        # 2) volume A (V_A)
+        ax_a = axes[1]
+        for i, va in enumerate(self.slices_a):
+            ax_a.plot(
+                slices,
+                va,
+                color=colors[i],
+                linewidth=5
+            )
+        ax_a.set_ylabel(r'$V_\text{A}$ / $V^\text{tot}$', fontsize=50)
+        ax_a.set_ylim(0, 1.05)
+        ax_a.set_yticks([0, 0.5],['0', '0.5'])
+
+        # 3) volume E (V_E)
+        ax_e = axes[2]
+        # ax_e.plot([], [], ' ', label=' ')
+        # ax_e.plot([], [], ' ', label=' ')
+        # ax_e.plot([], [], ' ', label=' ')
+        for i, ve in enumerate(self.slices_e):
+            ax_e.plot(
+                slices,
+                ve,
+                label=self.slice_times[i],
+                color=colors[i],
+                linewidth=5
+            )
+        ax_e.set_ylabel(r'$V_\text{E}$ / $V^\text{tot}$', fontsize=50)
+        ax_e.set_xlabel('x', fontsize=60, style='italic')
+        ax_e.set_ylim(0, 1.05)
+        ax_e.set_yticks([0, 0.5],['0', '0.5'])
+        handles, labels = ax_e.get_legend_handles_labels()
+        #order = [0,4,1,5,2,6,3,7]
+        n = len(handles)
+
+        cols = 4
+        rows = 2
+        slots = rows * cols
+
+        # Dummy handle/label (invisible entry)
+        from matplotlib.lines import Line2D
+        dummy_handle = Line2D([], [], linestyle='none', marker='', color='none')
+        dummy_label = ''
+
+        slot_handles = [dummy_handle] * slots
+        slot_labels  = [dummy_label]  * slots
+
+        if n > 0:
+            # put label "0" (handles[0]) in top-right corner: row 0, col cols-1
+            slot_handles[2 * cols - 2] = handles[0]
+            slot_labels[2 * cols - 2]  = labels[0]
+
+        # put the remaining labels (1..n-1) in bottom row, from left to right
+        for j, (h, lab) in enumerate(zip(handles[1:], labels[1:])):
+            if j >= cols:    # we only support up to 4 "other" labels
+                break
+            r, c = 1, j      # second row, columns 0..3
+            idx = r + c * rows
+            slot_handles[idx] = h
+            slot_labels[idx]  = lab
+
+        legend = ax_e.legend(
+            slot_handles,
+            slot_labels,
+            loc="upper center",
+            mode="expand",
+            ncol=cols,
+            prop={'size': 40},
+            handlelength=1,
+            frameon=False,
+            borderpad=0,
+            handletextpad=0.4,
+        )
+
+        for legobj in legend.legend_handles:
+            legobj.set_linewidth(10.0)
+
+        # Layout tweaks
+        for ax in axes[:-1]:
+            ax.tick_params(labelbottom=False)  # hide x tick labels on top two
+
+        fig.subplots_adjust(hspace=0, wspace=0)
+        plt.margins(tight=True)
+
+        plt.savefig(self.dirname + "/vol_profiles.png", bbox_inches="tight")
         plt.close()

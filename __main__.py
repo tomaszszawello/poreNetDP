@@ -141,8 +141,8 @@ while t < tmax and i < iters and data.dissolved_v < sid.dissolved_v_max and not 
         name = f"{int_part:04d}_{frac_part:02d}.jpg"
         data.check_data(edges)
         data.check_slice_porosity(graph, inc, edges, triangles, vols, int(t))
-        #data.check_init_slice_channelization(graph, inc, edges)
-        #data.check_slice_channelization(graph, inc, edges, t)
+        data.check_init_slice_channelization(graph, inc, edges)
+        data.check_slice_channelization(graph, inc, edges, t)
         #Tr.track(sid, graph, inc, edges, data, pressure)
         Dr.draw_flow(sid, graph, edges, f'q_' + name, 'q')
         #Dr.draw_flow(sid, graph, edges, f'd_{data.dissolved_v:.2f}.jpg', 'd')
@@ -154,7 +154,7 @@ while t < tmax and i < iters and data.dissolved_v < sid.dissolved_v_max and not 
         #     f'network_{data.dissolved_v:.2f}.vtk')
     else:
         #if data.dissolved_v // sid.track_every > iterator_dissolved:
-        if t // sid.track_every > iterator_dissolved:
+        if t // sid.track_every > iterator_dissolved and iterator_dissolved + 1 in sid.track_list:
             # print(edges.diams)
             # print(np.abs((spr.diags(edges.flow) @ inc.incidence > 0)) @ cb)
             # print(np.abs((spr.diags(edges.flow) @ inc.incidence > 0)) @ cc)
@@ -179,8 +179,8 @@ while t < tmax and i < iters and data.dissolved_v < sid.dissolved_v_max and not 
             #     f'network_{data.dissolved_v:.2f}.vtk')
             data.check_data(edges)
             data.check_slice_porosity(graph, inc, edges, triangles, vols, int(t))
-            #data.check_slice_channelization(graph, inc, edges, \
-            #    data.dissolved_v)
+            data.check_slice_channelization(graph, inc, edges, \
+               data.dissolved_v)
             data.save_data()
             #if iterator_dissolved == 3:
             #    Sv.save('/save.dill', sid, graph, inc, edges, triangles, vols)
@@ -229,7 +229,7 @@ while t < tmax and i < iters and data.dissolved_v < sid.dissolved_v_max and not 
 # to be able to continue it later
 if i != 1 and sid.load != 1 and not sid.debug:
     #data.check_data(edges)
-    #data.check_slice_channelization(graph, inc, edges, data.dissolved_v)
+    data.check_slice_channelization(graph, inc, edges, data.dissolved_v)
     #Tr.track(sid, graph, inc, edges, data, pressure)
     # Dr.draw_diams_profile(sid, graph, edges, data, \
     #     f'focusing_d_{data.dissolved_v:.2f}.jpg', 'd')
@@ -240,8 +240,8 @@ if i != 1 and sid.load != 1 and not sid.debug:
     data.save_data()
     data.plot_things(sid)
     data.check_slice_porosity(graph, inc, edges, triangles, vols, int(t))
-    data.plot_porosity_profile(graph)
-    #data.plot_profile(graph)
+    data.plot_vol_profile(graph)
+    data.plot_profile(graph)
     #Tr.plot_tracking(data, 100)
     # Dr.draw_flow_profile(sid, graph, edges, data, \
     #         f'focusing_q_{data.dissolved_v:.2f}.jpg', 'q')

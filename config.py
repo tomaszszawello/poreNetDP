@@ -15,7 +15,7 @@ class SimInputData:
     ''' Configuration class for the whole simulation.
     '''
     # GENERAL
-    n: int = 100
+    n: int = 200
     "network size along y (transverse to the flow)"
     m: int = 200
     "network size along x (parallel to the flow)"
@@ -29,8 +29,8 @@ class SimInputData:
     "frequency of plotting the results"
     
     "frequency of checking channelization"
-    track_list = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
-    #track_list = [1, 2, 3, 4, 5]
+    #track_list = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
+    track_list = [1, 2, 5, 10]
     "times of checking channelization"
 
     # DISSOLUTION & PRECIPITATION
@@ -43,7 +43,7 @@ class SimInputData:
     phi = 0.1
     #chi0 = (1 - (1 - phi) ** (1/3)) / np.sqrt(3)
     #chi0 = (1 / (1 - phi) ** (1/3) - 1) / np.sqrt(3)
-    chi0 = 4 * np.sqrt(phi) / np.pi
+    chi0 = np.sqrt(2 * phi / (np.pi * np.sqrt(3))) #4 * np.sqrt(phi) / np.pi
     Sh = 4
     include_diffusion = False
     #Da = Da_L * np.pi * chi0 / (m)
@@ -54,14 +54,15 @@ class SimInputData:
     "diffusion to reaction ratio"
     Da_eff: float = 1. #Da / (1 + G)
     Da = Da_eff * (1 + G)
-    tmax = 300 * Da
+    tmax = 100 * Da
     track_every: int = tmax / 10
     "Damkohler number"
     # G = 50
     # Da_eff = 5
     # Da = Da_eff * (1 + G)
     #V_tot = (1 / chi0) ** 2 * np.sqrt(6) / 6 / np.pi
-    V_tot = (1 / chi0) ** 2 * 3  #/ np.pi  / 4
+    #V_tot = (1 / chi0) ** 2 * 3  #/ np.pi  / 4
+    V_tot = (1 / chi0) ** 2 * 2 * np.sqrt(3) / (3 * np.pi)
 
     debug = False
     K: float = 0.1
@@ -127,7 +128,7 @@ class SimInputData:
     "initial dimensionless mean diameter"
     sigma_d0: float = 0.1
     "initial diameter standard deviation"
-    sigma_phi: float = 0.05
+    sigma_phi: float = 0.2
     "initial porosity lognormal deviation"
     dmin: float = 0.01
     "minimum diameter"
@@ -155,7 +156,7 @@ class SimInputData:
      simulation, 2 - load template network from load_name and start new \
      simulation")
     #load_name: str = 'diffusion/Pe0.00Da100.00/17'
-    load_name: str = 'singurindy/G5.00Daeff1.00/16'#/template/9'
+    load_name: str = 'singurindy/G5.00Daeff1.00/28'#/template/9'
     #load_name: str = 'singurindy/G5.00Daeff0.50/14'#/template/9'
     
     "name of loaded network"

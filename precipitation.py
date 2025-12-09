@@ -217,17 +217,20 @@ def solve_precipitation_nr9_vxx(sid, inc, graph, edges, vols, cb, cc, cd,
         delta_cb = cb_in - cb_out
         over = cd_out < 0.0
         if np.any(over):
-            # enforce cd_out >= 0 and consistent cc_out
             cd_out[over] = 0.0
 
             delta_cc_new = cd_in[over] - delta_cb[over]
-            cc_out[over] = cc_in[over] - delta_cc_new
+            cc_out[over] = cc_in[over] - delta_cc_new  # = cc_in - cd_in + delta_cb
 
-            # Derivative model in capped regime
-            dccout_dccu[over] = 1.0
-            dccout_dcd[over]  = 0.0
+            # Derivative model in capped regime (capacity-limited)
+            # cc_out = cc_in - cd_in + delta_cb
+            dccout_dccu[over] = 1.0   # ∂cc_out/∂cc_in = 1
+            dccout_dcd[over]  = -1.0  # ∂cc_out/∂cd_in = -1
+
+            # cd_out is clamped to 0; no dependence on upstream concentrations
             dcdout_dccu[over] = 0.0
             dcdout_dcd[over]  = 0.0
+
 
         # ---- 4. residual vector --------------------------------------
         F_cc = cc * Q_in - (D.T @ (abs_Q * cc_out))
