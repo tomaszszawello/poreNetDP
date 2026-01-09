@@ -23,7 +23,7 @@ def create_vector_danckwerts(sid: SimInputData, inc: Incidence, graph: Graph, ed
     Z_pos = ((Z @ inc.incidence) > 0)
     upstream = A_pos.maximum(Z_pos).astype(float)  # edges x nodes (1 where node is upstream)
     # Positive source: sum over upstream edges attached to inlet nodes
-    qc_in = sid.Pe * (upstream.T @ np.abs(edges.flow)) * graph.in_vec  # shape: nsq
+    qc_in = sid.Pe * (np.abs(inc.incidence).T @ np.abs(edges.flow)) * np.concatenate([np.array([1]), np.zeros(sid.nsq - 1)]) # shape: nsq
     return np.concatenate([sid.cb_0 * qc_in, np.zeros(2 * sid.ne)])
 
 def solve_diffusion(sid: SimInputData, inc: Incidence, graph: Graph, edges: Edges, cb_vector):
@@ -67,18 +67,21 @@ def solve_diffusion(sid: SimInputData, inc: Incidence, graph: Graph, edges: Edge
     return cb
 
 def solve_diffusion_pe_fix(sid: SimInputData, inc: Incidence, graph: Graph, edges: Edges, cb_vector):
+    edges.alpha = 1 * (inc.boundary.T @ (edges.grain > 0)) / 2 * edges.active
+    print(np.sum(edges.alpha))
+    print(np.sum(edges.active))
     lam_plus_val = sid.Pe / 2 * edges.lens / edges.diams ** 2 * \
-        (np.sqrt(np.abs(edges.flow) ** 2 + 4 * sid.Da / (1 + sid.G * edges.diams) / sid.Pe * edges.diams ** 3) + np.abs(edges.flow))
+        (np.sqrt(np.abs(edges.flow) ** 2 + 4 * edges.alpha * sid.ksi * edges.diams ** 2) + np.abs(edges.flow))
     lam_plus_val = np.array(np.ma.fix_invalid(lam_plus_val, fill_value = 0))
     lam_minus_val = sid.Pe / 2 * edges.lens / edges.diams ** 2 * \
-        (np.sqrt(np.abs(edges.flow) ** 2 + 4 * sid.Da / (1 + sid.G * edges.diams) / sid.Pe * edges.diams ** 3) - np.abs(edges.flow)) * (edges.diams <= sid.dmax)
+        (np.sqrt(np.abs(edges.flow) ** 2 + 4 * edges.alpha * sid.ksi * edges.diams ** 2) - np.abs(edges.flow))
     lam_minus_val = np.array(np.ma.fix_invalid(lam_minus_val, fill_value = 0))
-    lam_plus_zero = 1 * (1 * (lam_plus_val > sid.diffusion_exp_limit) + 1 * (edges.diams > sid.dmax) != 0)
+    lam_plus_zero = 1 * (1 * (lam_plus_val > sid.diffusion_exp_limit) + 1 * (edges.diams == 0) + 1 * (edges.flow == 0) > 0)
     lam_plus_val = lam_plus_val * (1 - lam_plus_zero)
 
     exp_plus = spr.diags(np.exp(lam_plus_val) * (1 - lam_plus_zero) + lam_plus_zero)
     exp_plus2 = spr.diags(np.exp(lam_plus_val) * (1 - lam_plus_zero))
-    exp_minus = spr.diags(np.exp(-lam_minus_val))
+    exp_minus = spr.diags(np.exp(-lam_minus_val)) 
     exp_minus2 = spr.diags(np.exp(-lam_minus_val) * (1 - lam_plus_zero))
     
     lam_minus_val = lam_minus_val * (1 - lam_plus_zero)
@@ -87,17 +90,20 @@ def solve_diffusion_pe_fix(sid: SimInputData, inc: Incidence, graph: Graph, edge
     #lam_minus = spr.diags(lam_minus_val)
     #print(np.sum(lam_plus_zero))
     #np.savetxt('expp.txt', exp_plus.toarray())
-    upstream = 1 * (spr.diags(edges.flow) @ inc.incidence > 0) + 1 * (spr.diags(1 * (edges.flow == 0)) @ inc.incidence > 0)
-    downstream = 1 * (spr.diags(edges.flow) @ inc.incidence < 0)
-    downstream2 = 1 * ((spr.diags(edges.flow) @ inc.incidence < 0).multiply((1 - lam_plus_zero)[:, np.newaxis]))
+    upstream = 1 * (spr.diags(edges.flow) @ inc.incidence > 0) + 1 * (spr.diags(1 * (edges.flow == 0)) @ inc.incidence < 0)
+    downstream = 1 * (spr.diags(edges.flow) @ inc.incidence < 0) + 1 * (spr.diags(1 * (edges.flow == 0)) @ inc.incidence > 0)
+    downstream2 = 1 * ((spr.diags(edges.flow) @ inc.incidence < 0).multiply((1 - lam_plus_zero)[:, np.newaxis])) + 1 * (spr.diags(1 * (edges.flow == 0)) @ inc.incidence > 0)
     #cb_pe_fix = 1 * (downstream.T @ (1 - lam_plus_zero) == 0)
     flux_a = 1 * (sid.Pe * spr.diags(np.abs(edges.flow)) @ exp_plus2 @ downstream + (spr.diags(lam_plus_val * edges.diams ** 2)) @ upstream - (exp_plus * spr.diags(lam_plus_val * edges.diams ** 2)) @ downstream).multiply((1 - lam_plus_zero)[:, np.newaxis])
     flux_b = 1 * (sid.Pe * spr.diags(np.abs(edges.flow)) @ exp_minus @ downstream + (spr.diags(-lam_minus_val * edges.diams ** 2)) @ upstream + (exp_minus * spr.diags(lam_minus_val * edges.diams ** 2)) @ downstream)
+    exp_pe_fix = np.exp(-edges.alpha * sid.ksi * edges.lens / np.abs(edges.flow))
+    exp_pe_fix = np.array(np.ma.fix_invalid(exp_pe_fix, fill_value = 0))
+    flux_b += 1 * (sid.Pe * spr.diags(np.abs(edges.flow)) @ spr.diags((lam_plus_val > sid.diffusion_exp_limit) * exp_pe_fix) @ downstream)
+
     #flux_a_in = flux_a.T.multiply((1 - (graph.in_vec + graph.out_vec))[:, np.newaxis]) + (flux_a / sid.Pe + (spr.diags(np.abs(edges.flow)) @ upstream)).T.multiply(graph.in_vec[:, np.newaxis]) + ((exp_plus * spr.diags(lam_plus_val)) @ downstream).T.multiply(graph.out_vec[:, np.newaxis])
     #flux_a_in = flux_a.T.multiply((1 - (graph.in_vec + graph.out_vec))[:, np.newaxis]) + upstream.T.multiply(graph.in_vec[:, np.newaxis]) + ((exp_plus * spr.diags(lam_plus_val)) @ downstream).T.multiply(graph.out_vec[:, np.newaxis])
     #flux_a_in = flux_a.T.multiply((1 - (graph.in_vec + graph.out_vec))[:, np.newaxis]) #+ ((exp_plus * spr.diags(lam_plus_val)) @ downstream).T.multiply((graph.out_vec * (1 - cb_pe_fix))[:, np.newaxis])
     flux_a_in = flux_a.T.multiply((1 - graph.in_vec)[:, np.newaxis]) #+ ((exp_plus * spr.diags(lam_plus_val)) @ downstream).T.multiply((graph.out_vec * (1 - cb_pe_fix))[:, np.newaxis])
-    
     
     #flux_b_in = flux_b.T.multiply((1 - (graph.in_vec + graph.out_vec))[:, np.newaxis]) + (flux_b / sid.Pe + (spr.diags(np.abs(edges.flow)) @ upstream)).T.multiply(graph.in_vec[:, np.newaxis]) - ((exp_minus * spr.diags(lam_minus_val)) @ downstream).T.multiply(graph.out_vec[:, np.newaxis])
     #flux_b_in = flux_b.T.multiply((1 - (graph.in_vec + graph.out_vec))[:, np.newaxis]) + upstream.T.multiply(graph.in_vec[:, np.newaxis]) - ((exp_minus * spr.diags(lam_minus_val)) @ downstream).T.multiply(graph.out_vec[:, np.newaxis])
@@ -115,13 +121,76 @@ def solve_diffusion_pe_fix(sid: SimInputData, inc: Incidence, graph: Graph, edge
                     spr.hstack([-downstream2, exp_plus, exp_minus2]), \
                     spr.hstack([-upstream, spr.diags(np.ones(sid.ne) - lam_plus_zero), spr.diags(np.ones(sid.ne))]) \
                     ])
-    cb_matrix = spr.diags(1 - inc.merge_vec) @ cb_matrix @ spr.diags(1 - inc.merge_vec) + spr.diags(inc.merge_vec)
+    #cb_matrix = spr.diags(1 - inc.merge_vec) @ cb_matrix @ spr.diags(1 - inc.merge_vec) + spr.diags(inc.merge_vec)
     
     diag = cb_matrix.diagonal()
     diag_old = diag.copy()
     for node in np.where(np.abs(cb_matrix).sum(axis = 1) == 0)[0]:
         diag[node] = 1
-        print(node)
+        #print(node)
+    # for node in np.where(np.abs(cb_matrix).sum(axis = 0) == 0)[1]:
+    #     diag[node] = 1
+    #     print(node)
+    #diag += 1 * (diag == 0)
+    cb_matrix += spr.diags(diag - diag_old)
+    res = solve_equation(cb_matrix, cb_vector)
+    cb = res[:sid.nsq]
+    edges.A = res[sid.nsq:sid.nsq+sid.ne]
+    edges.B = res[sid.nsq+sid.ne:]
+    #np.savetxt('cb.txt', cb)
+    #np.savetxt('cbm.txt', cb_matrix.toarray())
+    #np.savetxt('lam.txt', lam_plus_zero)
+    print(np.max(cb), np.min(cb))
+    return cb
+
+def solve_diffusion_sinks(sid: SimInputData, inc: Incidence, graph: Graph, edges: Edges, cb_vector):
+    edges.alpha = 1 * ((inc.boundary.T @ edges.grain) > 0)
+    #print(edges.alpha)
+    lam_plus_val = sid.Pe * edges.lens / edges.diams ** 2 * np.abs(edges.flow)
+    lam_plus_val += np.sqrt(edges.alpha * sid.Da2 * edges.lens ** 2 / edges.diams / (1 + sid.G * edges.diams)) * (edges.flow == 0)
+    lam_plus_val = np.array(np.ma.fix_invalid(lam_plus_val, fill_value = 0))    
+    lam_minus_val = 0
+    lam_minus_val += np.sqrt(edges.alpha * sid.Da2 * edges.lens ** 2 / edges.diams / (1 + sid.G * edges.diams)) * (edges.flow == 0)
+    lam_minus_val = np.array(np.ma.fix_invalid(lam_minus_val, fill_value = 0))
+    pure_diff = 1 * (edges.alpha == 0) * (inc.boundary.T @ np.ones(sid.ntr) > 0) + 1 * edges.active * (edges.flow == 0)
+    #print(pure_diff)
+    lam_plus_zero = 1 * (1 * (lam_plus_val > sid.diffusion_exp_limit) + 1 * (edges.diams == 0) + pure_diff > 0)
+    lam_plus_val = lam_plus_val * (1 - lam_plus_zero)
+
+    exp_plus = spr.diags(np.exp(lam_plus_val) * (1 - lam_plus_zero) + lam_plus_zero * (1 - pure_diff) + pure_diff * edges.lens)
+    exp_plus2 = spr.diags(np.exp(lam_plus_val) * (1 - lam_plus_zero))
+    exp_minus = spr.diags(np.exp(-lam_minus_val) * (1 - pure_diff))
+    exp_minus2 = spr.diags(np.exp(-lam_minus_val) * (1 - lam_plus_zero) + pure_diff)
+    
+    lam_minus_val = lam_minus_val * (1 - lam_plus_zero)
+    
+    upstream = 1 * (spr.diags(edges.flow) @ inc.incidence > 0) + 1 * (spr.diags(1 * (edges.flow == 0)) @ inc.incidence < 0)
+    downstream = 1 * (spr.diags(edges.flow) @ inc.incidence < 0) + 1 * (spr.diags(1 * (edges.flow == 0)) @ inc.incidence > 0)
+    downstream2 = 1 * ((spr.diags(edges.flow) @ inc.incidence < 0).multiply((1 - lam_plus_zero)[:, np.newaxis])) + 1 * (spr.diags(1 * (edges.flow == 0)) @ inc.incidence > 0)
+    #cb_pe_fix = 1 * (downstream.T @ (1 - lam_plus_zero) == 0)
+    flux_a = 1 * (sid.Pe * spr.diags(np.abs(edges.flow)) @ exp_plus2 @ downstream + (spr.diags(lam_plus_val * edges.diams ** 2)) @ upstream - (exp_plus * spr.diags(lam_plus_val * edges.diams ** 2)) @ downstream).multiply((1 - lam_plus_zero)[:, np.newaxis]) + spr.diags(pure_diff * edges.diams ** 2) @ upstream - spr.diags(pure_diff * edges.diams ** 2) @ downstream
+    flux_b = 1 * (sid.Pe * spr.diags(np.abs(edges.flow)) @ exp_minus @ downstream + (spr.diags(-lam_minus_val * edges.diams ** 2)) @ upstream + (exp_minus * spr.diags(lam_minus_val * edges.diams ** 2)) @ downstream)
+    flux_a_in = flux_a.T.multiply((1 - graph.in_vec)[:, np.newaxis]) #+ ((exp_plus * spr.diags(lam_plus_val)) @ downstream).T.multiply((graph.out_vec * (1 - cb_pe_fix))[:, np.newaxis])
+    flux_b_in = flux_b.T.multiply((1 - graph.in_vec)[:, np.newaxis]) #- ((exp_minus * spr.diags(lam_minus_val)) @ downstream).T.multiply((graph.out_vec * (1 - cb_pe_fix))[:, np.newaxis]) #- (spr.diags(np.abs(edges.flow)) @ exp_minus @ downstream).T.multiply((graph.out_vec * cb_pe_fix)[:, np.newaxis])
+    flow_fix_pe = -sid.Pe * downstream.T @ np.abs(edges.flow)
+    flow_fix_pe = flow_fix_pe * (1 - graph.in_vec) + graph.in_vec
+    #print(len(graph.in_vec), len(lam_minus_val), len(lam_plus_val))
+    cb_matrix = spr.vstack([spr.hstack([spr.diags(flow_fix_pe), flux_a_in, flux_b_in]), \
+                    spr.hstack([-downstream2, exp_plus, exp_minus2]), \
+                    spr.hstack([-upstream, spr.diags(np.ones(sid.ne) - lam_plus_zero), spr.diags(np.ones(sid.ne))]) \
+                    ])
+    #cb_matrix = spr.diags(1 - inc.merge_vec) @ cb_matrix @ spr.diags(1 - inc.merge_vec) + spr.diags(inc.merge_vec)
+    
+    diag = cb_matrix.diagonal()
+    diag_old = diag.copy()
+    for node in np.where(np.abs(cb_matrix).sum(axis = 1) == 0)[0]:
+        diag[node] = 1
+        #print(node)
+    # for node in np.where(np.abs(cb_matrix).sum(axis = 0) == 0)[1]:
+    #     diag[node] = 1
+    #     print(node)
+    #diag += 1 * (diag == 0)
+    #print(diag)
     cb_matrix += spr.diags(diag - diag_old)
     res = solve_equation(cb_matrix, cb_vector)
     cb = res[:sid.nsq]
@@ -195,6 +264,70 @@ def find_linearly_dependent_rows_csr(M: csr_matrix, print_details=True):
                 print()
 
     return dependent_pairs
+
+
+def solve_diffusion_fracture(sid: SimInputData, inc: Incidence, graph: Graph, edges: Edges, cb_vector):
+    edges.alpha = 1 * ((inc.boundary.T @ edges.grain) > 0)
+    lam_plus_val = sid.Pe / 2 / edges.diams ** 2 * \
+        (np.sqrt(np.abs(edges.flow) ** 2 + 4 * edges.alpha * sid.Da / (1 + sid.G * edges.diams) / sid.Pe * edges.diams ** 3) + np.abs(edges.flow))
+    lam_plus_val = np.array(np.ma.fix_invalid(lam_plus_val, fill_value = 0))
+    lam_minus_val = sid.Pe / 2 / edges.diams ** 2 * \
+        (np.sqrt(np.abs(edges.flow) ** 2 + 4 * edges.alpha * sid.Da / (1 + sid.G * edges.diams) / sid.Pe * edges.diams ** 3) - np.abs(edges.flow)) #* (edges.diams <= sid.dmax)
+    lam_minus_val = np.array(np.ma.fix_invalid(lam_minus_val, fill_value = 0))
+    #lam_plus_zero = 1 * (1 * (lam_plus_val > sid.diffusion_exp_limit) + 1 * (edges.alpha == 0) != 0)
+    lam_plus_zero = 1 * (1 * (lam_plus_val > sid.diffusion_exp_limit) + 1 * (edges.diams == 0) > 0)
+    lam_plus_val = lam_plus_val * (1 - lam_plus_zero)
+    lam_minus_val = lam_minus_val * (1 - lam_plus_zero)
+
+    exp_plus = spr.diags(np.exp(lam_plus_val * edges.lens) * (1 - lam_plus_zero) + lam_plus_zero)
+    exp_plus2 = spr.diags(np.exp(lam_plus_val * edges.lens) * (1 - lam_plus_zero))
+    exp_minus = spr.diags(np.exp(-lam_minus_val * edges.lens))
+    exp_minus2 = spr.diags(np.exp(-lam_minus_val * edges.lens) * (1 - lam_plus_zero))
+    
+    lam_minus_val = lam_minus_val * (1 - lam_plus_zero)
+    print(f'lam plus zero: {np.sum(lam_plus_zero), np.sum(1 - lam_plus_zero)}')
+    print(lam_plus_val[np.where((edges.flow ==0) * (lam_plus_val > 0))[0]])
+    #print(lam_minus_val[np.where((edges.flow ==0) * (lam_plus_val > 0))[0]])
+    # when flow == 0, we need purely diffusive flux
+    upstream = 1 * (spr.diags(edges.flow) @ inc.incidence > 0) + 1 * (spr.diags(1 * (edges.flow == 0) * (edges.diams > 0)) @ inc.incidence > 0)
+    downstream = 1 * (spr.diags(edges.flow) @ inc.incidence < 0) + 1 * (spr.diags(1 * (edges.flow == 0) * (edges.diams > 0)) @ inc.incidence < 0)
+    downstream2 = 1 * (1 * (spr.diags(edges.flow) @ inc.incidence < 0) + 1 * (spr.diags(1 * (edges.flow == 0) * (edges.diams > 0)) @ inc.incidence < 0)).multiply((1 - lam_plus_zero)[:, np.newaxis])
+    #cb_pe_fix = 1 * (downstream.T @ (1 - lam_plus_zero) == 0)
+    flux_a = 1 * (sid.Pe * spr.diags(np.abs(edges.flow)) @ exp_plus2 @ downstream + (spr.diags(lam_plus_val * edges.diams ** 2)) @ upstream - (exp_plus * spr.diags(lam_plus_val * edges.diams ** 2)) @ downstream).multiply((1 - lam_plus_zero)[:, np.newaxis])
+    #flux_b = 1 * (sid.Pe * spr.diags(np.abs(edges.flow)) @ exp_minus @ downstream + (spr.diags(-lam_minus_val * edges.diams ** 2)) @ upstream + (exp_minus * spr.diags(lam_minus_val * edges.diams ** 2)) @ downstream)
+    flux_b = 1 * (sid.Pe * spr.diags(np.abs(edges.flow)) @ exp_minus2 @ downstream + (spr.diags(-lam_minus_val * edges.diams ** 2)) @ upstream + (exp_minus2 * spr.diags(lam_minus_val * edges.diams ** 2)) @ downstream).multiply((1 - lam_plus_zero)[:, np.newaxis])
+    exp_pe_fix = np.exp(-edges.alpha * sid.Da / (1 + sid.G * edges.diams) * edges.diams * edges.lens / np.abs(edges.flow))
+    exp_pe_fix = np.array(np.ma.fix_invalid(exp_pe_fix, fill_value = 0))
+    flux_b += 1 * (sid.Pe * spr.diags(np.abs(edges.flow)) @ spr.diags(lam_plus_zero * exp_pe_fix) @ downstream)
+    flux_a_in = flux_a.T.multiply((1 - graph.in_vec)[:, np.newaxis])
+    
+    flux_b_in = flux_b.T.multiply((1 - graph.in_vec)[:, np.newaxis])
+
+    flow_fix_pe = -sid.Pe * downstream.T @ np.abs(edges.flow)
+    flow_fix_pe = flow_fix_pe * (1 - graph.in_vec) + graph.in_vec
+    zero_flow_fix = 1 * (edges.flow == 0) * (edges.alpha == 0) * (edges.diams > 0) # where the flow is zero and alpha is zero, we solve a different equation: d2c/dx2 = 0, with c(0) = c_up and c(l) = c_down
+    #flow_fix_pe += 1 * (flow_fix_pe == 0) * (downstream.T @ (1 * (edges.diams == 0)) != 0)
+    # what are the equations when flow == 0?
+    cb_matrix = spr.vstack([spr.hstack([spr.diags(flow_fix_pe), flux_a_in, flux_b_in]), \
+                    spr.hstack([-downstream2, exp_plus + spr.diags((edges.lens -  1) * zero_flow_fix), exp_minus2]), \
+                    spr.hstack([-upstream, spr.diags(np.ones(sid.ne) - zero_flow_fix), spr.diags(np.ones(sid.ne))]) \
+                    ])
+    
+
+    cb_matrix += spr.diags(1 * (np.array(np.sum(np.abs(cb_matrix), axis = 1))[:, 0] == 0))
+
+    res = solve_equation(cb_matrix, cb_vector)
+    cb = res[:sid.nsq]
+    edges.A = res[sid.nsq:sid.nsq+sid.ne]
+    edges.B = res[sid.nsq+sid.ne:]
+    J_in = np.sum(edges.inlet * (np.abs(edges.flow) * (edges.A * (1 - lam_plus_zero) + edges.B) - (1 - lam_plus_zero) / sid.Pe * edges.diams ** 2 * (lam_plus_val * edges.A - lam_minus_val * edges.B)))
+    cb = cb / J_in * sid.cb_0 * sid.Q_in
+    edges.A = edges.A / J_in * sid.cb_0 * sid.Q_in
+    edges.B = edges.B / J_in * sid.cb_0 * sid.Q_in
+
+    print(np.max(cb), np.min(cb))
+
+    return cb
 
 def solve_diffusion_vol(sid: SimInputData, inc: Incidence, graph: Graph, edges: Edges, vols: Volumes, cb_vector, data):
     edges.alpha = 1 * ((vols.triangles @ vols.vol_a) > 0)

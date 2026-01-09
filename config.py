@@ -21,23 +21,25 @@ class SimInputData:
     "network size along x (parallel to the flow)"
     iters: int = 10000000
     "maximum number of iterations"
-    tmax: float = 2000000000.
+    
     "maximum time"
     phi = 0.23
-    dissolved_v_max: float = 1.
+    dissolved_v_max: float = 100000000.
     "maximum dissolved pore volume"
     plot_every: int = 100000
     "frequency of plotting the results"
-    track_every: int = dissolved_v_max / 10
+    
     "frequency of checking channelization"
     track_list = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
     #track_list = [1, 2, 5, 10]
     "times of checking channelization"
 
+    p_in = 1
+
     # DISSOLUTION & PRECIPITATION
     Da_L = 100
     Pe_L = 10
-    # Da: float = 100#0.67 * 10 ** -1
+    Da: float = 1#0.67 * 10 ** -1
     # "effective Damkohler number"
     # Pe = 100.
 
@@ -47,17 +49,21 @@ class SimInputData:
     chi0 = 2 * np.sqrt(phi) / np.pi / np.sqrt(3)
     Sh = 4
     include_diffusion = True
-    Da = 2 #Da_L * np.pi * chi0 / (m)
+    ksi = 4.364 * 100 # Sh / chi ^ 2
     #Pe = Pe_L * 2 / (np.pi * chi0 ** 2)
-    Pe = 155 #Pe_L * 4 / (np.pi * chi0 ** 2)
-    
-    inert_fraction = 0.27
+    Pe = 0.1 #Pe_L * 4 / (np.pi * chi0 ** 2)
+    Da2 = 10
+    grain_vol = 1
+
+    tmax: float = 10000. * Da
+    track_every: int = tmax / 10
+    inert_fraction = 0.#27
 
     M = 0.1
     cosm_in = 1.25
     cosm_out = 0.75
 
-    G: float = Da * Pe / Sh * chi0 ** 2 / 4
+    G: float = 5#Da * Pe / Sh * chi0 ** 2 / 4
     "diffusion to reaction ratio"
     Da_eff: float = Da / (1 + G)
     "Damkohler number"
@@ -93,9 +99,9 @@ class SimInputData:
     "include adaptive timestep"
     include_cc: bool = False
     "include precipitation"
-    include_merging: bool = True
+    include_merging: bool = False
     "include pore merging"
-    include_volumes: bool = True
+    include_volumes: bool = False
     "include pore volume tracking"
     include_electroosmosis: bool = False
 
@@ -110,7 +116,7 @@ class SimInputData:
     # TIME
     dt: float = 0.000001
     "initial timestep (if no adaptive timestep, timestep for whole simulation)"
-    growth_rate: float = 0.05
+    growth_rate: float = 0.9
     ("maximum percentage growth of an edges (used for finding adaptive \
      timestep)")
     dt_max: float = 50000.
@@ -133,7 +139,7 @@ class SimInputData:
     "initial diameter standard deviation"
     dmin: float = 0
     "minimum diameter"
-    dmax: float = n
+    dmax: float = 1
     "maximum diameter"
     d_break: float = 4.
     "minimal diameter of outlet edge for network to be dissolved"
@@ -142,9 +148,9 @@ class SimInputData:
     # DRAWING
     figsize: float = 10.
     "figure size"
-    qdrawconst: float = 50 / n
+    qdrawconst: float = 1.
     "constant for improving flow drawing"
-    ddrawconst: float = 1 #2400 / n * chi0 #10 / n
+    ddrawconst: float = 0.1 #2400 / n * chi0 #10 / n
     "constant for improving diameter drawing"
     draw_th_q: float = 0.1
     "threshold for drawing of flow"
@@ -167,7 +173,7 @@ class SimInputData:
     geo: str = "rect" # WARNING - own is deprecated
     ("type of geometry: 'rect' - rectangular, 'own' - custom inlet and outlet \
      nodes, set in in/out_nodes_own")
-    periodic: str = 'top'
+    periodic: str = 'none'
     ("periodic boundary condition: 'none' - no PBC, 'top' - up and down, \
      'side' - left and right, 'all' - PBC everywhere")
     in_nodes_own: np.ndarray = np.array([[20, 50]]) / 100 * n
@@ -190,7 +196,7 @@ class SimInputData:
     Q_in = 1.
     "total inlet flow (updated later)"
     #dirname: str = geo + str(n) + '/' + f'G{G:.2f}Daeff{Da_eff:.2f}'
-    dirname: str = 'linda/' + f'Pe{Pe:.2f}Da{Da:.2f}'
+    dirname: str = 'fracture/' + f'Pe{Pe:.2f}Da{Da:.2f}'
     "directory of simulation"
     initial_merging: int = 5
     "number of initial merging iterations"

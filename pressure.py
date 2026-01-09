@@ -45,7 +45,11 @@ def create_vector(sid: SimInputData, graph: Graph) -> spr.csc_matrix:
     scipy sparse vector
         result vector for pressure calculation
     """
-    return graph.in_vec
+    in_pressures = np.linspace(sid.p_in, 0, len(graph.in_nodes))
+    p_vec = np.zeros(sid.nsq)
+    for i, node in enumerate(graph.in_nodes):
+        p_vec[node] = in_pressures[i]
+    return p_vec
 
 def solve_flow(sid: SimInputData, inc: Incidence, graph: Graph, edges: Edges, \
     pressure_b: spr.csc_matrix) -> np.ndarray:
@@ -83,12 +87,13 @@ def solve_flow(sid: SimInputData, inc: Incidence, graph: Graph, edges: Edges, \
     """
     # create matrix (nsq x nsq) for solving equations for pressure and flow
     # to find pressure in each node
-    p_matrix = inc.incidence.T @ spr.diags(edges.diams ** 4 / edges.lens) \
+    cond = edges.diams ** 4 / edges.lens * edges.active
+    p_matrix = inc.incidence.T @ spr.diags(cond) \
         @ inc.incidence
     # for all inlet nodes we set the same pressure, for outlet nodes we set
     # zero pressure; so for boundary nodes we zero the elements of p_matrix
     # and add identity for those rows
-    p_matrix = p_matrix.multiply((1 - graph.in_vec - graph.out_vec)[:, np.newaxis]) + spr.diags(graph.in_vec + graph.out_vec)
+    p_matrix = p_matrix.multiply((1 - graph.in_vec)[:, np.newaxis]) + spr.diags(graph.in_vec)
     diag = p_matrix.diagonal()
     diag_old = diag.copy()
     # fix for nodes with no connections
@@ -98,14 +103,19 @@ def solve_flow(sid: SimInputData, inc: Incidence, graph: Graph, edges: Edges, \
     pressure = solve_equation(p_matrix, pressure_b)
     # normalize pressure in inlet nodes to match condition for constant inlet
     # flow
-    q_in = np.abs(np.sum(edges.diams ** 4 / edges.lens * (inc.inlet \
-        @ pressure)))
-    pressure *= sid.Q_in / q_in
+    # q_in = np.abs(np.sum(edges.diams ** 4 / edges.lens * (inc.inlet \
+    #     @ pressure)))
+    #pressure *= sid.Q_in / q_in
     # update flow
-    edges.flow = edges.diams ** 4 / edges.lens * (inc.incidence @ pressure)
+    edges.flow = cond * (inc.incidence @ pressure)
+    flow_in = np.sum(spr.diags(np.abs(edges.flow)) @ (spr.diags(edges.flow) @ inc.incidence > 0) @ graph.in_vec)
+    flow_out = np.sum(spr.diags(np.abs(edges.flow)) @ (spr.diags(edges.flow) @ inc.incidence < 0) @ graph.in_vec)
+    print('flow difference: ', flow_in, flow_out)
     #p_continuity = p_matrix @ pressure * (1 - graph.in_vec - graph.out_vec)
     
     return pressure
+
+
 
 def solve_flow_constant_p(sid: SimInputData, inc: Incidence, graph: Graph, edges: Edges, \
     pressure_b: spr.csc_matrix) -> np.ndarray:

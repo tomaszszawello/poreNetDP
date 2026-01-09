@@ -244,8 +244,10 @@ class Data():
         
         
         if sid.include_diffusion:
-            print(f'J_in: {self.J_in}, J_out: {self.J_out}')
-            delta = (self.J_in - self.J_out) * sid.dt
+            #print(f'J_in: {self.J_in}, J_out: {self.J_out}')
+            #delta = (self.J_in - self.J_out) * sid.dt
+            delta = 0
+            print('.')
         else:
             # delta = np.abs((np.abs(inc.incidence.T < 0) @ (np.abs(edges.flow) \
             #     * edges.inlet) - np.abs(inc.incidence.T > 0) @ (np.abs(edges.flow) \
@@ -254,8 +256,8 @@ class Data():
                  * edges.inlet)) @ cb - np.abs(1 * ( inc.incidence.T @ spr.diags(edges.flow) < 0) @ (np.abs(edges.flow) \
                  * edges.outlet)) @ cb) * sid.dt / 2
         vol_dissolved = np.sum(edges.diams ** 2 * edges.lens) - self.vol_init
-        vol_a = np.sum(vols.vol_a_0 - vols.vol_a)
-        self.porosity.append(1 - np.sum(vols.vol_a) / np.sum(vols.vol_max))
+        #vol_a = np.sum(vols.vol_a_0 - vols.vol_a)
+        #self.porosity.append(1 - np.sum(vols.vol_a) / np.sum(vols.vol_max))
         self.delta_b += delta
         # delta2 = np.abs((np.abs(inc.incidence.T < 0) @ (np.abs(edges.flow) \
         #         * edges.inlet) - np.abs(inc.incidence.T > 0) @ (np.abs(edges.flow) \
@@ -263,8 +265,8 @@ class Data():
         # print(f'Delta2: {delta2}')
         # print(f'Delta3: {(J_in - J_out2) * sid.dt}')
         # print(f'Delta4: {(J_in - J_out3) * sid.dt}')
-        print(f'Used concentration: {self.delta_b}, Dissolved volume: {sid.Da * vol_dissolved / 2}, Dissolved volume A: {sid.Da * vol_a / 2}')
-        print(f'c - V: {(self.delta_b - sid.Da * vol_dissolved / 2) / self.delta_b}, c - V_A: {(self.delta_b - sid.Da * vol_a / 2) / self.delta_b}, V - V_A {(vol_dissolved - vol_a) / vol_dissolved}')
+        #print(f'Used concentration: {self.delta_b}, Dissolved volume: {sid.Da * vol_dissolved / 2}, Dissolved volume A: {sid.Da * vol_a / 2}')
+        #print(f'c - V: {(self.delta_b - sid.Da * vol_dissolved / 2) / self.delta_b}, c - V_A: {(self.delta_b - sid.Da * vol_a / 2) / self.delta_b}, V - V_A {(vol_dissolved - vol_a) / vol_dissolved}')
         self.cb_out.append(self.delta_b)
         delta = np.abs((np.abs(inc.incidence.T < 0) @ (np.abs(edges.flow) \
             * edges.inlet) - np.abs(inc.incidence.T > 0) @ (np.abs(edges.flow) \
