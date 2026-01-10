@@ -21,9 +21,16 @@ class SimInputData:
     "network size along x (parallel to the flow)"
     iters: int = 1000000
     "maximum number of iterations"
+<<<<<<< Updated upstream
     #
     "maximum time"
     dissolved_v_max: float = 1
+=======
+    
+    "maximum time"
+    phi = 0.23
+    dissolved_v_max: float = 100000000.
+>>>>>>> Stashed changes
     "maximum dissolved pore volume"
     plot_every: int = 100000
     "frequency of plotting the results"
@@ -33,11 +40,19 @@ class SimInputData:
     track_list = [1, 2, 5, 10]
     "times of checking channelization"
 
+    p_in = 1
+
     # DISSOLUTION & PRECIPITATION
+<<<<<<< Updated upstream
     Da_L = 1
     Pe_L = 0.5
     load_name: str = 'diffusion/Pe1000.00Da1000.00/1/template/71'
     # Da: float = 100#0.67 * 10 ** -1
+=======
+    Da_L = 100
+    Pe_L = 10
+    Da: float = 1#0.67 * 10 ** -1
+>>>>>>> Stashed changes
     # "effective Damkohler number"
     # Pe = 100.
     phi = 0.1
@@ -45,12 +60,31 @@ class SimInputData:
     #chi0 = (1 / (1 - phi) ** (1/3) - 1) / np.sqrt(3)
     chi0 = np.sqrt(2 * phi / (np.pi * np.sqrt(3))) #4 * np.sqrt(phi) / np.pi
     Sh = 4
+<<<<<<< Updated upstream
     include_diffusion = False
     #Da = Da_L * np.pi * chi0 / (m)
     #Pe = Pe_L * 2 / (np.pi * chi0 ** 2)
     Pe = Pe_L * 4 / (np.pi * chi0 ** 2)
     
     G: float = 5.#Da * Pe / Sh * chi0 ** 2 / 4
+=======
+    include_diffusion = True
+    ksi = 4.364 * 100 # Sh / chi ^ 2
+    #Pe = Pe_L * 2 / (np.pi * chi0 ** 2)
+    Pe = 0.1 #Pe_L * 4 / (np.pi * chi0 ** 2)
+    Da2 = 10
+    grain_vol = 1
+
+    tmax: float = 10000. * Da
+    track_every: int = tmax / 10
+    inert_fraction = 0.#27
+
+    M = 0.1
+    cosm_in = 1.25
+    cosm_out = 0.75
+
+    G: float = 5#Da * Pe / Sh * chi0 ** 2 / 4
+>>>>>>> Stashed changes
     "diffusion to reaction ratio"
     Da_eff: float = 1. #Da / (1 + G)
     Da = Da_eff * (1 + G)
@@ -90,7 +124,7 @@ class SimInputData:
     "include precipitation"
     include_merging: bool = False
     "include pore merging"
-    include_volumes: bool = True
+    include_volumes: bool = False
     "include pore volume tracking"
 
     # INITIAL CONDITIONS
@@ -106,7 +140,7 @@ class SimInputData:
     # TIME
     dt: float = 0.000001
     "initial timestep (if no adaptive timestep, timestep for whole simulation)"
-    growth_rate: float = 0.05
+    growth_rate: float = 0.9
     ("maximum percentage growth of an edges (used for finding adaptive \
      timestep)")
     dt_max: float = 50000.
@@ -132,7 +166,7 @@ class SimInputData:
     "initial porosity lognormal deviation"
     dmin: float = 0.01
     "minimum diameter"
-    dmax: float = n
+    dmax: float = 1
     "maximum diameter"
     d_break: float = 10.
     "minimal diameter of outlet edge for network to be dissolved"
@@ -140,9 +174,15 @@ class SimInputData:
     # DRAWING
     figsize: float = 30.
     "figure size"
+<<<<<<< Updated upstream
     qdrawconst: float = 10 / n
     "constant for improving flow drawing"
     ddrawconst: float = 5#2400 / n * chi0 #10 / n
+=======
+    qdrawconst: float = 1.
+    "constant for improving flow drawing"
+    ddrawconst: float = 0.1 #2400 / n * chi0 #10 / n
+>>>>>>> Stashed changes
     "constant for improving diameter drawing"
     draw_th_q: float = 10
     "threshold for drawing of flow"
@@ -165,7 +205,7 @@ class SimInputData:
     geo: str = "rect" # WARNING - own is deprecated
     ("type of geometry: 'rect' - rectangular, 'own' - custom inlet and outlet \
      nodes, set in in/out_nodes_own")
-    periodic: str = 'top'
+    periodic: str = 'none'
     ("periodic boundary condition: 'none' - no PBC, 'top' - up and down, \
      'side' - left and right, 'all' - PBC everywhere")
     in_nodes_own: np.ndarray = np.array([[20, 50]]) / 100 * n
@@ -188,8 +228,12 @@ class SimInputData:
     Q_in = 1.
     "total inlet flow (updated later)"
     #dirname: str = geo + str(n) + '/' + f'G{G:.2f}Daeff{Da_eff:.2f}'
+<<<<<<< Updated upstream
     #dirname: str = 'singurindy/' + f'Pe{Pe_L:.2f}Da{Da_L:.2f}'
     dirname: str = 'singurindy/' + f'G{G:.2f}Daeff{Da_eff:.2f}'
+=======
+    dirname: str = 'fracture/' + f'Pe{Pe:.2f}Da{Da:.2f}'
+>>>>>>> Stashed changes
     "directory of simulation"
     initial_merging: int = 5
     "number of initial merging iterations"

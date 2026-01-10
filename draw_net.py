@@ -78,16 +78,16 @@ def draw_flow(sid: SimInputData, graph: Graph, edges: Edges, \
     data : str
         parameter taken as edge width (diameter or flow)
     """
-    plt.figure(figsize=(sid.figsize * sid.m / sid.n, sid.figsize))
+    plt.figure(figsize=(sid.figsize, sid.figsize * sid.m / sid.n))
     #plt.suptitle(f'G = {sid.G:.2f}', fontsize = 1, color='white')
     spec = gridspec.GridSpec(ncols = 2, nrows = 1, width_ratios=[100, 1])
     # draw first panel for the network
     ax1 = plt.subplot(spec[0])
-    plt.axis('equal')
+    #plt.axis('equal')
     ax1.set_axis_on()
     ax1.tick_params(bottom=True)
-    plt.xlim(0, sid.m)
-    plt.ylim(0, sid.n)
+    #plt.xlim(0, sid.m)
+    #plt.ylim(0, sid.n)
     #plt.xlabel('x', fontsize = 60, style = 'italic')
     #plt.ylabel('flow focusing index', fontsize = 40)
     #plt.yticks([], [])
@@ -110,12 +110,21 @@ def draw_flow(sid: SimInputData, graph: Graph, edges: Edges, \
     plt.scatter(x_out, y_out, s = 1000 / sid.n, facecolors = 'black', \
         edgecolors = 'white')
     if plot_type == 'q':
+<<<<<<< Updated upstream
         qs = (1 - edges.boundary_list) * np.abs(edges.flow)
+=======
+        qs = np.abs(edges.flow) #/ edges.diams ** 2
+>>>>>>> Stashed changes
         draw_const = sid.qdrawconst
     else:
         #qs = (1 - edges.boundary_list) * np.abs(edges.diams_draw - edges.diams_initial) * (edges.diams_initial > 0)
         qs = (1 - edges.boundary_list) * edges.diams_draw * (edges.diams_draw - edges.diams_initial > 0.1) * (edges.diams_initial > 0)
         #qs = (1 - edges.boundary_list) * edges.diams_draw * (edges.diams_initial > 0)
+<<<<<<< Updated upstream
+=======
+        qs = edges.diams
+        #qs = (1 - edges.boundary_list) * edges.diams * (edges.diams > 3 * edges.diams_initial)
+>>>>>>> Stashed changes
         draw_const = sid.ddrawconst
     nx.draw_networkx_edges(graph, pos, edges.edge_list, edge_color = 'k', \
         width = draw_const * np.array(qs))
@@ -459,9 +468,9 @@ def draw_nodes(sid: SimInputData, graph: Graph, edges: Edges, cb, \
         parameter taken as edge width (diameter or flow)
     """
     # draw first panel for the network
-    plt.axis('equal')
+    #plt.axis('equal')
     
-    plt.figure(figsize=(sid.figsize, sid.figsize))
+    plt.figure(figsize=(sid.figsize, sid.figsize * sid.m / sid.n))
     pos = nx.get_node_attributes(graph, 'pos')
     # draw inlet and outlet nodes
     x_in, y_in = [], []
@@ -477,7 +486,7 @@ def draw_nodes(sid: SimInputData, graph: Graph, edges: Edges, cb, \
         x_zero.append(pos[node][0])
         y_zero.append(pos[node][1])
     #print (x_zero, y_zero)
-    qs = (1 - edges.boundary_list) * np.abs(edges.flow) * (edges.diams > 0)
+    qs = np.abs(edges.flow) * (edges.diams > 0)
     #qs = (1 - edges.boundary_list) * np.abs(edges.diams) * (edges.diams > 0)
     draw_const = sid.qdrawconst
     nx.draw_networkx_edges(graph, pos, edges.edge_list, edge_color = 'k', \

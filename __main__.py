@@ -144,12 +144,21 @@ while t < tmax and i < iters and data.dissolved_v < sid.dissolved_v_max and not 
         data.check_init_slice_channelization(graph, inc, edges)
         data.check_slice_channelization(graph, inc, edges, t)
         #Tr.track(sid, graph, inc, edges, data, pressure)
+<<<<<<< Updated upstream
         Dr.draw_flow(sid, graph, edges, f'q_' + name, 'q')
         #Dr.draw_flow(sid, graph, edges, f'd_{data.dissolved_v:.2f}.jpg', 'd')
         Dr.draw_triangles(sid, triangles, edges, graph, vols, f'tri_' + name)
         Dr.uniform_hist(sid, graph, edges, vols, cb, f'dreal_' + name, 'd')
         #Dr.draw_colored_edges(sid, graph, edges, vols, f'dc_{data.dissolved_v:.2f}.jpg')
         #Dr.draw_nodes(sid, graph, edges, cb, f'c_{data.dissolved_v:.2f}.jpg', 'q')
+=======
+        Dr.draw_flow(sid, graph, edges, f'q_{t:.1f}.jpg', 'q')
+        Dr.draw_flow(sid, graph, edges, f'd_{t:.1f}.jpg', 'd')
+        #Dr.draw_triangles(sid, triangles, graph, vols, f'tri_{t:.1f}.jpg')
+        #Dr.uniform_hist(sid, graph, edges, vols, cb, f'dreal_{t:.1f}.jpg', 'd')
+        #Dr.draw_nodes(sid, graph, edges, cosm, f'c_{t:.1f}.jpg', 'q')
+        #Dr.draw_nodes(sid, graph, edges, pressure, f'p_{t:.1f}.jpg', 'q')
+>>>>>>> Stashed changes
         # save_VTK(sid, graph, edges, pressure, cb, \
         #     f'network_{data.dissolved_v:.2f}.vtk')
     else:
@@ -164,6 +173,7 @@ while t < tmax and i < iters and data.dissolved_v < sid.dissolved_v_max and not 
             
             print('Drawing')
             iterator_dissolved += 1
+<<<<<<< Updated upstream
             int_part  = int(t)
             frac_part = int(100 * (t - int_part))
             name = f"{int_part:04d}_{frac_part:02d}.jpg"
@@ -185,6 +195,24 @@ while t < tmax and i < iters and data.dissolved_v < sid.dissolved_v_max and not 
             #if iterator_dissolved == 3:
             #    Sv.save('/save.dill', sid, graph, inc, edges, triangles, vols)
             #Tr.track(sid, graph, inc, edges, data, pressure)
+=======
+            if iterator_dissolved in sid.track_list:
+                #Dr.draw_flow(sid, graph, edges, \
+                #    f'q_{t:.1f}.jpg', 'q')
+                Dr.draw_flow(sid, graph, edges, f'q_{t:.1f}.jpg', 'q')
+                Dr.draw_flow(sid, graph, edges, f'd_{t:.1f}.jpg', 'd')
+                #Dr.draw_triangles(sid, triangles, graph, vols, f'tri_{t:.1f}.jpg')
+                #Dr.uniform_hist(sid, graph, edges, vols, cb, f'dreal_{t:.1f}.jpg', 'd')
+                #Dr.draw_nodes(sid, graph, edges, cosm, f'c_{t:.1f}.jpg', 'q')
+                #Dr.draw_nodes(sid, graph, edges, cb, f'c_{t:.1f}.jpg', 'q')
+                #Dr.draw_nodes(sid, graph, edges, pressure, f'p_{t:.1f}.jpg', 'q')
+                # save_VTK(sid, graph, edges, pressure, cb, \
+                #     f'network_{t:.1f}.vtk')
+                data.check_data(edges)
+                data.check_slice_channelization(graph, inc, edges, \
+                    t)
+                #Tr.track(sid, graph, inc, edges, data, pressure)
+>>>>>>> Stashed changes
     # grow/shrink diameters and update them in edges, update volumes with
     # dissolved/precipitated values, check if network dissolved, find new
     # timestep
@@ -244,6 +272,7 @@ if i != 1 and sid.load != 1 and not sid.debug:
     data.plot_profile(graph)
     #Tr.plot_tracking(data, 100)
     # Dr.draw_flow_profile(sid, graph, edges, data, \
+<<<<<<< Updated upstream
     #         f'focusing_q_{data.dissolved_v:.2f}.jpg', 'q')
     int_part  = int(t)
     frac_part = int(100 * (t - int_part))
@@ -255,3 +284,17 @@ if i != 1 and sid.load != 1 and not sid.debug:
     #Dr.draw_colored_edges(sid, graph, edges, vols, f'dc_{data.dissolved_v:.2f}.jpg')
     #Dr.draw_nodes(sid, graph, edges, cb, f'c_{data.dissolved_v:.2f}.jpg', 'q')
     Sv.save('/save.dill', sid, graph, inc, edges, triangles, vols)
+=======
+    #         f'focusing_q_{t:.1f}.jpg', 'q')
+    Dr.draw_flow(sid, graph, edges, f'q_{t:.1f}.jpg', 'q')
+    Dr.draw_flow(sid, graph, edges, f'd_{t:.1f}.jpg', 'd')
+    #Dr.draw_triangles(sid, triangles, graph, vols, f'tri_{t:.1f}.jpg')
+    #Dr.draw_nodes(sid, graph, edges, cosm, f'c_{t:.1f}.jpg', 'q')
+    #Dr.uniform_hist(sid, graph, edges, vols, cb, f'dreal_{t:.1f}.jpg', 'd')
+    #Dr.draw_nodes(sid, graph, edges, cb, f'c_{t:.1f}.jpg', 'q')
+    np.savetxt(sid.dirname + '/tau_h.txt', np.array([np.sum(np.abs(edges.flow) * edges.lens) / (np.abs(Q_in) * sid.m)]))
+    #Sv.save('/save.dill', sid, graph, inc, edges, triangles, vols)
+    #data.plot_things(sid)
+
+Dr.draw_triangles(sid, triangles, graph, vols, f'tri_final_{t:.1f}.jpg')
+>>>>>>> Stashed changes

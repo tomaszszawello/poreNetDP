@@ -15,14 +15,23 @@ import numpy as np
 import scipy.sparse as spr
 
 from config import SimInputData
+<<<<<<< Updated upstream
 from network import Edges, Graph
+=======
+from network import Graph, Edges
+>>>>>>> Stashed changes
 from incidence import Incidence
 from volumes import Volumes
 
 from utils import keep_largest_component
 
+<<<<<<< Updated upstream
 def update_diameters(sid: SimInputData, inc: Incidence, edges: Edges, graph: Graph, \
     vols: Volumes, cb: np.ndarray, cc: np.ndarray, cd: np.ndarray, data) -> tuple[bool, float]:
+=======
+def update_diameters(sid: SimInputData, inc: Incidence, graph: Graph, edges: Edges, \
+    vols: Volumes, cb: np.ndarray, cc: np.ndarray) -> tuple[bool, float]:
+>>>>>>> Stashed changes
     """ Update diameters.
 
     This function updates diameters of edges, calculates the next timestep (if
@@ -77,7 +86,8 @@ def update_diameters(sid: SimInputData, inc: Incidence, edges: Edges, graph: Gra
             if sid.include_volumes:
                 change = solve_d_diff_vol(sid, inc, edges, vols, cb)
             else:
-                change = solve_d_diff_pe_fix(sid, inc, edges, cb)
+                #change = solve_d_diff_pe_fix(sid, inc, edges, cb)
+                change = solve_d_diff(sid, inc, edges, cb)
             #change = solve_d(sid, inc, edges, cb)
         else:
             if sid.include_volumes:
@@ -87,18 +97,29 @@ def update_diameters(sid: SimInputData, inc: Incidence, edges: Edges, graph: Gra
     breakthrough = False
     if sid.include_adt:
         #change_rate = change / edges.diams
+<<<<<<< Updated upstream
         change_rate = np.abs(change) / edges.diams_initial ** 2 / edges.lens
+=======
+        change_rate = change / edges.diams
+>>>>>>> Stashed changes
         change_rate = np.array(np.ma.fix_invalid(change_rate, fill_value = 0))
         #print(change_rate)
         if np.max(change_rate) == 0:
             breakthrough = True
+<<<<<<< Updated upstream
         else:
             dt_next = sid.growth_rate / float(np.max(change_rate))
         #print(dt_next)
+=======
+            print ('Network dissolved, no more change.')
+            return breakthrough, 0
+        dt_next = sid.growth_rate / float(np.max(change_rate))
+>>>>>>> Stashed changes
         if dt_next > sid.dt_max:
             dt_next = sid.dt_max
     else:
         dt_next = sid.dt
+<<<<<<< Updated upstream
     
         vols.vol_a_prev = vols.vol_a.copy()
     change = change * sid.dt
@@ -176,6 +197,17 @@ def update_diameters(sid: SimInputData, inc: Incidence, edges: Edges, graph: Gra
     # if np.max(edges.diams / edges.diams_initial) > 300:
     #     breakthrough = True
 
+=======
+    #edges.grain -= inc.boundary @ (change * edges.diams * edges.lens / 4)
+    edges.grain -= inc.boundary @ (change * edges.diams * edges.lens / 4) * dt_next
+    #print(np.sum(edges.grain <= 0))
+    #edges.active += 1 * ((1 * (inc.center.T @ (edges.grain <= 0)) + 1 * (inc.boundary.T @ (edges.grain <= 0))) > 0) * (edges.active == 0)
+    edges.active = 1 * ((1 * (np.abs(inc.incidence) @ graph.in_vec > 0) + 1 * (inc.center.T @ (edges.grain <= 0)) + 1 * (inc.boundary.T @ (edges.grain <= 0))) > 0)
+    edges.alpha = 1 * (inc.boundary.T @ (edges.grain > 0)) / 2
+    #print('grains: ', edges.grain)
+    #print(edges.active, edges.alpha)
+    edges.diams = edges.diams * (1 - edges.active) + sid.dmax * edges.active
+>>>>>>> Stashed changes
     
     return breakthrough, dt_next
 
@@ -250,18 +282,20 @@ def solve_d_diff(sid: SimInputData, inc: Incidence, edges: Edges, cb: np.ndarray
     """
     # create list of concentrations which should be used for growth of each
     # edge (upstream one)
+    edges.alpha = 1 * (inc.boundary.T @ (edges.grain > 0)) / 2 * edges.active
     lam_plus_val = sid.Pe / 2 / edges.diams ** 2 * \
-        (np.sqrt(np.abs(edges.flow) ** 2 + 4 * sid.Da / (1 + sid.G * edges.diams) / sid.Pe * edges.diams ** 3) + np.abs(edges.flow))
+        (np.sqrt(np.abs(edges.flow) ** 2 + 4 * edges.alpha * sid.ksi * edges.diams ** 2) + np.abs(edges.flow))
     lam_plus_val = np.array(np.ma.fix_invalid(lam_plus_val, fill_value = 0))
     lam_minus_val = sid.Pe / 2 / edges.diams ** 2 * \
-        (np.sqrt(np.abs(edges.flow) ** 2 + 4 * sid.Da / (1 + sid.G * edges.diams) / sid.Pe * edges.diams ** 3) - np.abs(edges.flow))
+        (np.sqrt(np.abs(edges.flow) ** 2 + 4 * edges.alpha * sid.ksi * edges.diams ** 2) - np.abs(edges.flow))
     lam_minus_val = np.array(np.ma.fix_invalid(lam_minus_val, fill_value = 0))
-    # change = np.abs(edges.flow) / (sid.Da * edges.lens \
-    #       * edges.diams) * (edges.A * (np.exp(lam_plus_val) - 1) / lam_plus_val + edges.B * (1 - np.exp(-lam_minus_val)) / lam_minus_val)
-    
     #change = 2 / (1 + sid.G * edges.diams) * (edges.A * (np.exp(lam_plus_val) - 1) / lam_plus_val + edges.B * (1 - np.exp(-lam_minus_val)) / lam_minus_val)
-    change = 1 / (sid.Da * edges.lens * edges.diams) * (edges.A * (np.exp(lam_plus_val * edges.lens) - 1) * (np.sqrt(np.abs(edges.flow) ** 2 + 4 * sid.Da / (1 + sid.G * edges.diams) / sid.Pe * edges.diams ** 3) - np.abs(edges.flow)) + edges.B * (1 - np.exp(-lam_minus_val * edges.lens)) * (np.sqrt(np.abs(edges.flow) ** 2 + 4 * sid.Da / (1 + sid.G * edges.diams) / sid.Pe * edges.diams ** 3) + np.abs(edges.flow)))
-
+    lam_plus_zero = 1 * (1 * (lam_plus_val > sid.diffusion_exp_limit) + 1 * (edges.diams == 0) + 1 * (edges.flow == 0) > 0)
+    #change = (1 - lam_plus_zero) * edges.alpha / (sid.ksi * edges.lens * edges.diams) * (edges.A * (np.exp(lam_plus_val * edges.lens) - 1) * lam_minus_val + edges.B * (1 - np.exp(-lam_minus_val * edges.lens)) * lam_plus_val)
+    change_pe_fix = (lam_plus_val > sid.diffusion_exp_limit) * edges.alpha * edges.B * np.abs(edges.flow) / (sid.ksi * edges.diams * edges.lens) * (1 - np.exp(-edges.alpha / sid.ksi  * edges.lens / np.abs(edges.flow)))
+    change = (1 - lam_plus_zero) * edges.alpha / (sid.ksi * edges.lens * edges.diams) * (edges.A * (np.exp(lam_plus_val * edges.lens) - 1) * lam_minus_val + edges.B * (1 - np.exp(-lam_minus_val * edges.lens)) * lam_plus_val) + change_pe_fix
+    print(len(lam_plus_zero), np.sum(lam_plus_zero), np.sum(edges.alpha))
+    print(np.sum(change > 0))
     # change = cb_in * np.abs(edges.flow) / (sid.Da * edges.lens \
     #     * edges.diams) * (1 - np.exp(-sid.Da / (1 + sid.G * edges.diams) \
     #     * edges.diams * edges.lens / np.abs(edges.flow)))
@@ -300,22 +334,12 @@ def solve_d_diff_pe_fix(sid: SimInputData, inc: Incidence, edges: Edges, cb: np.
     """
     # create list of concentrations which should be used for growth of each
     # edge (upstream one)
-    lam_plus_val = sid.Pe / 2 * edges.lens / edges.diams ** 2 * \
-        (np.sqrt(np.abs(edges.flow) ** 2 + 4 * sid.Da / (1 + sid.G * edges.diams) / sid.Pe * edges.diams ** 3) + np.abs(edges.flow))
-    lam_plus_val = np.array(np.ma.fix_invalid(lam_plus_val, fill_value = 0))
-    lam_plus_zero = 1 * (lam_plus_val > sid.diffusion_exp_limit)
-    lam_plus_val = lam_plus_val * (1 - lam_plus_zero)  
-    lam_minus_val = sid.Pe / 2 * edges.lens / edges.diams ** 2 * \
-        (np.sqrt(np.abs(edges.flow) ** 2 + 4 * sid.Da / (1 + sid.G * edges.diams) / sid.Pe * edges.diams ** 3) - np.abs(edges.flow))
+    edges.alpha = 1 * ((inc.boundary.T @ edges.grain) > 0)
+    lam_plus_val = np.sqrt(edges.alpha * sid.Da2 * edges.lens ** 2 / edges.diams / (1 + sid.G * edges.diams)) * (edges.flow == 0)
+    lam_plus_val = np.array(np.ma.fix_invalid(lam_plus_val, fill_value = 0))    
+    lam_minus_val = np.sqrt(edges.alpha * sid.Da2 * edges.lens ** 2 / edges.diams / (1 + sid.G * edges.diams)) * (edges.flow == 0)
     lam_minus_val = np.array(np.ma.fix_invalid(lam_minus_val, fill_value = 0))
-    # change = np.abs(edges.flow) / (sid.Da * edges.lens \
-    #       * edges.diams) * (edges.A * (np.exp(lam_plus_val) - 1) / lam_plus_val + edges.B * (1 - np.exp(-lam_minus_val)) / lam_minus_val)
-    
-    #change = 2 / (1 + sid.G * edges.diams) * (edges.A * (np.exp(lam_plus_val) - 1) / lam_plus_val + edges.B * (1 - np.exp(-lam_minus_val)) / lam_minus_val)
-    #change = 1 / (sid.Da * edges.lens * edges.diams) * (edges.A * (np.exp(lam_plus_val) - 1) * (np.sqrt(np.abs(edges.flow) ** 2 + 4 * sid.Da / (1 + sid.G * edges.diams) / sid.Pe * edges.diams ** 3) - np.abs(edges.flow)) + edges.B * (1 - np.exp(-lam_minus_val)) * (np.sqrt(np.abs(edges.flow) ** 2 + 4 * sid.Da / (1 + sid.G * edges.diams) / sid.Pe * edges.diams ** 3) + np.abs(edges.flow)))
-    #change = 1 / (sid.Da * edges.lens * edges.diams) * (edges.A * (np.exp(lam_plus_val) - 1) * (np.sqrt(np.abs(edges.flow) ** 2 + 4 * sid.Da / (1 + sid.G * edges.diams) / sid.Pe * edges.diams ** 3) - np.abs(edges.flow)) + edges.B * (1 - np.exp(-lam_minus_val)) * (np.sqrt(np.abs(edges.flow) ** 2 + 4 * sid.Da / (1 + sid.G * edges.diams) / sid.Pe * edges.diams ** 3) + np.abs(edges.flow)))
-    change = (1 - lam_plus_zero) / (sid.Da * edges.lens * edges.diams) * (edges.A * (np.exp(lam_plus_val) - 1) * (np.sqrt(np.abs(edges.flow) ** 2 + 4 * sid.Da / (1 + sid.G * edges.diams) / sid.Pe * edges.diams ** 3) - np.abs(edges.flow)) + edges.B * (1 - np.exp(-lam_minus_val)) * (np.sqrt(np.abs(edges.flow) ** 2 + 4 * sid.Da / (1 + sid.G * edges.diams) / sid.Pe * edges.diams ** 3) + np.abs(edges.flow))) + lam_plus_zero * edges.B * np.abs(edges.flow) / (sid.Da * edges.lens * edges.diams) * (1 - np.exp(-sid.Da / (1 + sid.G * edges.diams) * edges.diams * edges.lens / np.abs(edges.flow)))
-
+    change = edges.diams / (np.sqrt(sid.Da2) * edges.lens) * (edges.A * (np.exp(lam_plus_val) - 1)  + edges.B * (1 - np.exp(-lam_minus_val)))
     # change = cb_in * np.abs(edges.flow) / (sid.Da * edges.lens \
     #     * edges.diams) * (1 - np.exp(-sid.Da / (1 + sid.G * edges.diams) \
     #     * edges.diams * edges.lens / np.abs(edges.flow)))

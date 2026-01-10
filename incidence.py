@@ -151,7 +151,7 @@ def create_matrices(sid: SimInputData, graph: Graph, inc: Incidence, \
             out_edges[i] = 1
         if (n1 in graph.in_nodes + graph.out_nodes and n2 \
             in graph.in_nodes + graph.out_nodes):
-            edges.boundary_list[i] = 1
+            #edges.boundary_list[i] = 1
             if n1 in graph.in_nodes and n2 in graph.in_nodes:
                 in_edges[i] = 1
             if n1 in graph.out_nodes and n2 in graph.out_nodes:
