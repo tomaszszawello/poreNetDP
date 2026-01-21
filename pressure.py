@@ -103,16 +103,11 @@ def solve_flow(sid: SimInputData, inc: Incidence, graph: Graph, edges: Edges, \
     pressure = solve_equation(p_matrix, pressure_b)
     # normalize pressure in inlet nodes to match condition for constant inlet
     # flow
-<<<<<<< Updated upstream
-    q_in = np.abs(np.sum(edges.diams ** 4 / edges.lens * (inc.inlet \
-        @ pressure)))
-    print(q_in)
-    pressure *= sid.Q_in / q_in
-=======
+
     # q_in = np.abs(np.sum(edges.diams ** 4 / edges.lens * (inc.inlet \
     #     @ pressure)))
     #pressure *= sid.Q_in / q_in
->>>>>>> Stashed changes
+
     # update flow
     edges.flow = cond * (inc.incidence @ pressure)
     flow_in = np.sum(spr.diags(np.abs(edges.flow)) @ (spr.diags(edges.flow) @ inc.incidence > 0) @ graph.in_vec)
@@ -121,8 +116,7 @@ def solve_flow(sid: SimInputData, inc: Incidence, graph: Graph, edges: Edges, \
     #p_continuity = p_matrix @ pressure * (1 - graph.in_vec - graph.out_vec)
     
     return pressure
-<<<<<<< Updated upstream
-=======
+
 
 
 
@@ -180,4 +174,4 @@ def solve_flow_constant_p(sid: SimInputData, inc: Incidence, graph: Graph, edges
     #p_continuity = p_matrix @ pressure * (1 - graph.in_vec - graph.out_vec)
     
     return pressure
->>>>>>> Stashed changes
+

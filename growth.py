@@ -15,23 +15,17 @@ import numpy as np
 import scipy.sparse as spr
 
 from config import SimInputData
-<<<<<<< Updated upstream
-from network import Edges, Graph
-=======
+
 from network import Graph, Edges
->>>>>>> Stashed changes
+
 from incidence import Incidence
 from volumes import Volumes
 
 from utils import keep_largest_component
 
-<<<<<<< Updated upstream
-def update_diameters(sid: SimInputData, inc: Incidence, edges: Edges, graph: Graph, \
-    vols: Volumes, cb: np.ndarray, cc: np.ndarray, cd: np.ndarray, data) -> tuple[bool, float]:
-=======
+
 def update_diameters(sid: SimInputData, inc: Incidence, graph: Graph, edges: Edges, \
     vols: Volumes, cb: np.ndarray, cc: np.ndarray) -> tuple[bool, float]:
->>>>>>> Stashed changes
     """ Update diameters.
 
     This function updates diameters of edges, calculates the next timestep (if
@@ -97,107 +91,22 @@ def update_diameters(sid: SimInputData, inc: Incidence, graph: Graph, edges: Edg
     breakthrough = False
     if sid.include_adt:
         #change_rate = change / edges.diams
-<<<<<<< Updated upstream
-        change_rate = np.abs(change) / edges.diams_initial ** 2 / edges.lens
-=======
         change_rate = change / edges.diams
->>>>>>> Stashed changes
+
         change_rate = np.array(np.ma.fix_invalid(change_rate, fill_value = 0))
         #print(change_rate)
         if np.max(change_rate) == 0:
             breakthrough = True
-<<<<<<< Updated upstream
+
         else:
             dt_next = sid.growth_rate / float(np.max(change_rate))
         #print(dt_next)
-=======
-            print ('Network dissolved, no more change.')
-            return breakthrough, 0
-        dt_next = sid.growth_rate / float(np.max(change_rate))
->>>>>>> Stashed changes
+
         if dt_next > sid.dt_max:
             dt_next = sid.dt_max
     else:
         dt_next = sid.dt
-<<<<<<< Updated upstream
-    
-        vols.vol_a_prev = vols.vol_a.copy()
-    change = change * sid.dt
-    dissolve = dissolve * sid.dt
-    precipitate = precipitate * sid.dt
-    #edge_vols = vols.triangles @ vols.vol_a
-    #vol_a_dissolved = (spr.diags(vols.vol_a) @ vols.triangles.T) @ (change / edge_vols)
-    data.vol_dissolved += np.sum(dissolve)
-    data.vol_precipitated += np.sum(precipitate)
-    
-    vol_a_dissolved = vols.triangles.T @ (dissolve / edges.triangles)
-    vol_e_precipitated = vols.triangles.T @ (precipitate / edges.triangles)
-    print(f'Dissolved: {np.sum(vol_a_dissolved)}, Precipitated: {np.sum(vol_e_precipitated)}')
-    #print(change)
-    vol_a_dissolved = np.array(np.ma.fix_invalid(vol_a_dissolved, fill_value = 0))
-    vol_e_precipitated = np.array(np.ma.fix_invalid(vol_e_precipitated, fill_value = 0))
-    #vol_a_dissolved = np.min([vol_a_dissolved, vols.vol_a], axis = 0)
-    vols.vol_a = np.clip(vols.vol_a - np.abs(vol_a_dissolved), 0, None)
-    #vols.vol_e = np.clip(vols.vol_e + np.abs(vol_e_precipitated), 0, vols.vol_max - vols.vol_a)
-    vols.vol_e = np.clip(vols.vol_e + np.abs(vol_e_precipitated), 0, vols.vol_max - vols.vol_a)
-    #change = vols.triangles @ (vol_a_dissolved / np.array(np.sum(vols.triangles.T, axis = 1))[:, 0])
-    # print(vol_a_dissolved)
-    #print(change)
-    diams_new = edges.diams + change / edges.diams / edges.lens / 2
-    #diams_new = np.sqrt(edges.diams ** 2 + change / edges.lens)
-    diams_new = np.array(np.ma.fix_invalid(diams_new, fill_value = 0))
-    # diams_new = diams_new * (diams_new >= sid.dmin) \
-    #     + sid.dmin * (diams_new < sid.dmin)
-    diams_new = diams_new * (diams_new > sid.dmin)
-    if np.sum(diams_new == 0) != np.sum(edges.diams == 0):
-        print("Edges cut")
-        print(np.where((diams_new == 0) != (edges.diams == 0)))
-        for edge in np.where((diams_new == 0) != (edges.diams == 0)):
-            for ind in inc.incidence[edge].nonzero()[1]:
-                inc.incidence[edge, ind] = 0
-            for ind in inc.inlet[edge].nonzero()[1]:
-                inc.inlet[edge, ind] = 0
-            edges.inlet[edge] = 0
-            edges.outlet[edge] = 0
-        
 
-        # zero_nodes = (1 - graph.in_vec) * (np.abs(inc.incidence.T) @ edges.inlet == np.abs(inc.incidence.T) @ np.ones(sid.ne)) + (1 - graph.out_vec) * (np.abs(inc.incidence.T) @ edges.outlet == np.abs(inc.incidence.T) @ np.ones(sid.ne))
-        # for node in np.where(zero_nodes == 1)[0]:
-        #     for ind in inc.incidence.T[node].nonzero()[1]:
-        #         inc.incidence[ind, node] = 0
-        #     for ind in inc.inlet.T[node].nonzero()[1]:
-        #         inc.inlet[ind, node] = 0
-        keep_largest_component(inc)
-        #graph.in_vec = 1 * (np.abs(inc.incidence.T) @ edges.inlet == np.abs(inc.incidence.T) @ np.ones(sid.ne))
-        #graph.out_vec = 1 * (np.abs(inc.incidence.T) @ edges.outlet == np.abs(inc.incidence.T) @ np.ones(sid.ne))
-        print(f'in_vec: {np.sum(graph.in_vec)}, inlet: {np.sum(edges.inlet)}')
-        print(f'out_vec: {np.sum(graph.out_vec)}, outlet: {np.sum(edges.outlet)}')
-        # inc.incidence = inc.incidence.multiply(1 * (diams_new > 0)[:, np.newaxis])
-        # inc.inlet = inc.inlet.multiply(1 * (diams_new > 0)[:, np.newaxis])
-        # edges.inlet *= diams_new > 0
-        # edges.outlet *= diams_new > 0
-    if np.max(edges.outlet * edges.diams) > sid.d_break:
-        breakthrough = True
-        print ('Network dissolved.')
-    if np.sum((vols.triangles @ (vols.vol_a == 0)) * edges.outlet) > sid.m / 2:
-        breakthrough = True
-        print ('Network dissolved.')
-    # if sid.include_adt:
-    #     diams_rate = np.abs((diams_new - edges.diams) / edges.diams)
-    #     diams_rate = np.array(np.ma.fix_invalid(diams_rate, fill_value = 0))
-    #     dt_next = sid.growth_rate / sid.dt / np.max(diams_rate)
-    #     if dt_next > sid.dt_max:
-    #         dt_next = sid.dt_max
-    # if np.sum(edges.inlet) == 0:
-    #     breakthrough = True
-    #     print ('Network clogged.')
-    edges.diams = diams_new
-    #print(edges.diams)
-    edges.diams_draw = diams_new * (diams_new > 0) + edges.diams_draw * (diams_new == 0)
-    # if np.max(edges.diams / edges.diams_initial) > 300:
-    #     breakthrough = True
-
-=======
     #edges.grain -= inc.boundary @ (change * edges.diams * edges.lens / 4)
     edges.grain -= inc.boundary @ (change * edges.diams * edges.lens / 4) * dt_next
     #print(np.sum(edges.grain <= 0))
@@ -207,7 +116,7 @@ def update_diameters(sid: SimInputData, inc: Incidence, graph: Graph, edges: Edg
     #print('grains: ', edges.grain)
     #print(edges.active, edges.alpha)
     edges.diams = edges.diams * (1 - edges.active) + sid.dmax * edges.active
->>>>>>> Stashed changes
+
     
     return breakthrough, dt_next
 

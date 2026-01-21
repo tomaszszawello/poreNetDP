@@ -110,21 +110,17 @@ def draw_flow(sid: SimInputData, graph: Graph, edges: Edges, \
     plt.scatter(x_out, y_out, s = 1000 / sid.n, facecolors = 'black', \
         edgecolors = 'white')
     if plot_type == 'q':
-<<<<<<< Updated upstream
-        qs = (1 - edges.boundary_list) * np.abs(edges.flow)
-=======
+
         qs = np.abs(edges.flow) #/ edges.diams ** 2
->>>>>>> Stashed changes
+
         draw_const = sid.qdrawconst
     else:
         #qs = (1 - edges.boundary_list) * np.abs(edges.diams_draw - edges.diams_initial) * (edges.diams_initial > 0)
-        qs = (1 - edges.boundary_list) * edges.diams_draw * (edges.diams_draw - edges.diams_initial > 0.1) * (edges.diams_initial > 0)
+        #qs = (1 - edges.boundary_list) * edges.diams_draw * (edges.diams_draw - edges.diams_initial > 0.1) * (edges.diams_initial > 0)
         #qs = (1 - edges.boundary_list) * edges.diams_draw * (edges.diams_initial > 0)
-<<<<<<< Updated upstream
-=======
+
         qs = edges.diams
         #qs = (1 - edges.boundary_list) * edges.diams * (edges.diams > 3 * edges.diams_initial)
->>>>>>> Stashed changes
         draw_const = sid.ddrawconst
     nx.draw_networkx_edges(graph, pos, edges.edge_list, edge_color = 'k', \
         width = draw_const * np.array(qs))
@@ -495,12 +491,12 @@ def draw_nodes(sid: SimInputData, graph: Graph, edges: Edges, cb, \
     # for key, val in dict(zip(edges.edge_list, np.arange(0, len(edges.edge_list)))):
     #     print(key, val)
     # print(pos)
-    nx.draw_networkx_edge_labels(graph, pos, edge_labels=dict(zip(edges.edge_list, np.arange(0, len(edges.edge_list)))), font_size = 10)
+    #nx.draw_networkx_edge_labels(graph, pos, edge_labels=dict(zip(edges.edge_list, np.arange(0, len(edges.edge_list)))), font_size = 10)
     #pathcollection = nx.draw_networkx_nodes(graph, pos, nodelist = np.where(cb > 0)[0], node_color = cb[np.where(cb > 0)], node_size = 1000 / sid.n, vmin = 0, vmax = 1)
-    pathcollection = nx.draw_networkx_nodes(graph, pos, nodelist = np.where(cb > 0)[0], node_color = cb[np.where(cb > 0)], node_size = 1000 / sid.n)
+    pathcollection = nx.draw_networkx_nodes(graph, pos, nodelist = np.where(cb > 0)[0], node_color = cb[np.where(cb > 0)], node_size = 5000 / sid.n, vmin = 0, vmax = 1)
     # pathcollection = nx.draw_networkx_nodes(graph, pos, node_color = (cb + np.min(cb)) * (1 * (cb < 0) + 1 * (cb > 1)) , node_size = 20)
     plt.colorbar(pathcollection)
-    nx.draw_networkx_labels(graph, pos, labels=dict(zip(graph.nodes(), graph.nodes())), font_size=5)
+    #nx.draw_networkx_labels(graph, pos, labels=dict(zip(graph.nodes(), graph.nodes())), font_size=5)
     plt.scatter(x_in, y_in, s = 30, facecolors = 'white', edgecolors = 'black')
     plt.scatter(x_out, y_out, s = 30, facecolors = 'black', \
         edgecolors = 'white')

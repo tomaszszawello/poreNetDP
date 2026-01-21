@@ -15,22 +15,18 @@ class SimInputData:
     ''' Configuration class for the whole simulation.
     '''
     # GENERAL
-    n: int = 200
+    n: int = 20
     "network size along y (transverse to the flow)"
-    m: int = 200
+    m: int = 20
     "network size along x (parallel to the flow)"
     iters: int = 1000000
     "maximum number of iterations"
-<<<<<<< Updated upstream
-    #
-    "maximum time"
-    dissolved_v_max: float = 1
-=======
+
     
     "maximum time"
     phi = 0.23
     dissolved_v_max: float = 100000000.
->>>>>>> Stashed changes
+
     "maximum dissolved pore volume"
     plot_every: int = 100000
     "frequency of plotting the results"
@@ -43,16 +39,11 @@ class SimInputData:
     p_in = 1
 
     # DISSOLUTION & PRECIPITATION
-<<<<<<< Updated upstream
-    Da_L = 1
-    Pe_L = 0.5
-    load_name: str = 'diffusion/Pe1000.00Da1000.00/1/template/71'
-    # Da: float = 100#0.67 * 10 ** -1
-=======
+
     Da_L = 100
     Pe_L = 10
     Da: float = 1#0.67 * 10 ** -1
->>>>>>> Stashed changes
+
     # "effective Damkohler number"
     # Pe = 100.
     phi = 0.1
@@ -60,14 +51,7 @@ class SimInputData:
     #chi0 = (1 / (1 - phi) ** (1/3) - 1) / np.sqrt(3)
     chi0 = np.sqrt(2 * phi / (np.pi * np.sqrt(3))) #4 * np.sqrt(phi) / np.pi
     Sh = 4
-<<<<<<< Updated upstream
-    include_diffusion = False
-    #Da = Da_L * np.pi * chi0 / (m)
-    #Pe = Pe_L * 2 / (np.pi * chi0 ** 2)
-    Pe = Pe_L * 4 / (np.pi * chi0 ** 2)
-    
-    G: float = 5.#Da * Pe / Sh * chi0 ** 2 / 4
-=======
+
     include_diffusion = True
     ksi = 4.364 * 100 # Sh / chi ^ 2
     #Pe = Pe_L * 2 / (np.pi * chi0 ** 2)
@@ -84,11 +68,11 @@ class SimInputData:
     cosm_out = 0.75
 
     G: float = 5#Da * Pe / Sh * chi0 ** 2 / 4
->>>>>>> Stashed changes
+
     "diffusion to reaction ratio"
     Da_eff: float = 1. #Da / (1 + G)
-    Da = Da_eff * (1 + G)
-    tmax = 100 * Da
+    #Da = Da_eff * (1 + G)
+    tmax = 1000 * Da
     track_every: int = tmax / 10
     "Damkohler number"
     # G = 50
@@ -174,15 +158,11 @@ class SimInputData:
     # DRAWING
     figsize: float = 30.
     "figure size"
-<<<<<<< Updated upstream
-    qdrawconst: float = 10 / n
-    "constant for improving flow drawing"
-    ddrawconst: float = 5#2400 / n * chi0 #10 / n
-=======
+
     qdrawconst: float = 1.
     "constant for improving flow drawing"
     ddrawconst: float = 0.1 #2400 / n * chi0 #10 / n
->>>>>>> Stashed changes
+
     "constant for improving diameter drawing"
     draw_th_q: float = 10
     "threshold for drawing of flow"
@@ -228,12 +208,9 @@ class SimInputData:
     Q_in = 1.
     "total inlet flow (updated later)"
     #dirname: str = geo + str(n) + '/' + f'G{G:.2f}Daeff{Da_eff:.2f}'
-<<<<<<< Updated upstream
-    #dirname: str = 'singurindy/' + f'Pe{Pe_L:.2f}Da{Da_L:.2f}'
-    dirname: str = 'singurindy/' + f'G{G:.2f}Daeff{Da_eff:.2f}'
-=======
+
     dirname: str = 'fracture/' + f'Pe{Pe:.2f}Da{Da:.2f}'
->>>>>>> Stashed changes
+
     "directory of simulation"
     initial_merging: int = 5
     "number of initial merging iterations"

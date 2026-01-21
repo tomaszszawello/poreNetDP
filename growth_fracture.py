@@ -21,7 +21,7 @@ from volumes import Volumes
 
 
 def update_diameters(sid: SimInputData, inc: Incidence, graph: Graph, edges: Edges, \
-    vols: Volumes, cb: np.ndarray, cc: np.ndarray) -> tuple[bool, float]:
+    vols: Volumes, cb: np.ndarray) -> tuple[bool, float]:
     """ Update diameters.
 
     This function updates diameters of edges, calculates the next timestep (if

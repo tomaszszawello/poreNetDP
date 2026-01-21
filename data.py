@@ -273,13 +273,10 @@ class Data():
                  * edges.inlet)) @ cb - np.abs(1 * ( inc.incidence.T @ spr.diags(edges.flow) < 0) @ (np.abs(edges.flow) \
                  * edges.outlet)) @ cb) * sid.dt
         vol_dissolved = np.sum(edges.diams ** 2 * edges.lens) - self.vol_init
-<<<<<<< Updated upstream
-        vol_a = np.sum(vols.vol_a_0 - vols.vol_a)
-        print(f'Zero volume: {np.sum(vols.vol_a == 0)}')
-=======
+
         #vol_a = np.sum(vols.vol_a_0 - vols.vol_a)
         #self.porosity.append(1 - np.sum(vols.vol_a) / np.sum(vols.vol_max))
->>>>>>> Stashed changes
+
         self.delta_b += delta
         # delta2 = np.abs((np.abs(inc.incidence.T < 0) @ (np.abs(edges.flow) \
         #         * edges.inlet) - np.abs(inc.incidence.T > 0) @ (np.abs(edges.flow) \
@@ -287,14 +284,10 @@ class Data():
         # print(f'Delta2: {delta2}')
         # print(f'Delta3: {(J_in - J_out2) * sid.dt}')
         # print(f'Delta4: {(J_in - J_out3) * sid.dt}')
-<<<<<<< Updated upstream
-        print(f'Used concentration: {self.delta_b}, Dissolved volume: {sid.Da * vol_dissolved}, Dissolved volume A: {sid.Da * vol_a}')
-        #print(f'c - V: {(self.delta_b - sid.Da * vol_dissolved / 2) / self.delta_b}, c - V_A: {(self.delta_b - sid.Da * vol_a / 2) / self.delta_b}, V - V_A {(vol_dissolved - vol_a) / vol_dissolved}')
-        #print(f'c - V: {(self.delta_b - sid.Da * vol_dissolved)}, c - V_A: {(self.delta_b - sid.Da * vol_a)}, V - V_A {(vol_dissolved - vol_a)}')
-=======
+
         #print(f'Used concentration: {self.delta_b}, Dissolved volume: {sid.Da * vol_dissolved / 2}, Dissolved volume A: {sid.Da * vol_a / 2}')
         #print(f'c - V: {(self.delta_b - sid.Da * vol_dissolved / 2) / self.delta_b}, c - V_A: {(self.delta_b - sid.Da * vol_a / 2) / self.delta_b}, V - V_A {(vol_dissolved - vol_a) / vol_dissolved}')
->>>>>>> Stashed changes
+
         self.cb_out.append(self.delta_b)
         delta_c = np.abs(np.abs(1 * ( inc.incidence.T @ spr.diags(edges.flow) > 0) @ (np.abs(edges.flow) \
                  * edges.inlet)) @ cc - np.abs(1 * ( inc.incidence.T @ spr.diags(edges.flow) < 0) @ (np.abs(edges.flow) \
