@@ -20,6 +20,7 @@ import matplotlib.pyplot as plt
 import networkx as nx
 import numpy as np
 import scipy.sparse as spr
+from matplotlib.lines import Line2D
 
 from config import SimInputData
 from network import Edges, Graph, Triangles
@@ -536,16 +537,14 @@ class Data():
         edge_number  = np.array(self.slices[0])
         colors = ['C0', 'C1', 'C2', 'C3', 'C4', 'C5', 'C6', 'C7', 'C8', 'C9']
         plt.figure(figsize = (15, 10))
-        plt.plot([], [], ' ', label=' ')
-        plt.plot([], [], ' ', label=' ')
-        plt.plot([], [], ' ', label=' ')
-        plt.plot(slices, np.array((edge_number - 2 * np.array(self.slices[1])) \
+        plt.plot(slices / np.max(pos_x), np.array((edge_number - 2 * np.array(self.slices[1])) \
             / edge_number), linewidth = 5, color = 'black', label = '0.0')
         for i, channeling in enumerate(self.slices[2:]):
             plt.plot(slices, (edge_number - 2 * np.array(channeling)) \
                 / edge_number, label = self.slice_times[i+1], color = colors[i], linewidth = 5)
         plt.ylim(0, 1.05)
-        plt.xlabel('x', fontsize = 60, style = 'italic')
+        plt.xlabel(r'$x$ / L', fontsize = 60)
+        plt.xticks([0, 0.5, 1], '0', '0.5', '1')
         # ax2.xaxis.label.set_color('white')
         # ax2.tick_params(axis = 'x', colors='white')
         #plt.xticks([],[])
@@ -555,16 +554,47 @@ class Data():
         #plt.yticks([],[])
         plt.yticks([0, 0.5, 1],['0', '0.5', '1'])
         handles, labels = plt.gca().get_legend_handles_labels()
-        #order = [0,4,1,5,2,6,3,7]
-        order = []
-        for i in range(len(handles) // 2):
-            order.append(i)
-            if i == len(handles) // 2 - 1:
-                if len(handles) % 2 == 0:
-                    order.append(len(handles) // 2 + i)
-            else:
-                order.append(len(handles) // 2 + i)
-        legend = plt.legend([handles[idx] for idx in order],[labels[idx] for idx in order], loc="lower center", mode = "expand", ncol = 4, prop={'size': 40}, handlelength = 1, frameon=False, borderpad = 0, handletextpad = 0.4)
+        n = len(handles)
+
+        cols = 4
+        rows = 2
+        slots = rows * cols
+
+        # Dummy handle/label (invisible entry)
+        
+        dummy_handle = Line2D([], [], linestyle='none', marker='', color='none')
+        dummy_label = ''
+
+        slot_handles = [dummy_handle] * slots
+        slot_labels  = [dummy_label]  * slots
+
+        if n > 0:
+            # put label "0" (handles[0]) in top-right corner: row 0, col cols-1
+            slot_handles[2 * cols - 2] = handles[0]
+            slot_labels[2 * cols - 2]  = labels[0]
+
+        # put the remaining labels (1..n-1) in bottom row, from left to right
+        for j, (h, lab) in enumerate(zip(handles[1:], labels[1:])):
+            if j >= cols:    # we only support up to 4 "other" labels
+                break
+            r, c = 1, j      # second row, columns 0..3
+            idx = r + c * rows
+            slot_handles[idx] = h
+            slot_labels[idx]  = lab
+
+        legend = plt.legend(
+            slot_handles,
+            slot_labels,
+            loc="lower center",
+            mode="expand",
+            ncol=cols,
+            prop={'size': 40},
+            handlelength=1,
+            frameon=False,
+            borderpad=0,
+            handletextpad=0.4,
+        )
+
         for legobj in legend.legend_handles:
             legobj.set_linewidth(10.0)
         #spine_color = 'blue'
@@ -766,7 +796,6 @@ class Data():
         slots = rows * cols
 
         # Dummy handle/label (invisible entry)
-        from matplotlib.lines import Line2D
         dummy_handle = Line2D([], [], linestyle='none', marker='', color='none')
         dummy_label = ''
 

@@ -49,6 +49,7 @@ flag_s = 1
 
 import scipy.sparse as spr
 print(sid.ne)
+raise ValueError
 # main loop
 # runs until we reach iteration limit or time limit or network is dissolved
 while t < tmax and i < iters and data.dissolved_v < sid.dissolved_v_max and not breakthrough and not clogged:
@@ -156,7 +157,7 @@ while t < tmax and i < iters and data.dissolved_v < sid.dissolved_v_max and not 
         #     f'network_{data.dissolved_v:.2f}.vtk')
     else:
         #if data.dissolved_v // sid.track_every > iterator_dissolved:
-        if t // sid.track_every > iterator_dissolved and iterator_dissolved + 1 in sid.track_list:
+        if t // sid.track_every > iterator_dissolved:
             # print(edges.diams)
             # print(np.abs((spr.diags(edges.flow) @ inc.incidence > 0)) @ cb)
             # print(np.abs((spr.diags(edges.flow) @ inc.incidence > 0)) @ cc)
@@ -179,10 +180,11 @@ while t < tmax and i < iters and data.dissolved_v < sid.dissolved_v_max and not 
             #Dr.draw_nodes(sid, graph, edges, cb, f'c_{data.dissolved_v:.2f}.jpg', 'q')
             # save_VTK(sid, graph, edges, pressure, cb, \
             #     f'network_{data.dissolved_v:.2f}.vtk')
-            data.check_data(edges)
-            data.check_slice_porosity(graph, inc, edges, triangles, vols, int(t))
-            data.check_slice_channelization(graph, inc, edges, \
-               data.dissolved_v)
+            if iterator_dissolved in sid.track_list:
+                data.check_data(edges)
+                data.check_slice_porosity(graph, inc, edges, triangles, vols, int(t))
+                data.check_slice_channelization(graph, inc, edges, \
+                    data.dissolved_v)
             data.save_data()
             #if iterator_dissolved == 3:
             #    Sv.save('/save.dill', sid, graph, inc, edges, triangles, vols)
