@@ -18,34 +18,40 @@ class SimInputData:
     '''
     # GENERAL
 
-    m = 20
+    m = 21
     n: int = 100
     "network size"
     iters: int = 1000000
     "maximum number of iterations"
-    tmax: float = 40000.
+    tmax: float = 1080
     "maximum time"
     dissolved_v_max: float = 10
     "maximum dissolved volume (in terms of initial pore volume)"
-    plot_every: int = 1000
+    plot_every: int = tmax // 24
     "frequency of plotting the results"
     plotting_mode: str = 'time' # 'volume', 'iters'
     "time measure used for plotting"
+    track_every: int = 1000000
 
-    bound_x = n / 10 * np.sqrt(3)
-    bound_y = m * np.sqrt(3) / 2
+    bound_x = n/5 #100 / 3 * np.sqrt(3) / 3 - 0.5
+    bound_y = (m - 1)/2 #m * np.sqrt(3) / 2 - 1.2
     y_max = (2 * m) * np.sqrt(3) / 2
     y_min = 0
+
+    diams_y_min = y_max / 2 - 10 * np.sqrt(3)
+    diams_y_max = y_max / 2 + 10 * np.sqrt(3)
 
     track_list = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
     "list of time measures in which tracking is performed"
 
     # DISSOLUTION & PRECIPITATION
-    Da_eff: float = 30
+    Da = 0.1
+    #Da_eff: float = 0.026
     "effective Damkohler number"
-    G: float = 0
+    G: float = 0.77
     "diffusion to reaction ratio"
-    Da: float = Da_eff * (1 + G)
+    #Da: float = Da_eff * (1 + G)
+    Da_eff = Da / (1 + G)
     "Damkohler number"
     chi0: float = 0.01
     "diameter scale to length scale ratio for merging"
@@ -57,14 +63,14 @@ class SimInputData:
     "include pore merging"
     tracking_mode = 'time'
 
-    cut_edges = True
-
+    cut = 'intersections_up' # 'edges'
+    pore_diam = 12
     # INITIAL CONDITIONS
     qin: float = 1.
     "characteristic flow for inlet edge"
     cb_in: float = 1
     "inlet B concentration"
-    cc_in: float = 1
+    cc_in: float = cb_in
     "inlet C concentration"
     initial_merging: int = 5
     "number of initial merging iterations"
@@ -72,17 +78,29 @@ class SimInputData:
     c_th = 1e-2
     solve_type = "full" # "full"
 
+    #dmin = np.sqrt(1 / (1 + c_eq / (cb_in * Da_eff))) #* 0.5
+    #dmin = 0.3 * np.sqrt(1 / (1 + 1 / Da_eff))
+    #dmin = 0.1#0.42 * np.sqrt(1 / (1 + 1 / Da_eff))
+    dmin = 0.#1  / (1 + 1 / (Da_eff * cb_in))
+    cond_weight = 0.5
+
+    Pe_c = 0.01
+    "critical Pe for mixing; 0 for streamlined, infinity for full"
+    mixing_at_barrier = 0#0.05
+    "additional mixing right behind barrier"
+
     q_rate = 1
-    q_amp = 0.1
-    q_period = 40
+    q_amp = 0.048 #0.13 #
+    q_period = tmax / 24#150
+    q_trans = 0#q_period / 10
 
     # TIME
-    dt: float = 0.01
+    dt: float = 1e-6
     "initial timestep (if no adaptive timestep, timestep for whole simulation)"
-    growth_rate: float = 0.05
+    growth_rate: float = 0.01
     ("maximum percentage growth of an edges (used for finding adaptive \
      timestep)")
-    dt_max: float = 50.
+    dt_max: float = 200.
     "maximum timestep (for adaptive)"
 
     # DIAMETERS
@@ -93,9 +111,9 @@ class SimInputData:
     "name of file with initial diameters if noise == file_"
     d0: float = 1.
     "initial dimensionless mean diameter"
-    sigma_d0: float = 0.1
+    sigma_d0: float = 0#0.0001
     "initial diameter standard deviation"
-    dmin: float = 0.1
+    #dmin: float = 0.3
     "minimum diameter"
     dmax: float = 1000.
     "maximum diameter"
@@ -116,10 +134,11 @@ class SimInputData:
      simulation, 1 - load previous network from load_name and continue \
      simulation, 2 - load template network from load_name and start new \
      simulation")
-    #load_name: str = 'mip/G0.00Daeff1.00/0'
-    load_name: str = 'mip/G0.00Daeff0.10/19'
+    #load_name: str = 'Daeff0.25/25'
+    load_name: str = 'Daeff0.56/2'
     "name of loaded network"
-    dirname: str = f'mip/G{G:.2f}Daeff{Da_eff:.2f}'
+    dirname: str = f'Daeff{Da_eff:.2f}'
+    #dirname: str = f'Daeff{Da_eff:.2f}'
     "directory of simulation"
 
     # GEOMETRY

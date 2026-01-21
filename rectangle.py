@@ -18,7 +18,6 @@ import numpy as np
 import scipy.sparse as spr
 
 from config import SimInputData
-from data import Data
 from network import Edges, Graph
 from incidence import Incidence
 from utils import solve_equation
@@ -46,20 +45,9 @@ def create_vector(sid: SimInputData, graph: Graph) -> spr.csc_matrix:
     scipy sparse vector
         result vector for pressure calculation
     """
-    # data, row, col = [], [], []
-    # for node in graph.in_nodes:
-    #     data.append(1)
-    #     row.append(node)
-    #     col.append(0)
-    # return spr.csc_matrix((data, (row, col)), shape=(sid.nsq, 1))
-    
-    # pressure_b = np.concatenate([2 * np.ones(sid.n // 2), np.ones(sid.n // 2), np.zeros(sid.nsq - sid.n)])
-    # sid.Q_in = np.sum(pressure_b)
-    # return pressure_b
-    
     return graph.in_vec
 
-def solve_flow(sid: SimInputData, inc: Incidence, graph: Graph, edges: Edges, data: Data, \
+def solve_flow(sid: SimInputData, inc: Incidence, graph: Graph, edges: Edges, \
     pressure_b: spr.csc_matrix) -> np.ndarray:
     """ Calculates pressure and flow.
 
@@ -97,85 +85,7 @@ def solve_flow(sid: SimInputData, inc: Incidence, graph: Graph, edges: Edges, da
     pressure_b_cc = graph.in_vec_b
     # create matrix (nsq x nsq) for solving equations for pressure and flow
     # to find pressure in each node
-    
-    # cond_e = edges.diams ** 4 / edges.lens
-    # cond_down = inc.right @ cond_e   # (ne,)
-    # cond_zero = 1 * (inc.right @ (1 * (cond_e == 0)) > 0)
-
-    # A = inc.right.tocsr()
-    # ne = A.shape[0]
-
-    # cond_down_min = np.full(ne, np.inf)
-
-    # for e in range(ne):
-    #     start = A.indptr[e]
-    #     end   = A.indptr[e+1]
-    #     cols  = A.indices[start:end]   # neighbor edges f of e
-    #     if cols.size > 0:
-    #         cond_down_min[e] = cond_e[cols].min()
-
-    # cond = cond_e.copy()
-    # #mask = (inc.right @ np.ones(sid.ne) > 0) * (cond_e > 0) * (cond_down_min > 0)
-    # mask = (cond_e + cond_down_min > 0)
-    # cond[mask] = cond_e[mask] * cond_down_min[mask] / (cond_e[mask] + cond_down_min[mask])
-    # #cond[mask] = cond_e[mask] * cond_down[mask] / (cond_e[mask] + cond_down[mask])
-    # cond = cond * (1 - cond_zero) + edges.outlet * cond_e
-    # edges.cond = cond
-
-    # local Poiseuille conductance for each edge
-    cond_e = edges.diams**4 / edges.lens     # shape (ne,)
-
-    A = inc.right.tocsr()                    # edge->right-neighbour adjacency
-    ne = A.shape[0]
-
-    # For each edge e: minimal cond_e of its right neighbours
-    cond_down_min = np.full(ne, np.nan)      # NaN = "no neighbour"
-    has_neighbor  = np.zeros(ne, dtype=bool)
-    zero_neighbor = np.zeros(ne, dtype=bool) # True if any right neighbour has cond=0
-
-    for e in range(ne):
-        start = A.indptr[e]
-        end   = A.indptr[e+1]
-        cols  = A.indices[start:end]         # neighbour edges f of e
-
-        if cols.size == 0:
-            continue  # no right neighbours → leave NaN, has_neighbor[e]=False
-
-        has_neighbor[e] = True
-        neigh_conds = cond_e[cols]
-
-        cond_down_min[e] = neigh_conds.min()
-        zero_neighbor[e] = np.any(neigh_conds == 0.0)
-
-    # start from local conductance
-    cond = cond_e.copy()
-
-    outlet_mask = edges.outlet.astype(bool)
-
-    # 1) Edges that *do* have right neighbours and are *not* outlets
-    active = has_neighbor & (~outlet_mask)
-
-    # 2) Among them, those with at least one zero-conductance neighbour ⇒ cond = 0
-    mask_zero = active & zero_neighbor
-    cond[mask_zero] = 0.0
-
-    # 3) Remaining active edges with strictly positive self & downstream cond:
-    mask_harm = active & (~zero_neighbor) & (cond_e > 0) & (cond_down_min > 0)
-
-    g0   = cond_e[mask_harm]
-    gmin = cond_down_min[mask_harm]
-
-    # harmonic mean of g0 and gmin
-    #cond[mask_harm] = g0 * gmin / (g0 + gmin)
-    cond[mask_harm] = 1 / (1 / g0 + sid.cond_weight / gmin)
-
-    # 4) Outlets: enforce original conductance (even if they had neighbours)
-    cond[outlet_mask] = cond_e[outlet_mask]
-
-    # Result
-    edges.cond = cond
-
-    p_matrix = inc.incidence.T @ spr.diags(cond) \
+    p_matrix = inc.incidence.T @ spr.diags(edges.diams ** 2 / edges.lens) \
         @ inc.incidence
     # for all inlet nodes we set the same pressure, for outlet nodes we set
     # zero pressure; so for boundary nodes we zero the elements of p_matrix
@@ -190,42 +100,63 @@ def solve_flow(sid: SimInputData, inc: Incidence, graph: Graph, edges: Edges, da
     # replace diagonal
     p_matrix_cb += spr.diags(diag - diag_old)
     diag = p_matrix_cc.diagonal()
-
+    # print(np.where(diag == 0))
+    # print(np.where(np.abs(inc.incidence).sum(axis = 0) == 0))
+    # print(np.where(np.abs(p_matrix_cb).sum(axis = 0) == 0))
+    # print(p_matrix_cb.tocsr()[127].nonzero())
+    # print(p_matrix_cb.tocsr()[128, 113])
+    # print(p_matrix_cb.tocsr()[128, 128])
+    # print(p_matrix_cb.tocsr()[128, 129])
+    # print(((inc.incidence.T @ spr.diags(edges.diams ** 4 / edges.lens) \
+    #     @ inc.incidence).multiply(1 - pressure_b_cb[:, np.newaxis] - graph.out_vec[:, np.newaxis]) + spr.diags(pressure_b_cb + graph.out_vec)).tocsr()[128, 113])
+    # print((inc.incidence.T @ spr.diags(edges.diams ** 4 / edges.lens) \
+    #     @ inc.incidence).tocsr()[128, 128])
+    # print((inc.incidence.T @ spr.diags(edges.diams ** 4 / edges.lens) \
+    #     @ inc.incidence).tocsr()[128, 129])
+    # print(graph.in_vec[127:129], graph.out_vec[127:129])
     # fix for nodes with no connections
     diag_old = diag.copy()
     diag += 1 * (diag == 0)
     # replace diagonal
     p_matrix_cc += spr.diags(diag - diag_old)
     # replace diagonal
-
+    #np.savetxt(f'd{sid.old_iters}.txt', edges.diams)
+    #np.savetxt(f'p{sid.old_iters}.txt', p_matrix.toarray())
     # solve matrix @ pressure = pressure_b
     print("Solving b pressure")
     pressure_cb = solve_equation(p_matrix_cb, pressure_b_cb)
     print("Solving c pressure")
     pressure_cc = solve_equation(p_matrix_cc, pressure_b_cc)
     print("Pressure solved")
-    flow_cb = np.abs(cond * (inc.incidence @ pressure_cb))
-    flow_cc = np.abs(cond * (inc.incidence @ pressure_cc))
-    data.cond_ratio_cb.append(np.sum(flow_cb * (np.abs(inc.incidence) @ graph.out_vec_b > 0)) / np.sum(flow_cb * (np.abs(inc.incidence) @ graph.in_vec_a > 0)))
-    data.cond_ratio_cc.append(np.sum(flow_cc * (np.abs(inc.incidence) @ graph.out_vec_a > 0)) / np.sum(flow_cc * (np.abs(inc.incidence) @ graph.in_vec_b > 0)))
     # normalize pressure in inlet nodes to match condition for constant inlet
     # flow
     pressure = pressure_cb * (1 + sid.q_rate) + pressure_cc * (1 - sid.q_rate)
 
-
+    # q_cb = edges.diams ** 4 / edges.lens * (inc.incidence @ pressure_cb)
+    # q_cc = edges.diams ** 4 / edges.lens * (inc.incidence @ pressure_cc)
+    # q_tot = q_cb + q_cc
+    # q_in = np.sum(edges.inlet * q_tot)
+    #edges.flow = q_tot * sid.Q_in / q_in 
     
-    q_in = np.abs(np.sum(cond * (inc.inlet \
+    q_in = np.abs(np.sum(edges.diams ** 2 / edges.lens * (inc.inlet \
         @ pressure)))
     pressure *= sid.Q_in / q_in
     # update flow
-    edges.flow = cond * (inc.incidence @ pressure)
+    edges.flow = edges.diams ** 2 / edges.lens * (inc.incidence @ pressure)
     p_continuity = p_matrix @ pressure * (1 - graph.in_vec - graph.out_vec)
     print(np.sum(np.abs(p_continuity)))
     Q_in = np.sum(edges.inlet * np.abs(edges.flow))
     Q_out = np.sum(edges.outlet * np.abs(edges.flow))
-    q_in = np.abs(np.sum(cond * (inc.inlet \
+    q_in = np.abs(np.sum(edges.diams ** 2 / edges.lens * (inc.inlet \
         @ pressure)))
     print('Q_in =', Q_in, 'Q_out =', Q_out)
     print(np.sum(edges.inlet), np.sum(edges.outlet), q_in)
-
+    # np.savetxt('pa.txt', pressure_cb)
+    # np.savetxt('pb.txt', pressure_cc)
+    # np.savetxt('q.txt', edges.flow)
+    # if np.abs(np.abs(Q_in) - np.abs(Q_out)) > 0.1:
+    #     raise ValueError('Flow not matching!')
+    # if np.sum(np.abs(p_continuity)) > 1e-3:
+    # #    np.savetxt('p_continuity.txt', p_continuity)
+    #    raise ValueError("continuity")
     return pressure

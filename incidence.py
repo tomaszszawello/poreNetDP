@@ -183,3 +183,107 @@ def create_matrices(sid: SimInputData, graph: Graph, inc: Incidence, \
     # we calculate how many triangles each edge has as neighbors (1 or 2)
     edges.inlet = in_edges
     edges.outlet = out_edges
+
+import numpy as np
+import scipy.sparse as spr
+import networkx as nx
+
+import numpy as np
+import scipy.sparse as spr
+import networkx as nx
+
+def build_edge_incidence_right(inc: Incidence, graph: Graph) -> spr.csr_matrix:
+    """
+    Build an edge–edge incidence matrix E such that:
+
+      For each edge e with endpoints (nL, nR) ordered by x-coordinate
+      (x(nL) <= x(nR)), row e has 1s in columns f where:
+
+        - edge f is incident to nR (the *right* end of e), and
+        - if m is the other endpoint of f (m != nR),
+          then x(m) > x(nR)  (edge f goes further to the right).
+
+      All other entries are 0.
+
+    Shape: (ne, ne); rows & cols ordered like rows of inc.incidence.
+
+    Assumptions:
+    - inc.incidence is (ne x nnodes) with ±1 for edge–node incidence.
+    - The columns of inc.incidence correspond to `nodes = list(graph.nodes())`
+      in that exact order.
+    - Graph nodes are your (i, j) tuples from diamond_lattice_graph.
+    - Node positions are stored as attribute 'pos': node -> (x, y).
+    """
+
+    B = inc.incidence.tocsr()        # (ne, nnodes)
+    ne, nnodes = B.shape
+
+    # Node ordering used for columns of B
+    nodes = list(graph.nodes())
+    if len(nodes) != nnodes:
+        raise ValueError(
+            "Number of graph nodes and incidence columns differ; "
+            "ensure incidence was built with the same node order."
+        )
+
+    # absolute incidence: 1 if edge incident to node
+    B_abs = (B != 0).astype(int)
+    B_csr = B_abs.tocsr()
+    B_csc = B_abs.tocsc()
+
+    # x-coordinates per column index j
+    pos = nx.get_node_attributes(graph, "pos")  # node -> (x, y)
+    x_coords = np.zeros(nnodes, dtype=float)
+    for j, n in enumerate(nodes):
+        x_coords[j] = pos[n][0]
+
+    # We'll fill a LIL matrix then convert to CSR
+    E = spr.lil_matrix((ne, ne), dtype=int)
+
+    # Loop over edges e
+    for e in range(ne):
+        # endpoints of edge e: two node indices (columns) where B[e,:] != 0
+        endpoints_e = B_csr[e].indices
+        if endpoints_e.size != 2:
+            # should not happen in this lattice, but guard anyway
+            continue
+
+        j1, j2 = endpoints_e
+        # pick right endpoint: larger x
+        if x_coords[j1] <= x_coords[j2]:
+            idx_right = j2
+        else:
+            idx_right = j1
+
+        xR = x_coords[idx_right]
+
+        # all edges incident to the right endpoint
+        edges_at_right = B_csc[:, idx_right].indices
+        if edges_at_right.size == 0:
+            continue
+
+        # among them, take only edges that go further right from that node
+        for f in edges_at_right:
+            if f == e:
+                continue  # skip self
+
+            endpoints_f = B_csr[f].indices
+            if endpoints_f.size != 2:
+                continue
+
+            k1, k2 = endpoints_f
+            # other node of f, relative to right endpoint
+            if k1 == idx_right:
+                other = k2
+            elif k2 == idx_right:
+                other = k1
+            else:
+                # f should contain idx_right if edges_at_right is correct,
+                # but guard anyway
+                continue
+
+            # only keep f if it goes further right than the right endpoint
+            if x_coords[other] > xR:
+                E[e, f] = 1
+
+    return E.tocsr()

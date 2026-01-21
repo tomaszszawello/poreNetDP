@@ -407,8 +407,10 @@ def solve_dissolution_an(sid: SimInputData, inc: Incidence, graph: Graph, \
     while np.linalg.norm(cb - cb_prev) > sid.c_th or np.linalg.norm(cc - cc_prev) > sid.c_th:
         cb_in = np.abs((spr.diags(edges.flow) @ inc.incidence > 0)) @ cb
         cc_in = np.abs((spr.diags(edges.flow) @ inc.incidence > 0)) @ cc
+        # alpha = np.abs(sid.Da / (1 + sid.G * edges.diams) \
+        #     / sid.c_eq * edges.diams * edges.lens / edges.flow)
         alpha = np.abs(sid.Da / (1 + sid.G * edges.diams) \
-            / sid.c_eq * edges.diams * edges.lens / edges.flow)
+           / sid.c_eq * (edges.diams > 0) * edges.lens / edges.flow)
         exp_a = np.exp(-alpha * (cb_in - cc_in))
         alpha = np.array(np.ma.fix_invalid(alpha, fill_value = 0))
         exp_a = np.array(np.ma.fix_invalid(exp_a, fill_value = 0)) * (cb_in >= cc_in) + np.array(np.ma.fix_invalid(exp_a, fill_value = 1e10)) * (cc_in > cb_in)
@@ -542,14 +544,23 @@ def solve_dissolution_an2(sid: SimInputData, inc: Incidence, graph: Graph, \
         dcb_cc = dcb_cc * (dcb_cc != 1000) + 1 / (1 + alpha * cc_in) ** 2 * (dcb_cc == 1000)
         dcc_cc = dcb_cc + 1
 
+
         dcb_cb_matrix = upstream @ spr.diags(np.abs(edges.flow) * dcb_cb) @ np.abs(inc.incidence)
-        dcb_cb_matrix.setdiag(diag)
+        diag_old = dcb_cb_matrix.diagonal()
+        #dcb_cb_matrix.setdiag(diag)
+        dcb_cb_matrix += spr.diags(diag - diag_old)
         dcb_cc_matrix = upstream @ spr.diags(np.abs(edges.flow) * dcb_cc) @ np.abs(inc.incidence)
-        dcb_cc_matrix.setdiag(0)
+        #dcb_cc_matrix.setdiag(0)
+        diag_old = dcb_cc_matrix.diagonal()
+        dcb_cc_matrix -= spr.diags(diag_old)
         dcc_cb_matrix = upstream @ spr.diags(np.abs(edges.flow) * dcc_cb) @ np.abs(inc.incidence)
-        dcb_cc_matrix.setdiag(0)
+        #dcb_cc_matrix.setdiag(0)
+        diag_old = dcc_cb_matrix.diagonal()
+        dcc_cb_matrix -= spr.diags(diag_old)
         dcc_cc_matrix = upstream @ spr.diags(np.abs(edges.flow) * dcc_cc) @ np.abs(inc.incidence)
-        dcc_cc_matrix.setdiag(diag)
+        #dcc_cc_matrix.setdiag(diag)
+        diag_old = dcc_cc_matrix.diagonal()
+        dcc_cc_matrix += spr.diags(diag - diag_old)
 
         dc_matrix = spr.vstack([spr.hstack([dcb_cb_matrix, dcb_cc_matrix]), spr.hstack([dcc_cb_matrix, dcc_cc_matrix])])
         f = np.concatenate((f_cb, f_cc))
@@ -565,7 +576,8 @@ def solve_dissolution_an2(sid: SimInputData, inc: Incidence, graph: Graph, \
         diag_c = diag_c * (diag_c != 0) + 1 * (diag_c == 0)
         #print(np.sum(f))
         dc_matrix = dc_matrix.multiply(1 - (diag_c == 0)[:, np.newaxis])
-        dc_matrix.setdiag(diag_c)
+        diag_old = dc_matrix.diagonal()
+        dc_matrix += spr.diags(diag_c - diag_old)
         delta_c = solve_equation(dc_matrix, -f)
         cb_prev = cb.copy()
         cc_prev = cc.copy()
@@ -642,8 +654,10 @@ def solve_dissolution_v2(sid: SimInputData, inc: Incidence, graph: Graph, \
     while np.linalg.norm(cb - cb_prev) > sid.c_th or np.linalg.norm(cc - cc_prev) > sid.c_th:
         cb_in = np.abs((spr.diags(edges.flow) @ inc.incidence > 0)) @ cb
         cc_in = np.abs((spr.diags(edges.flow) @ inc.incidence > 0)) @ cc
+        #alpha = np.abs(sid.Da / (1 + sid.G * edges.diams) \
+        #    / sid.c_eq * edges.diams * edges.lens / edges.flow)
         alpha = np.abs(sid.Da / (1 + sid.G * edges.diams) \
-            / sid.c_eq * edges.diams * edges.lens / edges.flow)
+           / sid.c_eq * (edges.diams > 0) * edges.lens / edges.flow)
         exp_a = np.exp(-alpha * (cb_in - cc_in))
         alpha = np.array(np.ma.fix_invalid(alpha, fill_value = 0))
         exp_a = np.array(np.ma.fix_invalid(exp_a, fill_value = 0)) * (cb_in >= cc_in) + np.array(np.ma.fix_invalid(exp_a, fill_value = 1e10)) * (cc_in > cb_in)
@@ -669,13 +683,21 @@ def solve_dissolution_v2(sid: SimInputData, inc: Incidence, graph: Graph, \
         dcc_cc = (dcb_cc + 1) * (cb_in != cc_in) + (cb_in == cc_in) / (1 + alpha * cc_in) ** 2
 
         dcb_cb_matrix = upstream @ spr.diags(np.abs(edges.flow) * dcb_cb) @ np.abs(inc.incidence)
-        dcb_cb_matrix.setdiag(diag)
+        diag_old = dcb_cb_matrix.diagonal()
+        #dcb_cb_matrix.setdiag(diag)
+        dcb_cb_matrix += spr.diags(diag - diag_old)
         dcb_cc_matrix = upstream @ spr.diags(np.abs(edges.flow) * dcb_cc) @ np.abs(inc.incidence)
-        dcb_cc_matrix.setdiag(0)
+        #dcb_cc_matrix.setdiag(0)
+        diag_old = dcb_cc_matrix.diagonal()
+        dcb_cc_matrix -= spr.diags(diag_old)
         dcc_cb_matrix = upstream @ spr.diags(np.abs(edges.flow) * dcc_cb) @ np.abs(inc.incidence)
-        dcb_cc_matrix.setdiag(0)
+        #dcb_cc_matrix.setdiag(0)
+        diag_old = dcc_cb_matrix.diagonal()
+        dcc_cb_matrix -= spr.diags(diag_old)
         dcc_cc_matrix = upstream @ spr.diags(np.abs(edges.flow) * dcc_cc) @ np.abs(inc.incidence)
-        dcc_cc_matrix.setdiag(diag)
+        #dcc_cc_matrix.setdiag(diag)
+        diag_old = dcc_cc_matrix.diagonal()
+        dcc_cc_matrix += spr.diags(diag - diag_old)
 
         dc_matrix = spr.vstack([spr.hstack([dcb_cb_matrix, dcb_cc_matrix]), spr.hstack([dcc_cb_matrix, dcc_cc_matrix])])
         f = np.concatenate((f_cb, f_cc))
@@ -691,7 +713,9 @@ def solve_dissolution_v2(sid: SimInputData, inc: Incidence, graph: Graph, \
         diag_c = diag_c * (diag_c != 0) + 1 * (diag_c == 0)
         #print(np.sum(f))
         dc_matrix = dc_matrix.multiply(1 - (diag_c == 0)[:, np.newaxis])
-        dc_matrix.setdiag(diag_c)
+        #dc_matrix.setdiag(diag_c)
+        diag_old = dc_matrix.diagonal()
+        dc_matrix += spr.diags(diag_c - diag_old)
         delta_c = solve_equation(dc_matrix, -f)
         cb_prev = cb.copy()
         cc_prev = cc.copy()
@@ -707,3 +731,391 @@ def solve_dissolution_v2(sid: SimInputData, inc: Incidence, graph: Graph, \
         #np.savetxt('dc_matrix.txt', dc_matrix.toarray())
     #np.savetxt('cb_in.txt', (spr.diags(edges.flow) @ inc.incidence > 0).toarray())
     return cb, cc
+
+import numpy as np
+import scipy.sparse as spr
+
+def solve_dissolution_mixing(
+    sid: SimInputData,
+    edges: Edges,
+    inc: Incidence,
+    graph: Graph,
+    alpha_eff: spr.csr_matrix,
+    max_iter: int = 50
+):
+    """
+    Solve dissolution with mixing matrix alpha_eff in edge space.
+
+    Unknowns:
+        cB_in[e], cC_in[e]  (inlet concentrations on each edge e)
+
+    Equations (for non-inlet edges):
+        |q_k| cB_in[k] - sum_j alphaEff[k,j] |q_j| cB_out[j] = 0
+        |q_k| cC_in[k] - sum_j alphaEff[k,j] |q_j| cC_out[j] = 0
+
+    Boundary (inlet edges):
+        cB_in[e] = cb_inlet_value
+        cC_in[e] = cc_inlet_value
+    """
+
+    ne = sid.ne
+    q_abs = np.abs(edges.flow).astype(float)
+    Q = spr.diags(q_abs)              # (ne x ne)
+
+    # Mixing flux matrix M[k,j] = alpha_eff[k,j] * |q_j|
+    M = alpha_eff.T @ Q                 # (ne x ne)
+
+    # Inlet edges mask (assume edges.inlet is (ne,) 0/1 or bool)
+    inlet = np.asarray(edges.inlet, dtype=bool)
+    internal = ~inlet
+    inlet_a = 1 * (np.abs(inc.incidence) @ graph.in_vec_a > 0)
+    inlet_b = 1 * (np.abs(inc.incidence) @ graph.in_vec_b > 0)
+
+    # Initial guesses (you can choose something smarter)
+    cB_in = np.ones(ne, dtype=float)
+    cC_in = np.ones(ne, dtype=float)
+
+    # Enforce initial BC at inlets
+    cB_in[inlet_a] = sid.cb_in
+    cC_in[inlet_b] = sid.cc_in
+
+    for it in range(max_iter):
+        cB_in_old = cB_in.copy()
+        cC_in_old = cC_in.copy()
+
+        # --- reaction along edges: compute cB_out, cC_out and derivatives ---
+
+        alpha_reac = np.abs(
+            sid.Da / (1.0 + sid.G * edges.diams) / sid.c_eq *
+            (edges.diams > 0.0) * edges.lens / edges.flow
+        )
+
+        cb_in = cB_in
+        cc_in = cC_in
+
+        exp_a = np.exp(-alpha_reac * (cb_in - cc_in))
+        alpha_reac = np.ma.fix_invalid(alpha_reac, fill_value=0.0).filled(0.0)
+
+        exp_a_fix1 = np.ma.fix_invalid(exp_a, fill_value=0.0).filled(0.0)
+        exp_a_fix2 = np.ma.fix_invalid(exp_a, fill_value=1e10).filled(1e10)
+        exp_a = exp_a_fix1 * (cb_in >= cc_in) + exp_a_fix2 * (cc_in > cb_in)
+
+        # main formulas
+        num = cb_in * (cb_in - cc_in)
+        den = cb_in - cc_in * exp_a
+
+        cb_out = num / den
+        cc_out = num / den + cc_in - cb_in
+
+        cb_out = np.ma.fix_invalid(cb_out, fill_value=0.0).filled(0.0)
+        cc_out = np.ma.fix_invalid(cc_out, fill_value=0.0).filled(0.0)
+
+        # special case cb_in == cc_in
+        same = (cb_in == cc_in)
+        cb_out_fix = same * cb_in / (1.0 + alpha_reac * cb_in)
+        cb_out += cb_out_fix
+        cc_out += cb_out_fix
+
+        # --- derivatives w.r.t cb_in and cc_in (your formulas) ---
+
+        dcb_cb = (cb_in**2 + cc_in * exp_a *
+                  (cb_in * (-2.0 - alpha_reac * (cb_in - cc_in)) + cc_in)) / (den**2)
+        dcb_cb = np.ma.fix_invalid(dcb_cb, fill_value=0.0).filled(0.0)
+        dcb_cb_fix = same / (1.0 + alpha_reac * cb_in)**2
+        dcb_cb += dcb_cb_fix
+
+        dcc_cb = (dcb_cb - 1.0) * (~same)
+
+        dcb_cc = (cb_in * (-cb_in + exp_a *
+                  (cb_in + alpha_reac * cc_in * (cb_in - cc_in)))) / (den**2)
+        dcb_cc = np.ma.fix_invalid(dcb_cc, fill_value=0.0).filled(0.0)
+
+        dcc_cc = (dcb_cc + 1.0) * (~same) + same / (1.0 + alpha_reac * cc_in)**2
+
+        # --- residuals R_B, R_C (size ne each) ---
+
+        # flux from upstream edges
+        fluxB_in = M @ cb_out   # (ne,)
+        fluxC_in = M @ cc_out   # (ne,)
+
+        R_B = q_abs * cB_in - fluxB_in
+        R_C = q_abs * cC_in - fluxC_in
+
+        # Dirichlet boundary on inlet edges
+        R_B[inlet_a] = cB_in[inlet_a] - sid.cb_in
+        R_C[inlet_b] = cC_in[inlet_b] - sid.cc_in
+
+        # --- Jacobian assembly (2ne x 2ne) ---
+
+        # diag of derivatives
+        D_dcb_cb = spr.diags(dcb_cb)
+        D_dcb_cc = spr.diags(dcb_cc)
+        D_dcc_cb = spr.diags(dcc_cb)
+        D_dcc_cc = spr.diags(dcc_cc)
+
+        # R_B = Q cB_in - M cb_out
+        J_BB = Q - M @ D_dcb_cb   # ∂R_B/∂cB_in
+        J_BC = - M @ D_dcb_cc     # ∂R_B/∂cC_in
+
+        # R_C = Q cC_in - M cc_out
+        J_CB = - M @ D_dcc_cb     # ∂R_C/∂cB_in
+        J_CC = Q - M @ D_dcc_cc   # ∂R_C/∂cC_in
+
+        # apply Dirichlet BC rows for inlet edges: R = c - c_bc
+        if np.any(inlet):
+            # zero out rows and put 1 on diagonal for inlet edges
+            mask_in = spr.diags(inlet.astype(float))
+            mask_int = spr.diags((~inlet).astype(float))
+
+            # for B
+            J_BB = mask_int @ J_BB + mask_in
+            J_BC = mask_int @ J_BC   # zero rows at inlets
+
+            # for C
+            J_CB = mask_int @ J_CB
+            J_CC = mask_int @ J_CC + mask_in
+
+        # build big Jacobian block matrix
+        J_top = spr.hstack([J_BB, J_BC])
+        J_bot = spr.hstack([J_CB, J_CC])
+        J = spr.vstack([J_top, J_bot]).tocsr()
+
+        # big residual vector
+        R = np.concatenate([R_B, R_C])
+
+        # Solve J * delta = -R
+        delta = solve_equation(J, -R)
+
+        delta_B = delta[:ne]
+        delta_C = delta[ne:]
+
+        cB_in += delta_B
+        cC_in += delta_C
+
+        # clamp to non-negative
+        cB_in = np.maximum(cB_in, 0.0)
+        cC_in = np.maximum(cC_in, 0.0)
+
+        # convergence check
+        diff_B = np.linalg.norm(cB_in - cB_in_old)
+        diff_C = np.linalg.norm(cC_in - cC_in_old)
+        print("iter", it, "ΔB =", diff_B, "ΔC =", diff_C)
+
+        if diff_B < sid.c_th and diff_C < sid.c_th:
+            break
+
+    return cB_in, cC_in #, cb_out, cc_out
+
+
+import numpy as np
+import scipy.sparse as spr
+
+def reaction_along_edges(sid, edges, cb_in, cc_in):
+    cb_in = np.asarray(cb_in, float)
+    cc_in = np.asarray(cc_in, float)
+
+    alpha = np.abs(
+        sid.Da / (1.0 + sid.G * edges.diams) / sid.c_eq *
+        (edges.diams > 0.0) * edges.lens / edges.flow
+    )
+    alpha = np.ma.fix_invalid(alpha, fill_value=0.0).filled(0.0)
+
+    delta = cb_in - cc_in
+    arg = -alpha * delta
+    arg = np.clip(arg, -50.0, 50.0)
+    exp_a = np.exp(arg)
+
+    num = cb_in * (cb_in - cc_in)
+    den = cb_in - cc_in * exp_a
+    eps = 1e-12
+    den_safe = np.where(np.abs(den) < eps, np.sign(den) * eps, den)
+
+    cb_out_main = num / den_safe
+    cc_out_main = num / den_safe + cc_in - cb_in
+
+    cb_out_main = np.ma.fix_invalid(cb_out_main, fill_value=0.0).filled(0.0)
+    cc_out_main = np.ma.fix_invalid(cc_out_main, fill_value=0.0).filled(0.0)
+
+    same = np.abs(cb_in - cc_in) < 1e-10
+    cb_out_same = cb_in / (1.0 + alpha * cb_in)
+    cc_out_same = cb_out_same
+
+    cb_out = np.where(same, cb_out_same, cb_out_main)
+    cc_out = np.where(same, cc_out_same, cc_out_main)
+
+    cb_out = np.maximum(cb_out, 0.0)
+    cc_out = np.maximum(cc_out, 0.0)
+
+    return cb_out, cc_out
+
+
+
+def reaction_derivatives(sid, edges, cB_in, cC_in, cb_out, cc_out):
+    """
+    Derivatives of cB_out, cC_out wrt cB_in, cC_in.
+    Vectorized version of your dcb_cb, dcb_cc, dcc_cb, dcc_cc.
+    """
+
+    cb_in = cB_in
+    cc_in = cC_in
+
+    alpha = np.abs(
+        sid.Da / (1.0 + sid.G * edges.diams) / sid.c_eq *
+        (edges.diams > 0.0) * edges.lens / edges.flow
+    )
+    alpha = np.ma.fix_invalid(alpha, fill_value=0.0).filled(0.0)
+
+    delta = cb_in - cc_in
+    arg = -alpha * delta
+    arg = np.clip(arg, -50.0, 50.0)
+    exp_a = np.exp(arg)
+
+    num = cb_in * (cb_in - cc_in)
+    den = cb_in - cc_in * exp_a
+    eps = 1e-12
+    den_safe = np.where(np.abs(den) < eps, np.sign(den) * eps, den)
+
+    same = np.abs(cb_in - cc_in) < 1e-10
+
+    # dcb_out / dcb_in
+    dcb_cb = (cb_in**2 + cc_in * exp_a *
+              (cb_in * (-2.0 - alpha * (cb_in - cc_in)) + cc_in)) / (den_safe**2)
+    dcb_cb = np.ma.fix_invalid(dcb_cb, fill_value=0.0).filled(0.0)
+    dcb_cb_fix = same / (1.0 + alpha * cb_in)**2
+    dcb_cb += dcb_cb_fix
+
+    # dcc_out / dcb_in
+    dcc_cb = (dcb_cb - 1.0) * (~same)
+
+    # dcb_out / dcc_in
+    dcb_cc = (cb_in * (-cb_in + exp_a *
+              (cb_in + alpha * cc_in * (cb_in - cc_in)))) / (den_safe**2)
+    dcb_cc = np.ma.fix_invalid(dcb_cc, fill_value=0.0).filled(0.0)
+
+    # dcc_out / dcc_in
+    dcc_cc = (dcb_cc + 1.0) * (~same) + same / (1.0 + alpha * cc_in)**2
+
+    return dcb_cb, dcb_cc, dcc_cb, dcc_cc
+
+
+def solve_dissolution_edges_with_alpha(
+    sid: SimInputData,
+    edges: Edges,
+    alpha_eff: spr.csr_matrix,
+    cb_bc: np.ndarray,      # (ne,) inlet B concentration per edge
+    cc_bc: np.ndarray,      # (ne,) inlet C concentration per edge
+    inlet_mask: np.ndarray, # (ne,) bool, True for inlet edges
+    max_iter: int = 50
+):
+    """
+    Edge-based Newton solver including mixing (alpha_eff) and reaction.
+
+    Unknowns: cB_in[e], cC_in[e]  (inlet conc on each edge)
+    Equations for non-inlet edges k:
+
+        sum_j alpha_eff[j,k] |q_j| cB_out[j] - |q_k| cB_in[k] = 0
+        sum_j alpha_eff[j,k] |q_j| cC_out[j] - |q_k| cC_in[k] = 0
+
+    For inlet edges (inlet_mask == True):
+        cB_in[k] = cb_bc[k]
+        cC_in[k] = cc_bc[k]
+    """
+
+    ne = sid.ne
+    q_abs = np.abs(edges.flow).astype(float)
+    Q = spr.diags(q_abs)
+
+    # Flux-mixing matrix: M[k,j] = alpha_eff[j,k] * |q_j|
+    # note the transpose: this matches your find_concentration operator
+    #M = alpha_eff.T @ Q
+    M = Q @ alpha_eff.T
+
+    inlet = inlet_mask.astype(bool)
+    internal = ~inlet
+
+    # initial guess: BC on inlets, 0 elsewhere (you can choose something else)
+    cB_in = cb_bc
+    cC_in = cc_bc
+    #cB_in[inlet] = cb_bc[inlet]
+    #cC_in[inlet] = cc_bc[inlet]
+
+    for it in range(max_iter):
+        cB_old = cB_in.copy()
+        cC_old = cC_in.copy()
+
+        # 1) reaction along edges
+        cb_out, cc_out = reaction_along_edges(sid, edges, cB_in, cC_in)
+
+        # 2) flux into each edge via mixing
+        fluxB_in = M @ cb_out   # (ne,)
+        fluxC_in = M @ cc_out
+
+        # 3) residuals
+        R_B = fluxB_in - q_abs * cB_in
+        R_C = fluxC_in - q_abs * cC_in
+
+        # Dirichlet BC on inlets: c_in = c_bc
+        R_B[inlet] = cB_in[inlet] - cb_bc[inlet]
+        R_C[inlet] = cC_in[inlet] - cc_bc[inlet]
+
+        # 4) Jacobian
+        dcb_cb, dcb_cc, dcc_cb, dcc_cc = reaction_derivatives(
+            sid, edges, cB_in, cC_in, cb_out, cc_out
+        )
+
+        D_dcb_cb = spr.diags(dcb_cb)
+        D_dcb_cc = spr.diags(dcb_cc)
+        D_dcc_cb = spr.diags(dcc_cb)
+        D_dcc_cc = spr.diags(dcc_cc)
+
+        # R_B = M cb_out(cB_in,cC_in) - Q cB_in
+        J_BB = M @ D_dcb_cb - Q   # ∂R_B / ∂cB_in
+        J_BC = M @ D_dcb_cc       # ∂R_B / ∂cC_in
+
+        # R_C = M cc_out(cB_in,cC_in) - Q cC_in
+        J_CB = M @ D_dcc_cb       # ∂R_C / ∂cB_in
+        J_CC = M @ D_dcc_cc - Q   # ∂R_C / ∂cC_in
+
+        # apply Dirichlet rows on inlets
+        if np.any(inlet):
+            mask_in  = spr.diags(inlet.astype(float))
+            mask_int = spr.diags((~inlet).astype(float))
+
+            # for B
+            J_BB = mask_int @ J_BB + mask_in
+            J_BC = mask_int @ J_BC
+
+            # for C
+            J_CB = mask_int @ J_CB
+            J_CC = mask_int @ J_CC + mask_in
+
+        # big block Jacobian
+        J_top = spr.hstack([J_BB, J_BC])
+        J_bot = spr.hstack([J_CB, J_CC])
+        J = spr.vstack([J_top, J_bot]).tocsr()
+        diag_J = J.diagonal()
+        J += spr.diags(1 * (diag_J == 0))
+
+        R = np.concatenate([R_B, R_C])
+
+        # solve
+        delta = solve_equation(J, -R)
+        dB = delta[:ne]
+        dC = delta[ne:]
+
+        cB_in += dB
+        cC_in += dC
+
+        cB_in = np.maximum(cB_in, 0.0)
+        cC_in = np.maximum(cC_in, 0.0)
+
+        diff_B = np.linalg.norm(cB_in - cB_old)
+        diff_C = np.linalg.norm(cC_in - cC_old)
+        print(f"iter {it}: ΔB={diff_B:.3e}, ΔC={diff_C:.3e}")
+
+        if diff_B < sid.c_th and diff_C < sid.c_th:
+            break
+
+    # final outlet concentrations
+    cb_out, cc_out = reaction_along_edges(sid, edges, cB_in, cC_in)
+    return cB_in, cC_in

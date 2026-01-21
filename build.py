@@ -11,8 +11,9 @@ build(None) -> tuple[SimInputData, In.Incidence, De.Graph, In.Edges, Data]
     create class objects and initialize their parameters
 """
 
+
 import delaunay as De
-import network_hex as Ne
+import network_hex2 as Ne
 import incidence as In
 import save as Sv
 
@@ -60,6 +61,7 @@ def build() -> tuple[SimInputData, In.Incidence, De.Graph, In.Edges, Data]:
         graph, edges = Ne.build_delaunay_net(sid, inc)
         #Ne.set_geometry(sid, graph)
         In.create_matrices(sid, graph, inc, edges)
+        inc.right = In.build_edge_incidence_right(inc, graph)
         data = Data(sid, edges)
         Sv.save('/template.dill', sid, graph, inc, edges)
         Sv.save_config(sid)
@@ -70,7 +72,7 @@ def build() -> tuple[SimInputData, In.Incidence, De.Graph, In.Edges, Data]:
         print(f'load 1: loading a network from {sid.load_name}')
         sid, graph, inc, edges = Sv.load(sid.load_name+'/save.dill')
         data = Data(sid, edges)
-        data.load_data()
+        #data.load_data()
     # 2 - load config from SimInputData, but use graph from a template saved in
     # the directory specified by load_name; based on that create incidence and
     # edges (with initial diameters), also update data in config corresponding
