@@ -87,7 +87,7 @@ def solve_flow(sid: SimInputData, inc: Incidence, graph: Graph, edges: Edges, \
     """
     # create matrix (nsq x nsq) for solving equations for pressure and flow
     # to find pressure in each node
-    cond = edges.diams ** 4 / edges.lens * edges.active
+    cond = edges.diams ** 4 / edges.lens #* edges.active
     p_matrix = inc.incidence.T @ spr.diags(cond) \
         @ inc.incidence
     # for all inlet nodes we set the same pressure, for outlet nodes we set
@@ -105,7 +105,7 @@ def solve_flow(sid: SimInputData, inc: Incidence, graph: Graph, edges: Edges, \
     # flow
     # q_in = np.abs(np.sum(edges.diams ** 4 / edges.lens * (inc.inlet \
     #     @ pressure)))
-    #pressure *= sid.Q_in / q_in
+    # pressure *= sid.Q_in / q_in
     # update flow
     edges.flow = cond * (inc.incidence @ pressure)
     flow_in = np.sum(spr.diags(np.abs(edges.flow)) @ (spr.diags(edges.flow) @ inc.incidence > 0) @ graph.in_vec)

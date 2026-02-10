@@ -1344,6 +1344,23 @@ def solve_vol_scaling_chat(sid: SimInputData, inc: Incidence, graph: Graph,
     # ---- helper: one ADR solve + change computation given edge alpha ----
     def solve_transport_and_change(alpha_edge):
         # safe inverse |flow|
+        M = spr.diags(edges.flow) @ inc.incidence  # edges x nodes
+
+        # if incidence uses -1 at tail and +1 at head:
+        out_of_node = (M < 0).astype(float)   # flow leaves node
+        into_node   = (M > 0).astype(float)   # flow enters node
+
+        Qout = out_of_node.T @ np.abs(edges.flow)
+        Qin  = into_node.T   @ np.abs(edges.flow)
+
+        tol = 1e-14
+        dirichlet = (graph.in_vec > 0) & (Qin > Qout + tol)
+
+        in_vec = graph.in_vec #dirichlet.astype(float)
+        cb_vector = np.concatenate([sid.cb_0 * in_vec, np.zeros(2 * sid.ne)])
+
+
+        
         inv_abs_flow = np.divide(1.0, np.abs(edges.flow),
                                  out=np.zeros_like(edges.flow, dtype=float),
                                  where=np.abs(edges.flow) > 0)
@@ -1371,11 +1388,17 @@ def solve_vol_scaling_chat(sid: SimInputData, inc: Incidence, graph: Graph,
         F = spr.diags(edges.flow)
         zero_carrier = spr.diags(((edges.flow == 0) & (edges.diams > 0)).astype(float))
         A_pos = ((F @ inc.incidence) > 0)
-        Z_pos = ((zero_carrier @ inc.incidence) > 0)
+        #Z_pos = ((zero_carrier @ inc.incidence) > 0)
         A_neg = ((F @ inc.incidence) < 0)
-        Z_neg = ((zero_carrier @ inc.incidence) < 0)
-        upstream   = A_pos.maximum(Z_pos).astype(float)
-        downstream = A_neg.maximum(Z_neg).astype(float)
+        #Z_neg = ((zero_carrier @ inc.incidence) < 0)
+        #upstream   = A_pos.maximum(Z_pos).astype(float)
+        #downstream = A_neg.maximum(Z_neg).astype(float)
+        Z_up = ((zero_carrier @ inc.incidence) < 0)   # tail (-1)
+        Z_dn = ((zero_carrier @ inc.incidence) > 0)   # head (+1)
+
+        upstream   = A_pos.maximum(Z_up).astype(float)
+        downstream = A_neg.maximum(Z_dn).astype(float)
+
         downstream2 = downstream.multiply((1.0 - lam_plus_zero)[:, np.newaxis])
 
         # flux blocks
@@ -1393,22 +1416,42 @@ def solve_vol_scaling_chat(sid: SimInputData, inc: Incidence, graph: Graph,
                             edges.diams * edges.lens * inv_abs_flow)
         flux_b += sid.Pe * spr.diags(np.abs(edges.flow)) @ spr.diags(lam_plus_zero * exp_pe_fix) @ downstream
 
-        flux_a_in = flux_a.T.multiply((1.0 - graph.in_vec)[:, np.newaxis])
-        flux_b_in = flux_b.T.multiply((1.0 - graph.in_vec)[:, np.newaxis])
+        flux_a_in = flux_a.T.multiply((1.0 - in_vec)[:, np.newaxis])
+        flux_b_in = flux_b.T.multiply((1.0 - in_vec)[:, np.newaxis])
 
         flow_fix_pe = -sid.Pe * downstream.T @ np.abs(edges.flow)
-        flow_fix_pe = flow_fix_pe * (1.0 - graph.in_vec) + graph.in_vec
+        flow_fix_pe = flow_fix_pe * (1.0 - in_vec) + in_vec
 
-        zero_flow_fix = ((edges.flow == 0) & (alpha_edge == 0)).astype(float)
+        #zero_flow_fix = ((edges.flow == 0) & (alpha_edge == 0)).astype(float)
+        zero_flow_fix = ((edges.flow == 0) & (alpha_edge == 0) & (edges.diams > 0)).astype(float)
+        flux_b += spr.diags(-edges.diams**2 * zero_flow_fix) @ upstream \
+            + spr.diags( edges.diams**2 * zero_flow_fix) @ downstream
+
         exp_plus_eff_diag = exp_plus_diag.copy()
         exp_plus_eff_diag[zero_flow_fix.astype(bool)] = 1.0
         exp_plus_eff = spr.diags(exp_plus_eff_diag)
 
+        A_up = np.ones(sid.ne)
+        B_up = np.ones(sid.ne) - zero_flow_fix         # linear edges: B coeff 0
+
+        A_dn = exp_plus_eff_diag.copy()
+        B_dn = exp_minus2_diag.copy()
+
+        # overwrite for linear edges: cb_down = A + B*L
+        A_dn[zero_flow_fix.astype(bool)] = 1.0
+        B_dn[zero_flow_fix.astype(bool)] = edges.lens[zero_flow_fix.astype(bool)]
+
         cb_matrix = spr.vstack([
-            spr.hstack([spr.diags(flow_fix_pe),           flux_a_in,                                 flux_b_in]),
-            spr.hstack([-downstream2,                     exp_plus_eff,                              exp_minus2]),
-            spr.hstack([-upstream,                        spr.diags(np.ones(sid.ne) - zero_flow_fix), spr.diags(np.ones(sid.ne))])
+            spr.hstack([spr.diags(flow_fix_pe), flux_a_in, flux_b_in]),
+            spr.hstack([-downstream, spr.diags(A_dn), spr.diags(B_dn)]),
+            spr.hstack([-upstream,  spr.diags(A_up), spr.diags(B_up)]),
         ])
+
+        # cb_matrix = spr.vstack([
+        #     spr.hstack([spr.diags(flow_fix_pe),           flux_a_in,                                 flux_b_in]),
+        #     spr.hstack([-downstream2,                     exp_plus_eff,                              exp_minus2]),
+        #     spr.hstack([-upstream,                        spr.diags(np.ones(sid.ne) - zero_flow_fix), spr.diags(np.ones(sid.ne))])
+        # ])
         merge_diag = spr.diags((1.0 - inc.merge_vec))
         cb_matrix = merge_diag @ cb_matrix @ merge_diag + spr.diags(inc.merge_vec.astype(float))
 
@@ -1421,17 +1464,17 @@ def solve_vol_scaling_chat(sid: SimInputData, inc: Incidence, graph: Graph,
         edges.A = res[sid.nsq:sid.nsq + sid.ne]
         edges.B = res[sid.nsq + sid.ne:]
 
-        # normalize
-        J_in = np.sum(
-            edges.inlet *
-            (np.abs(edges.flow) * (edges.A * (1.0 - lam_plus_zero) + edges.B)
-             - (1.0 - lam_plus_zero) / sid.Pe * edges.diams ** 2 * (lam_plus_val * edges.A - lam_minus_val * edges.B))
-        )
-        if (not np.isfinite(J_in)) or (J_in <= 0):
-            print(J_in)
-            raise ValueError("Non-positive or invalid inlet flux during normalization")
-        scale = sid.cb_0 * sid.Q_in / J_in
-        cb *= scale; edges.A *= scale; edges.B *= scale
+        # # normalize
+        # J_in = np.sum(
+        #     edges.inlet *
+        #     (np.abs(edges.flow) * (edges.A * (1.0 - lam_plus_zero) + edges.B)
+        #      - (1.0 - lam_plus_zero) / sid.Pe * edges.diams ** 2 * (lam_plus_val * edges.A - lam_minus_val * edges.B))
+        # )
+        # if (not np.isfinite(J_in)) or (J_in <= 0):
+        #     print(J_in)
+        #     raise ValueError("Non-positive or invalid inlet flux during normalization")
+        # scale = sid.cb_0 * sid.Q_in / J_in
+        # cb *= scale; edges.A *= scale; edges.B *= scale
 
         # edge loss rate ("change")
         change_pe_fix = lam_plus_zero * 2.0 * edges.B * np.abs(edges.flow) / sid.Da * (
@@ -1445,121 +1488,14 @@ def solve_vol_scaling_chat(sid: SimInputData, inc: Incidence, graph: Graph,
         change = np.array(np.ma.fix_invalid(change, fill_value=0.0))
 
         return cb, lam_plus_val, lam_minus_val, lam_plus_zero, change
-
-    def solve_transport_and_change_danckwerts(alpha_edge):
-        # safe inverse |flow|
-        inv_abs_flow = np.divide(1.0, np.abs(edges.flow),
-                                 out=np.zeros_like(edges.flow, dtype=float),
-                                 where=np.abs(edges.flow) > 0)
-
-        lam_root = np.sqrt(np.abs(edges.flow) ** 2 +
-                           4.0 * alpha_edge * sid.Da / (1.0 + sid.G * edges.diams) / sid.Pe * edges.diams ** 3)
-        lam_plus_val  = sid.Pe / (2.0 * edges.diams ** 2) * (lam_root + np.abs(edges.flow))
-        lam_plus_val = np.array(np.ma.fix_invalid(lam_plus_val, fill_value = 0))
-        lam_minus_val = sid.Pe / (2.0 * edges.diams ** 2) * (lam_root - np.abs(edges.flow))
-        lam_minus_val = np.array(np.ma.fix_invalid(lam_minus_val, fill_value = 0))
-
-        lam_plus_zero = (lam_plus_val * edges.lens > sid.diffusion_exp_limit).astype(float)
-        lam_plus_val  = lam_plus_val  * (1.0 - lam_plus_zero)
-        lam_minus_val = lam_minus_val * (1.0 - lam_plus_zero)
-
-        exp_plus_diag   = np.exp(lam_plus_val * edges.lens) * (1.0 - lam_plus_zero) + lam_plus_zero
-        exp_plus2_diag  = np.exp(lam_plus_val * edges.lens) * (1.0 - lam_plus_zero)
-        exp_minus2_diag = np.exp(-lam_minus_val * edges.lens) * (1.0 - lam_plus_zero)
-
-        exp_plus   = spr.diags(exp_plus_diag)
-        exp_plus2  = spr.diags(exp_plus2_diag)
-        exp_minus2 = spr.diags(exp_minus2_diag)
-
-        # upstream / downstream
-        F = spr.diags(edges.flow)
-        zero_carrier = spr.diags(((edges.flow == 0) & (edges.diams > 0)).astype(float))
-        A_pos = ((F @ inc.incidence) > 0)
-        Z_pos = ((zero_carrier @ inc.incidence) > 0)
-        A_neg = ((F @ inc.incidence) < 0)
-        Z_neg = ((zero_carrier @ inc.incidence) < 0)
-        upstream   = A_pos.maximum(Z_pos).astype(float)
-        downstream = A_neg.maximum(Z_neg).astype(float)
-        downstream2 = downstream.multiply((1.0 - lam_plus_zero)[:, np.newaxis])
-
-        # flux blocks
-        flux_a = (sid.Pe * spr.diags(np.abs(edges.flow)) @ exp_plus2 @ downstream
-                  + spr.diags(lam_plus_val * edges.diams ** 2) @ upstream
-                  - exp_plus2 @ spr.diags(lam_plus_val * edges.diams ** 2) @ downstream).multiply(
-                      (1.0 - lam_plus_zero)[:, np.newaxis])
-        flux_b = (sid.Pe * spr.diags(np.abs(edges.flow)) @ exp_minus2 @ downstream
-                  - spr.diags(lam_minus_val * edges.diams ** 2) @ upstream
-                  + exp_minus2 @ spr.diags(lam_minus_val * edges.diams ** 2) @ downstream).multiply(
-                      (1.0 - lam_plus_zero)[:, np.newaxis])
-
-        # Pe fix
-        exp_pe_fix = np.exp(-alpha_edge * sid.Da / (1.0 + sid.G * edges.diams) *
-                            edges.diams * edges.lens * inv_abs_flow)
-        flux_b += sid.Pe * spr.diags(np.abs(edges.flow)) @ spr.diags(lam_plus_zero * exp_pe_fix) @ downstream
-
-        flux_a_in = -flux_a.T#.multiply((1.0 - graph.in_vec)[:, np.newaxis])
-        flux_b_in = -flux_b.T#.multiply((1.0 - graph.in_vec)[:, np.newaxis])
-
-        flow_fix_pe = sid.Pe * downstream.T @ np.abs(edges.flow)
-        flow_fix_pe = flow_fix_pe * (1.0 - graph.in_vec)
-        flow_fix_pe += sid.Pe * upstream.T @ np.abs(edges.flow) * graph.in_vec
-
-        zero_flow_fix = ((edges.flow == 0) & (alpha_edge == 0)).astype(float)
-        exp_plus_eff_diag = exp_plus_diag.copy()
-        exp_plus_eff_diag[zero_flow_fix.astype(bool)] = 1.0
-        exp_plus_eff = spr.diags(exp_plus_eff_diag)
-
-        cb_matrix = spr.vstack([
-            spr.hstack([spr.diags(flow_fix_pe),           flux_a_in,                                 flux_b_in]),
-            spr.hstack([-downstream2,                     exp_plus_eff,                              exp_minus2]),
-            spr.hstack([-upstream,                        spr.diags(np.ones(sid.ne) - zero_flow_fix), spr.diags(np.ones(sid.ne))])
-        ])
-        merge_diag = spr.diags((1.0 - inc.merge_vec))
-        cb_matrix = merge_diag @ cb_matrix @ merge_diag + spr.diags(inc.merge_vec.astype(float))
-
-
-        rows_empty = (cb_matrix.getnnz(axis=1) == 0)
-        if np.any(rows_empty):
-            cb_matrix = cb_matrix + spr.diags(rows_empty.astype(float))
-
-        res = solve_equation(cb_matrix, cb_vector)
-        cb = res[:sid.nsq]
-        edges.A = res[sid.nsq:sid.nsq + sid.ne]
-        edges.B = res[sid.nsq + sid.ne:]
-
-        # normalize
-        J_in = np.sum(
-            edges.inlet *
-            (np.abs(edges.flow) * (edges.A * (1.0 - lam_plus_zero) + edges.B)
-             - (1.0 - lam_plus_zero) / sid.Pe * edges.diams ** 2 * (lam_plus_val * edges.A - lam_minus_val * edges.B))
-        )
-        print(J_in)
-        if (not np.isfinite(J_in)) or (J_in <= 0):
-            raise ValueError("Non-positive or invalid inlet flux during normalization")
-        #scale = sid.cb_0 * sid.Q_in / J_in
-        #cb *= scale; edges.A *= scale; edges.B *= scale
-
-        # edge loss rate ("change")
-        change_pe_fix = lam_plus_zero * 2.0 * edges.B * np.abs(edges.flow) / sid.Da * (
-            1.0 - np.exp(-alpha_edge * sid.Da / (1.0 + sid.G * edges.diams) * edges.diams * edges.lens * inv_abs_flow)
-        )
-        change_pe_fix = np.array(np.ma.fix_invalid(change_pe_fix, fill_value=0.0))
-        change = ((1.0 - lam_plus_zero) * 2.0 * edges.diams ** 2 / (sid.Pe * sid.Da) *
-                  (edges.A * (np.exp(lam_plus_val * edges.lens) - 1.0) * lam_minus_val
-                   + edges.B * (1.0 - np.exp(-lam_minus_val * edges.lens)) * lam_plus_val)
-                  + change_pe_fix)
-        change = np.array(np.ma.fix_invalid(change, fill_value=0.0))
-
-        return cb, lam_plus_val, lam_minus_val, lam_plus_zero, change
-
 
     # ---- iterate a couple times: solve → project → re-solve ----
     max_proj_iters = getattr(sid, "proj_iters", 3)
 
     for k in range(max_proj_iters):
         # 1) solve ADR with current alphas
-        cb, lam_plus_val, lam_minus_val, lam_plus_zero, change = solve_transport_and_change_danckwerts(alpha)
-        #cb, lam_plus_val, lam_minus_val, lam_plus_zero, change = solve_transport_and_change(alpha)
+        #cb, lam_plus_val, lam_minus_val, lam_plus_zero, change = solve_transport_and_change_danckwerts(alpha)
+        cb, lam_plus_val, lam_minus_val, lam_plus_zero, change = solve_transport_and_change(alpha)
 
         # 2) predict per-grain loss this step: qg_hat = (W^T * change) * dt
         qg_hat = np.asarray((W.T @ change)).ravel() * sid.dt   # grains
@@ -1612,3 +1548,109 @@ def solve_vol_scaling_chat(sid: SimInputData, inc: Incidence, graph: Graph,
         print(qc_in[np.where(cb < 0)[0]])
         raise ValueError("Negative concentration detected")
     return cb
+
+# def solve_transport_and_change_danckwerts(alpha_edge):
+#         # safe inverse |flow|
+#         inv_abs_flow = np.divide(1.0, np.abs(edges.flow),
+#                                  out=np.zeros_like(edges.flow, dtype=float),
+#                                  where=np.abs(edges.flow) > 0)
+
+#         lam_root = np.sqrt(np.abs(edges.flow) ** 2 +
+#                            4.0 * alpha_edge * sid.Da / (1.0 + sid.G * edges.diams) / sid.Pe * edges.diams ** 3)
+#         lam_plus_val  = sid.Pe / (2.0 * edges.diams ** 2) * (lam_root + np.abs(edges.flow))
+#         lam_plus_val = np.array(np.ma.fix_invalid(lam_plus_val, fill_value = 0))
+#         lam_minus_val = sid.Pe / (2.0 * edges.diams ** 2) * (lam_root - np.abs(edges.flow))
+#         lam_minus_val = np.array(np.ma.fix_invalid(lam_minus_val, fill_value = 0))
+
+#         lam_plus_zero = (lam_plus_val * edges.lens > sid.diffusion_exp_limit).astype(float)
+#         lam_plus_val  = lam_plus_val  * (1.0 - lam_plus_zero)
+#         lam_minus_val = lam_minus_val * (1.0 - lam_plus_zero)
+
+#         exp_plus_diag   = np.exp(lam_plus_val * edges.lens) * (1.0 - lam_plus_zero) + lam_plus_zero
+#         exp_plus2_diag  = np.exp(lam_plus_val * edges.lens) * (1.0 - lam_plus_zero)
+#         exp_minus2_diag = np.exp(-lam_minus_val * edges.lens) * (1.0 - lam_plus_zero)
+
+#         exp_plus   = spr.diags(exp_plus_diag)
+#         exp_plus2  = spr.diags(exp_plus2_diag)
+#         exp_minus2 = spr.diags(exp_minus2_diag)
+
+#         # upstream / downstream
+#         F = spr.diags(edges.flow)
+#         zero_carrier = spr.diags(((edges.flow == 0) & (edges.diams > 0)).astype(float))
+#         A_pos = ((F @ inc.incidence) > 0)
+#         Z_pos = ((zero_carrier @ inc.incidence) > 0)
+#         A_neg = ((F @ inc.incidence) < 0)
+#         Z_neg = ((zero_carrier @ inc.incidence) < 0)
+#         upstream   = A_pos.maximum(Z_pos).astype(float)
+#         downstream = A_neg.maximum(Z_neg).astype(float)
+#         downstream2 = downstream.multiply((1.0 - lam_plus_zero)[:, np.newaxis])
+
+#         # flux blocks
+#         flux_a = (sid.Pe * spr.diags(np.abs(edges.flow)) @ exp_plus2 @ downstream
+#                   + spr.diags(lam_plus_val * edges.diams ** 2) @ upstream
+#                   - exp_plus2 @ spr.diags(lam_plus_val * edges.diams ** 2) @ downstream).multiply(
+#                       (1.0 - lam_plus_zero)[:, np.newaxis])
+#         flux_b = (sid.Pe * spr.diags(np.abs(edges.flow)) @ exp_minus2 @ downstream
+#                   - spr.diags(lam_minus_val * edges.diams ** 2) @ upstream
+#                   + exp_minus2 @ spr.diags(lam_minus_val * edges.diams ** 2) @ downstream).multiply(
+#                       (1.0 - lam_plus_zero)[:, np.newaxis])
+
+#         # Pe fix
+#         exp_pe_fix = np.exp(-alpha_edge * sid.Da / (1.0 + sid.G * edges.diams) *
+#                             edges.diams * edges.lens * inv_abs_flow)
+#         flux_b += sid.Pe * spr.diags(np.abs(edges.flow)) @ spr.diags(lam_plus_zero * exp_pe_fix) @ downstream
+
+#         flux_a_in = -flux_a.T#.multiply((1.0 - graph.in_vec)[:, np.newaxis])
+#         flux_b_in = -flux_b.T#.multiply((1.0 - graph.in_vec)[:, np.newaxis])
+
+#         flow_fix_pe = sid.Pe * downstream.T @ np.abs(edges.flow)
+#         flow_fix_pe = flow_fix_pe * (1.0 - graph.in_vec)
+#         flow_fix_pe += sid.Pe * upstream.T @ np.abs(edges.flow) * graph.in_vec
+
+#         zero_flow_fix = ((edges.flow == 0) & (alpha_edge == 0)).astype(float)
+#         exp_plus_eff_diag = exp_plus_diag.copy()
+#         exp_plus_eff_diag[zero_flow_fix.astype(bool)] = 1.0
+#         exp_plus_eff = spr.diags(exp_plus_eff_diag)
+
+#         cb_matrix = spr.vstack([
+#             spr.hstack([spr.diags(flow_fix_pe),           flux_a_in,                                 flux_b_in]),
+#             spr.hstack([-downstream2,                     exp_plus_eff,                              exp_minus2]),
+#             spr.hstack([-upstream,                        spr.diags(np.ones(sid.ne) - zero_flow_fix), spr.diags(np.ones(sid.ne))])
+#         ])
+#         merge_diag = spr.diags((1.0 - inc.merge_vec))
+#         cb_matrix = merge_diag @ cb_matrix @ merge_diag + spr.diags(inc.merge_vec.astype(float))
+
+
+#         rows_empty = (cb_matrix.getnnz(axis=1) == 0)
+#         if np.any(rows_empty):
+#             cb_matrix = cb_matrix + spr.diags(rows_empty.astype(float))
+
+#         res = solve_equation(cb_matrix, cb_vector)
+#         cb = res[:sid.nsq]
+#         edges.A = res[sid.nsq:sid.nsq + sid.ne]
+#         edges.B = res[sid.nsq + sid.ne:]
+
+#         # normalize
+#         J_in = np.sum(
+#             edges.inlet *
+#             (np.abs(edges.flow) * (edges.A * (1.0 - lam_plus_zero) + edges.B)
+#              - (1.0 - lam_plus_zero) / sid.Pe * edges.diams ** 2 * (lam_plus_val * edges.A - lam_minus_val * edges.B))
+#         )
+#         print(J_in)
+#         if (not np.isfinite(J_in)) or (J_in <= 0):
+#             raise ValueError("Non-positive or invalid inlet flux during normalization")
+#         #scale = sid.cb_0 * sid.Q_in / J_in
+#         #cb *= scale; edges.A *= scale; edges.B *= scale
+
+#         # edge loss rate ("change")
+#         change_pe_fix = lam_plus_zero * 2.0 * edges.B * np.abs(edges.flow) / sid.Da * (
+#             1.0 - np.exp(-alpha_edge * sid.Da / (1.0 + sid.G * edges.diams) * edges.diams * edges.lens * inv_abs_flow)
+#         )
+#         change_pe_fix = np.array(np.ma.fix_invalid(change_pe_fix, fill_value=0.0))
+#         change = ((1.0 - lam_plus_zero) * 2.0 * edges.diams ** 2 / (sid.Pe * sid.Da) *
+#                   (edges.A * (np.exp(lam_plus_val * edges.lens) - 1.0) * lam_minus_val
+#                    + edges.B * (1.0 - np.exp(-lam_minus_val * edges.lens)) * lam_plus_val)
+#                   + change_pe_fix)
+#         change = np.array(np.ma.fix_invalid(change, fill_value=0.0))
+
+#         return cb, lam_plus_val, lam_minus_val, lam_plus_zero, change

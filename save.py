@@ -73,7 +73,11 @@ def save_config(sid: SimInputData) -> None:
         all config parameters of the simulation
         dirname - directory of simulation
     """
-    f = open(sid.dirname+'/config.txt', 'w', encoding = "utf-8")
-    for key, val in sid.__class__.__dict__.items():
-        f.write(f'{key} = {val} \r')
-    f.close()
+    data = dict(sid.__class__.__dict__)  # defaults (includes methods too)
+    data.update(vars(sid))               # instance overrides
+
+    with open(f"{sid.dirname}/config.txt", "w", encoding="utf-8") as f:
+        for key, val in data.items():
+            if key.startswith("_") or callable(val):
+                continue
+            f.write(f"{key} = {val}\n")

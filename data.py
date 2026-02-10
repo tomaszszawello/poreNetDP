@@ -70,9 +70,13 @@ class Data():
     slices: list = []
     slices_d: list = []
     slices_s: list = []
+    slices_c: list = []
     "channelization for slices through the whole system in a given time"
     slice_times: list = []
     "list of times of checking slice channelization"
+    front_pos: list = []
+    q_in: list = []
+    pe: list = []
     breakthrough_times: list = []
     concentrations: list = []
     reactive_breakthrough_times: list = []
@@ -162,7 +166,7 @@ class Data():
         #     * edges.outlet)) @ cb * sid.dt)
 
 
-    def collect_data(self, sid: SimInputData, inc: Incidence, edges: Edges, vols, \
+    def collect_data(self, sid: SimInputData, inc: Incidence, edges: Edges, vols, triangles, \
         p: np.ndarray, cb: np.ndarray, cc: np.ndarray) -> None:
         """ Collect data from different vectors.
 
@@ -275,6 +279,15 @@ class Data():
         self.cc_out.append(self.delta_c)
         self.dissolved_v = (np.sum(edges.diams ** 2 * edges.lens) - self.vol_init) / self.vol_init
         self.dissolved_v_list.append(self.dissolved_v)
+        mask = vols.vol_a < 0.1 * vols.vol_a_0
+        y = np.array(triangles.centers)[mask, 0]
+        front = np.quantile(y, 0.95) if y.size else 0
+        #self.front_pos.append(np.max(triangles.centers[np.where(vols.vol_a < 0.1 * vols.vol_a_0)][:,1]))
+        self.front_pos.append(front)
+        q_in_now = np.sum(np.abs(edges.diams ** 4 / edges.lens * (inc.inlet \
+            @ p))) / sid.n
+        self.q_in.append(q_in_now)
+        self.pe.append(q_in_now * (sid.n / np.sum(edges.inlet * edges.diams)) ** 2 * sid.Pe)
         # if self.delta_b - sid.Da * vol_a / 2 > 1e-5:
         #     raise ValueError("Mass lost")
 
@@ -301,7 +314,7 @@ class Data():
         plt.close()
 
     def check_channelization(self, graph: Graph, inc: Incidence, edges: Edges, \
-        slice_x: float) -> tuple[int, float]:
+        cb: np.ndarray, slice_x: float) -> tuple[int, float]:
         """ Calculate channelization parameter for a slice of the network.
 
         This function calculates the channelization parameter for a slice of
@@ -341,6 +354,11 @@ class Data():
             @ (pos_x <= slice_x) * np.abs(inc.incidence @ (pos_x > slice_x)) \
             - (spr.diags(edges.flow) @ inc.incidence > 0) @ (pos_x > slice_x) \
             * np.abs(inc.incidence @ (pos_x <= slice_x))
+        cb_edges = ((spr.diags(edges.flow) @ inc.incidence > 0) @ cb) * slice_edges
+        if np.sum(cb_edges):
+            cb_slice = np.average(cb_edges[np.where(cb_edges > 0)])
+        else:
+            cb_slice = 0
         # sort edges from maximum flow to minimum (taking into account
         # their orientation)
         slice_flow = np.array(sorted(slice_edges * np.abs(edges.flow), reverse = True))
@@ -371,17 +389,17 @@ class Data():
             if fraction_surface > total_surface / 2:
                 surface_50 = i + 1
                 break
-        return (flow_50, np.sum(slice_flow != 0), diams_50, np.sum(slice_diams != 0), surface_50, np.sum(surface_50 != 0))
+        return (flow_50, np.sum(slice_flow != 0), diams_50, np.sum(slice_diams != 0), surface_50, np.sum(surface_50 != 0), cb_slice)
 
     def check_init_slice_channelization(self, graph: Graph, inc: Incidence, \
-        edges: Edges) -> None:
+        edges: Edges, cb: np.ndarray) -> None:
         pos_x = np.array(list(nx.get_node_attributes(graph, 'pos').values()))[:,0]
         slices = np.linspace(np.min(pos_x), np.max(pos_x), 102)[1:-1]
         channels_tab = []
         diams_tab = []
         surface_tab = []
         for x in slices:
-            res = self.check_channelization(graph, inc, edges, x)
+            res = self.check_channelization(graph, inc, edges, cb, x)
             channels_tab.append(res[1])
             diams_tab.append(res[3])
             surface_tab.append(res[5])
@@ -390,20 +408,23 @@ class Data():
         self.slices_s.append(surface_tab)
 
     def check_slice_channelization(self, graph: Graph, inc: Incidence, \
-        edges: Edges, time: float) -> None:
+        edges: Edges, cb: np.ndarray, time: float) -> None:
         pos_x = np.array(list(nx.get_node_attributes(graph, 'pos').values()))[:,0]
         slices = np.linspace(np.min(pos_x), np.max(pos_x), 102)[1:-1]
         channels_tab = []
         diams_tab = []
         surface_tab = []
+        c_tab = []
         for x in slices:
-            res = self.check_channelization(graph, inc, edges, x)
+            res = self.check_channelization(graph, inc, edges, cb, x)
             channels_tab.append(res[0])
             diams_tab.append(res[2])
             surface_tab.append(res[4])
+            c_tab.append(res[6])
         self.slices.append(channels_tab)
         self.slices_d.append(diams_tab)
         self.slices_s.append(surface_tab)
+        self.slices_c.append(c_tab)
         self.slice_times.append("{0}".format(str(round(time, 1) if time % 1 else int(time))))
 
     def plot_slice_channelization(self, graph: Graph) -> None:
@@ -567,4 +588,82 @@ class Data():
         plt.ylabel(r'$\phi$', fontsize = 50)
         plt.savefig(self.dirname + '/porosity.png', bbox_inches="tight")
         plt.close()
-    
+
+    def plot_front(self, sid: SimInputData):
+        plt.figure(figsize = (15, 10))
+        plt.plot(self.t, np.array(self.front_pos) / sid.m, linewidth = 5, color = 'black')
+        plt.xlabel(r'simulation time', fontsize = 50)
+        #plt.subplots_adjust(wspace=0, hspace=0)
+        plt.margins(tight = True)
+        plt.ylabel('front position', fontsize = 50)
+        plt.savefig(self.dirname + '/front.png', bbox_inches="tight")
+        plt.close()
+
+    def plot_flow(self, sid: SimInputData):
+        plt.figure(figsize = (15, 10))
+        plt.plot(self.t, self.q_in, linewidth = 5, color = 'black')
+        plt.xlabel(r'simulation time', fontsize = 50)
+        #plt.subplots_adjust(wspace=0, hspace=0)
+        plt.margins(tight = True)
+        plt.ylabel('inlet flow', fontsize = 50)
+        plt.savefig(self.dirname + '/inlet_flow.png', bbox_inches="tight")
+        plt.close()
+
+    def plot_pe(self, sid: SimInputData):
+        plt.figure(figsize = (15, 10))
+        plt.plot(self.t, self.pe, linewidth = 5, color = 'black')
+        plt.xlabel(r'simulation time', fontsize = 50)
+        #plt.subplots_adjust(wspace=0, hspace=0)
+        plt.margins(tight = True)
+        plt.yscale('log')
+        plt.ylabel('effective Peclet', fontsize = 50)
+        plt.savefig(self.dirname + '/pe.png', bbox_inches="tight")
+        plt.close()
+
+    def plot_c(self, graph: Graph) -> None:
+        """ Plots slice data from text file.
+
+        This function loads the data from text file slices.txt and plots them
+        to files slices.png, slices_no_div.png, slices_norm.png.
+        """
+        pos_x = np.array(list(nx.get_node_attributes(graph, 'pos').values()))[:,0]
+        # slices = np.linspace(np.min(pos_x), np.max(pos_x), 120)[10:-10]
+        slices = np.linspace(np.min(pos_x), np.max(pos_x), 102)[1:-1]
+        colors = ['C0', 'C1', 'C2', 'C3', 'C4', 'C5', 'C6', 'C7', 'C8', 'C9']
+        plt.figure(figsize = (15, 10))
+        plt.plot(slices, self.slices_c[1], linewidth = 5, color = 'black', label = '0.0')
+        for i, channeling in enumerate(self.slices_c[2:]):
+            plt.plot(slices, channeling, label = self.slice_times[i+1], color = colors[i], linewidth = 5)
+        plt.ylim(0, 1.05)
+        plt.xlabel('x', fontsize = 60, style = 'italic')
+        # ax2.xaxis.label.set_color('white')
+        # ax2.tick_params(axis = 'x', colors='white')
+        #plt.xticks([],[])
+        plt.subplots_adjust(wspace=0, hspace=0)
+        plt.margins(tight = True)
+        plt.ylabel('average concentration', fontsize = 50)
+        #plt.yticks([],[])
+        plt.yticks([0, 0.5, 1],['0', '0.5', '1'])
+        handles, labels = plt.gca().get_legend_handles_labels()
+        #order = [0,4,1,5,2,6,3,7]
+        # order = []
+        # for i in range(len(handles) // 2):
+        #     order.append(i)
+        #     if i == len(handles) // 2 - 1:
+        #         if len(handles) % 2 == 0:
+        #             order.append(len(handles) // 2 + i)
+        #     else:
+        #         order.append(len(handles) // 2 + i)
+        legend = plt.legend(loc="lower center", mode = "expand", ncol = 4, prop={'size': 40}, handlelength = 1, frameon=False, borderpad = 0, handletextpad = 0.4)
+        for legobj in legend.legend_handles:
+            legobj.set_linewidth(10.0)
+        #spine_color = 'blue'
+        # for spine in ax1.spines.values():
+        #     spine.set_linewidth(5)
+        #     spine.set_edgecolor(spine_color)
+        # for spine in ax2.spines.values():
+        #     spine.set_linewidth(5)
+        #     spine.set_edgecolor(spine_color)
+        # save file in the directory
+        plt.savefig(self.dirname + "/concentration.png", bbox_inches="tight")
+        plt.close()

@@ -25,6 +25,7 @@ from build import build
 from utils import initialize_iterators, update_iterators
 from utils_vtk import save_VTK
 
+import numpy as np
 
 
 # initialize main classes
@@ -33,8 +34,14 @@ sid, inc, graph, edges, vols, triangles, data = build()
 iters, tmax, i, t, breakthrough = initialize_iterators(sid)
 iterator_dissolved = 0
 
-
-import numpy as np
+pressure_b = Pr.create_vector(sid, graph)
+pressure = Pr.solve_flow(sid, inc, graph, edges, pressure_b)
+q_in = np.sum(np.abs(edges.diams ** 4 / edges.lens * (inc.inlet \
+    @ pressure)))
+#sid.p_in = 2 * sid.n / q_in
+sid.qin = q_in
+print(sid.p_in, sid.qin, q_in)
+Sv.save_config(sid)
 
 
 # initial merging
@@ -56,6 +63,7 @@ while t < tmax and i < iters and data.dissolved_v < sid.dissolved_v_max and not 
     print(np.max(edges.diams))
     # initialize vectors
     #
+
     pressure_b = Pr.create_vector(sid, graph)
     if sid.include_electroosmosis:
         #cosm_b = Osm.create_vector(sid, graph)
@@ -75,11 +83,13 @@ while t < tmax and i < iters and data.dissolved_v < sid.dissolved_v_max and not 
     else:
         #pressure = Pr.solve_flow_constant_p(sid, inc, graph, edges, pressure_b)
         pressure = Pr.solve_flow(sid, inc, graph, edges, pressure_b)
+        # if np.sum(edges.flow) > 1e3:
+        #     edges.flow *= 1e-7
     
 
     if sid.include_diffusion:
-        cb_b = Dif.create_vector_danckwerts(sid, inc, graph, edges)
-        #cb_b = Dif.create_vector(sid, graph)
+        #cb_b = Dif.create_vector_danckwerts(sid, inc, graph, edges)
+        cb_b = Dif.create_vector(sid, graph)
     else:
         cb_b = Di.create_vector(sid, graph)
     #print(np.where(edges.triangles > 2))
@@ -133,21 +143,21 @@ while t < tmax and i < iters and data.dissolved_v < sid.dissolved_v_max and not 
     cc = Pi.solve_precipitation(sid, inc, graph, edges, cb)
     # calculate ffp, draw figures
     if t == 0 and not sid.debug:
-        data.check_data(edges)
-        data.check_init_slice_channelization(graph, inc, edges)
-        data.check_slice_channelization(graph, inc, edges, t)
+        #data.check_data(edges)
+        data.check_init_slice_channelization(graph, inc, edges, cb)
+        data.check_slice_channelization(graph, inc, edges, cb, t)
         #Tr.track(sid, graph, inc, edges, data, pressure)
         Dr.draw_flow(sid, graph, edges, f'q_{t:.1f}.jpg', 'q')
         Dr.draw_flow(sid, graph, edges, f'd_{t:.1f}.jpg', 'd')
-        #Dr.draw_triangles(sid, triangles, graph, vols, f'tri_{t:.1f}.jpg')
+        Dr.draw_triangles2(sid, triangles, graph, vols, f'tri_{t:.1f}.jpg')
         #Dr.uniform_hist(sid, graph, edges, vols, cb, f'dreal_{t:.1f}.jpg', 'd')
-        #Dr.draw_nodes(sid, graph, edges, cosm, f'c_{t:.1f}.jpg', 'q')
+        Dr.draw_nodes(sid, graph, edges, cb, f'c_{t:.1f}.jpg', 'q')
         #Dr.draw_nodes(sid, graph, edges, pressure, f'p_{t:.1f}.jpg', 'q')
         # save_VTK(sid, graph, edges, pressure, cb, \
         #     f'network_{t:.1f}.vtk')
     else:
-        if data.dissolved_v // sid.track_every > iterator_dissolved:
-        #if t // sid.track_every > iterator_dissolved:
+        #if data.dissolved_v // sid.track_every > iterator_dissolved:
+        if t // sid.track_every > iterator_dissolved:
             print('Drawing')
             iterator_dissolved += 1
             if iterator_dissolved in sid.track_list:
@@ -155,15 +165,15 @@ while t < tmax and i < iters and data.dissolved_v < sid.dissolved_v_max and not 
                 #    f'q_{t:.1f}.jpg', 'q')
                 Dr.draw_flow(sid, graph, edges, f'q_{t:.1f}.jpg', 'q')
                 Dr.draw_flow(sid, graph, edges, f'd_{t:.1f}.jpg', 'd')
-                #Dr.draw_triangles(sid, triangles, graph, vols, f'tri_{t:.1f}.jpg')
+                Dr.draw_triangles2(sid, triangles, graph, vols, f'tri_{t:.1f}.jpg')
                 #Dr.uniform_hist(sid, graph, edges, vols, cb, f'dreal_{t:.1f}.jpg', 'd')
                 #Dr.draw_nodes(sid, graph, edges, cosm, f'c_{t:.1f}.jpg', 'q')
-                #Dr.draw_nodes(sid, graph, edges, cb, f'c_{t:.1f}.jpg', 'q')
+                Dr.draw_nodes(sid, graph, edges, cb, f'c_{t:.1f}.jpg', 'q')
                 #Dr.draw_nodes(sid, graph, edges, pressure, f'p_{t:.1f}.jpg', 'q')
                 # save_VTK(sid, graph, edges, pressure, cb, \
                 #     f'network_{t:.1f}.vtk')
-                data.check_data(edges)
-                data.check_slice_channelization(graph, inc, edges, \
+                #data.check_data(edges)
+                data.check_slice_channelization(graph, inc, edges, cb, \
                     t)
                 #Tr.track(sid, graph, inc, edges, data, pressure)
     # grow/shrink diameters and update them in edges, update volumes with
@@ -173,8 +183,8 @@ while t < tmax and i < iters and data.dissolved_v < sid.dissolved_v_max and not 
     breakthrough, dt_next = Gr.update_diameters(sid, inc, edges, vols, cb, cc)
     # if breakthrough:
     #     break
-    
-    data.collect_data(sid, inc, edges, vols, pressure, cb, cc)
+
+    data.collect_data(sid, inc, edges, vols, triangles, pressure, cb, cc)
     # merge edges
     if sid.include_merging:
         print ('Merging')
@@ -195,7 +205,7 @@ while t < tmax and i < iters and data.dissolved_v < sid.dissolved_v_max and not 
         #Sv.save('/save.dill', sid, graph, inc, edges)
         #Dr.draw_flow(sid, graph, edges, f'd_{t:.1f}.jpg', 'd')
     #    raise ValueError('Flow not matching!')
-    # if i == 129:
+    # if i == 1041:
     #     Sv.save('/save.dill', sid, graph, inc, edges, triangles, vols)
     # if np.sum((np.array((inc.merge != 0).sum(axis = 0))[0] == 0) * (edges.diams != 0)):
 
@@ -207,26 +217,31 @@ while t < tmax and i < iters and data.dissolved_v < sid.dissolved_v_max and not 
 # to be able to continue it later
 if i != 1 and sid.load != 1 and not sid.debug:
     #data.check_data(edges)
-    data.check_slice_channelization(graph, inc, edges, t)
+    data.check_slice_channelization(graph, inc, edges, cb, t)
+    
     #Tr.track(sid, graph, inc, edges, data, pressure)
     # Dr.draw_diams_profile(sid, graph, edges, data, \
     #     f'focusing_d_{t:.2f}.jpg', 'd')
     # save_VTK(sid, graph, edges, pressure, cb, \
     #     f'network_{t:.1f}.vtk')
 
-    data.save_data()
-    data.plot_profile(graph)
+    #data.save_data()
+    #data.plot_profile(graph)
     #Tr.plot_tracking(data, 100)
     # Dr.draw_flow_profile(sid, graph, edges, data, \
     #         f'focusing_q_{t:.1f}.jpg', 'q')
     Dr.draw_flow(sid, graph, edges, f'q_{t:.1f}.jpg', 'q')
     Dr.draw_flow(sid, graph, edges, f'd_{t:.1f}.jpg', 'd')
     #Dr.draw_triangles(sid, triangles, graph, vols, f'tri_{t:.1f}.jpg')
-    #Dr.draw_nodes(sid, graph, edges, cosm, f'c_{t:.1f}.jpg', 'q')
+    Dr.draw_nodes(sid, graph, edges, cb, f'c_{t:.1f}.jpg', 'q')
     #Dr.uniform_hist(sid, graph, edges, vols, cb, f'dreal_{t:.1f}.jpg', 'd')
     #Dr.draw_nodes(sid, graph, edges, cb, f'c_{t:.1f}.jpg', 'q')
-    np.savetxt(sid.dirname + '/tau_h.txt', np.array([np.sum(np.abs(edges.flow) * edges.lens) / (np.abs(Q_in) * sid.m)]))
+    #np.savetxt(sid.dirname + '/tau_h.txt', np.array([np.sum(np.abs(edges.flow) * edges.lens) / (np.abs(Q_in) * sid.m)]))
     #Sv.save('/save.dill', sid, graph, inc, edges, triangles, vols)
     #data.plot_things(sid)
+    data.plot_c(graph)
+    data.plot_front(sid)
+    data.plot_flow(sid)
+    data.plot_pe(sid)
 
-Dr.draw_triangles(sid, triangles, graph, vols, f'tri_final_{t:.1f}.jpg')
+Dr.draw_triangles2(sid, triangles, graph, vols, f'tri_final_{t:.1f}.jpg')

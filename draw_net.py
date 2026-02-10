@@ -568,6 +568,99 @@ def draw_triangles(sid, triangles, graph, volumes, name):
     plt.savefig(sid.dirname + "/" + name, bbox_inches="tight", dpi = 600)
     plt.close()
 
+import matplotlib.pyplot as plt
+from matplotlib.collections import PolyCollection
+import matplotlib as mpl
+
+def draw_triangles2(sid, triangles, graph, vols, name):
+
+    pos = nx.get_node_attributes(graph, 'pos')
+    verts1 = []
+    verts2 = []
+    vol_max = vols.vol_max #vols.vol_a + vols.vol_e + vols.triangles.T @ (edges.diams ** 2 * edges.lens / edges.triangles)
+    # scale1 = (1 - triangles.boundary) * (vols.vol_a + vols.vol_e) / vol_max
+    # scale2 = (1 - triangles.boundary) * vols.vol_a / (vols.vol_a + vols.vol_e)
+    # scale2 = np.array(np.ma.fix_invalid(scale2, fill_value = 0))
+    # for i, nodes in enumerate(triangles.tlist):
+    #     n1, n2, n3 = nodes
+    #     pi = triangles.centers[i]
+    #     scalei = scale1[i]
+    #     p10 = (pos[n1] - pi) * scalei + pi
+    #     p2 = (pos[n2] - pi) * scalei + pi
+    #     p3 = (pos[n3] - pi) * scalei + pi
+    #     p11 = p10 + (p2 - p10) * (1 - scale2[i])
+    #     verts1.append((p11, p2, p3))
+    #     p12 = p10 + (p2 - p10) * scale2[i]
+    #     verts2.append((p12, p2, p3))
+    # total fraction of max volume -> target area fraction
+    f_total = (1 - triangles.boundary) * (vols.vol_a + vols.vol_e) / vol_max
+    s = np.sqrt(np.clip(f_total, 0, None))   # IMPORTANT: sqrt because area ~ s^2
+
+    # fraction to allocate to A (handle 0/0 safely)
+    den = vols.vol_a + vols.vol_e
+    fA = np.divide(vols.vol_a, den, out=np.zeros_like(vols.vol_a), where=(den > 0))
+    fA = np.clip(fA, 0, 1)
+
+    for i, (n1, n2, n3) in enumerate(triangles.tlist):
+        pi = triangles.centers[i]
+        si = s[i]
+
+        p1 = (pos[n1] - pi) * si + pi
+        p2 = (pos[n2] - pi) * si + pi
+        p3 = (pos[n3] - pi) * si + pi
+
+        # Cut point on edge p2 -> p1 so that area(q,p2,p3) = fA * area(p1,p2,p3)
+        q = p2 + fA[i] * (p1 - p2)
+
+        verts1.append((q,  p2, p3))   # area fraction = fA
+        verts2.append((p1, q,  p3))   # area fraction = 1 - fA
+
+        
+
+
+
+    plt.figure(figsize=(sid.figsize * sid.m / sid.n, sid.figsize))
+    spec = gridspec.GridSpec(ncols = 2, nrows = 1, width_ratios=[100, 1])
+    # draw first panel for the network
+    ax = plt.subplot(spec[0])
+    # ax.set_facecolor("black")  
+    # Make the collection and add it to the plot.
+    # coll = PolyCollection(verts2, facecolors = 'c')
+    # #coll.set_sizes(z, dpi = 300)
+    # #coll.set_alpha(volumes.vol_a / volumes.vol_max)
+    # ax.add_collection(coll)
+
+
+    #edges.boundary_list += (edges.boundary_list == 0) * (triangles.incidence @ triangles.boundary > 0)
+    plt.axis('equal')
+    coll1 = PolyCollection(verts1, facecolors = 'royalblue')
+    #coll1 = PolyCollection(verts1, facecolors = 'gold')
+    coll2 = PolyCollection(verts2, facecolors = 'red')
+    #coll2 = PolyCollection(verts2, facecolors = '#001370')
+    ax.add_collection(coll1)
+    ax.add_collection(coll2)
+    
+    ax.set_xlim(0, sid.m)
+    ax.set_ylim(0, sid.n)
+    #ax.autoscale_view()
+    plt.axis('off')
+    # qs4 = (1 - edges.boundary_list) * edges.diams \
+    #     * (edges.diams > edges.diams_initial * 1.5)
+    # nx.draw_networkx_edges(graph, pos, edges.edge_list, edge_color = 'white', \
+    #     width = sid.ddrawconst * np.array(qs4))
+    
+    # qs = (1 - edges.boundary_list) * np.abs(edges.flow)
+    # draw_const = 3 * sid.qdrawconst
+    # nx.draw_networkx_edges(graph, pos, edges.edge_list, edge_color = 'k', \
+    #     width = draw_const * np.array(qs))
+    
+    # Add a colorbar for the PolyCollection
+    #fig.colorbar(coll, ax=ax)
+    plt.subplots_adjust(wspace=0, hspace=0)
+    plt.savefig(sid.dirname + "/" + name, bbox_inches="tight")
+    plt.close()
+
+
 def uniform_hist(sid: SimInputData, graph: Graph, edges: Edges, vols: Volumes, \
     cb: np.ndarray, name: str, data: str) -> None:
     """ Draw the network with diameters/flow as edge width.

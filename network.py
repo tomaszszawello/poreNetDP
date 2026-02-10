@@ -364,7 +364,10 @@ def build_delaunay_net(sid: SimInputData, inc: Incidence) \
         for i, edge in enumerate((sorted((n1_new, n2_new)), \
             sorted((n1_new, n3_new)), sorted((n2_new, n3_new)))):
             node1, node2 = edge
+            #if (node1, node2) not in edge_list:
             if (node1, node2) not in edge_list:
+                if lens_tr[i] > 3:
+                    continue
                 if pos[node1][0] == 0 and pos[node2][0] == 0:
                     continue
                 if pos[node1][0] == sid.n and pos[node2][0] == sid.n:
