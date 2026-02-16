@@ -18,12 +18,12 @@ class SimInputData:
     '''
     # GENERAL
 
-    m = 21
-    n: int = 100
+    m = 20
+    n: int = 80
     "network size"
-    iters: int = 1000000
+    iters: int = 100000000
     "maximum number of iterations"
-    tmax: float = 1080
+    tmax: float = 36
     "maximum time"
     dissolved_v_max: float = 10
     "maximum dissolved volume (in terms of initial pore volume)"
@@ -45,15 +45,15 @@ class SimInputData:
     "list of time measures in which tracking is performed"
 
     # DISSOLUTION & PRECIPITATION
-    Da = 0.1
+    Da = 0.073
     #Da_eff: float = 0.026
     "effective Damkohler number"
-    G: float = 0.77
+    G: float = 1.05
     "diffusion to reaction ratio"
     #Da: float = Da_eff * (1 + G)
     Da_eff = Da / (1 + G)
     "Damkohler number"
-    chi0: float = 0.01
+    chi0: float = 0.63 # 0.3
     "diameter scale to length scale ratio for merging"
 
     # INCLUDE
@@ -64,7 +64,7 @@ class SimInputData:
     tracking_mode = 'time'
 
     cut = 'intersections_up' # 'edges'
-    pore_diam = 12
+    pore_diam = 1.
     # INITIAL CONDITIONS
     qin: float = 1.
     "characteristic flow for inlet edge"
@@ -77,20 +77,24 @@ class SimInputData:
     c_eq = 1.
     c_th = 1e-2
     solve_type = "full" # "full"
+    Ksp = 7.78e-5
 
+    v0 = 1
     #dmin = np.sqrt(1 / (1 + c_eq / (cb_in * Da_eff))) #* 0.5
     #dmin = 0.3 * np.sqrt(1 / (1 + 1 / Da_eff))
     #dmin = 0.1#0.42 * np.sqrt(1 / (1 + 1 / Da_eff))
-    dmin = 0.#1  / (1 + 1 / (Da_eff * cb_in))
+    dmin = 1 / (1 + 1 / (Da_eff * cb_in))
+    node_diam_min = 0#.1
     cond_weight = 0.5
+    w_node = 0.7
 
-    Pe_c = 0.01
+    Pe_c = 0.1
     "critical Pe for mixing; 0 for streamlined, infinity for full"
     mixing_at_barrier = 0#0.05
     "additional mixing right behind barrier"
 
     q_rate = 1
-    q_amp = 0.048 #0.13 #
+    q_amp = 0.048 #
     q_period = tmax / 24#150
     q_trans = 0#q_period / 10
 
@@ -129,7 +133,7 @@ class SimInputData:
     "constant for improving diameter drawing"
     
     # INITIALIZATION
-    load: int = 2
+    load: int = 0
     ("type of loading: 0 - build new network based on config and start new \
      simulation, 1 - load previous network from load_name and continue \
      simulation, 2 - load template network from load_name and start new \
@@ -137,7 +141,7 @@ class SimInputData:
     #load_name: str = 'Daeff0.25/25'
     load_name: str = 'Daeff0.56/2'
     "name of loaded network"
-    dirname: str = f'Daeff{Da_eff:.2f}'
+    dirname: str = f'mip/Daeff{Da_eff:.2f}'
     #dirname: str = f'Daeff{Da_eff:.2f}'
     "directory of simulation"
 

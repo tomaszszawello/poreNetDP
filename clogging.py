@@ -55,7 +55,7 @@ def update_diameters(sid: SimInputData, inc: Incidence, edges: Edges, graph: Gra
     dt_next : float
         new timestep
     """
-    change = solve_d_rect(sid, inc, edges, cb, cc)
+    change = solve_d(sid, inc, edges, cb, cc)
     breakthrough = False
     if sid.include_adt:
         change_rate = change / edges.diams * (edges.diams > 0.5)
@@ -70,7 +70,9 @@ def update_diameters(sid: SimInputData, inc: Incidence, edges: Edges, graph: Gra
     else:
         dt_next = sid.dt
     diams_new = edges.diams + change * dt_next
-    node_clogging -= cb * cc * dt_next
+    cb_out = np.abs((spr.diags(edges.flow) @ inc.incidence < 0)).T @ np.abs(cb)
+    cc_out = np.abs((spr.diags(edges.flow) @ inc.incidence < 0)).T @ np.abs(cc)
+    node_clogging -= cb_out * cc_out * dt_next
     node_clogging *= node_clogging > 0
     diams_new = diams_new * (1 - (np.abs(inc.incidence) @ (node_clogging == 0)))
     if np.sum(diams_new == 0) != np.sum(edges.diams == 0):
@@ -132,8 +134,8 @@ def solve_d(sid: SimInputData, inc: Incidence, edges: Edges, cb: np.ndarray, cc:
     """
     # create list of concentrations which should be used for growth of each
     # edge (upstream one)
-    cb_in = np.abs((spr.diags(edges.flow) @ inc.incidence > 0)) @ np.abs(cb)
-    cc_in = np.abs((spr.diags(edges.flow) @ inc.incidence > 0)) @ np.abs(cc)
+    cb_in = cb
+    cc_in = cc
 
     # cb_in = (np.abs((spr.diags(edges.flow) @ inc.incidence > 0)) @ np.abs(cb) + np.abs((spr.diags(edges.flow) @ inc.incidence < 0)) @ np.abs(cb)) / 2
     # cc_in = (np.abs((spr.diags(edges.flow) @ inc.incidence > 0)) @ np.abs(cc) + np.abs((spr.diags(edges.flow) @ inc.incidence < 0)) @ np.abs(cc)) / 2

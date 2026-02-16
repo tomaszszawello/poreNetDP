@@ -13,7 +13,7 @@ build(None) -> tuple[SimInputData, In.Incidence, De.Graph, In.Edges, Data]
 
 
 import delaunay as De
-import network_hex2 as Ne
+import network_kagome as Ne
 import incidence as In
 import save as Sv
 

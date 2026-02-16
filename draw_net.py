@@ -123,7 +123,7 @@ def uniform_hist(sid: SimInputData, graph: Graph, edges: Edges, \
     plt.close()
 
 
-def draw(sid: SimInputData, graph: Graph, edges: Edges, \
+def draw(sid: SimInputData, graph: Graph, edges: Edges, node_clogging, \
     name: str, plot_type: str) -> None:
     """ Draw the network with diameters/flow as edge width.
 
@@ -216,7 +216,7 @@ def draw(sid: SimInputData, graph: Graph, edges: Edges, \
             width = sid.ddrawconst * np.array(qs3))
         nx.draw_networkx_edges(graph, pos, edges.edge_list_draw, edge_color = 'k', \
             width = sid.ddrawconst * np.array(qs4))
-    #nx.draw_networkx_nodes(graph, pos, node_color = cd)
+        nx.draw_networkx_nodes(graph, pos, node_size = 5 * node_clogging, node_color = 'black')
     plt.subplots_adjust(wspace=0, hspace=0)
     # save file in the directory
     plt.savefig(sid.dirname + "/" + name, bbox_inches="tight")
@@ -502,7 +502,7 @@ def draw_nodes(sid: SimInputData, graph: Graph, edges: Edges, cb, \
         x_out.append(pos[index_to_node[node]][0])
         y_out.append(pos[index_to_node[node]][1])
     #print (x_zero, y_zero)
-    pathcollection = nx.draw_networkx_nodes(graph, pos, node_color = cb * (cb >= 0))
+    pathcollection = nx.draw_networkx_nodes(graph, pos, node_color = cb * (cb >= 0), node_size= 50)
     plt.colorbar(pathcollection)
     #nx.draw_networkx_labels(graph, pos, labels=dict(zip(graph.nodes(), graph.nodes())), font_size=5)
     plt.scatter(x_in, y_in, s = 30, facecolors = 'white', edgecolors = 'black')

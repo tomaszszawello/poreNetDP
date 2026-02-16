@@ -147,7 +147,7 @@ class Data():
         #print ('Difference =', (self.delta_b - self.delta_c) / sid.Gamma - self.delta_b + sid.Da * vol / 2)
 
     def collect_data(self, sid: SimInputData, inc: Incidence, edges: Edges, graph: Graph, \
-        p: np.ndarray, cb: np.ndarray, cc: np.ndarray) -> None:
+        p: np.ndarray, cb: np.ndarray, cc: np.ndarray, node_diams) -> None:
         """ Collect data from different vectors.
 
         This function extracts information such as permeability, quantity of
@@ -203,7 +203,7 @@ class Data():
         #     * edges.outlet)) @ cc * sid.dt)
         # self.delta_c += delta
         # self.cc_out.append(self.delta_c)
-        self.dissolved_v = (np.sum(edges.diams_min ** 2 * edges.lens) - self.vol_init) / self.vol_init
+        self.dissolved_v = (self.vol_init - np.sum(edges.diams_min ** 2 * edges.lens) - 2 / 3 * np.sum(node_diams ** 3)) / self.vol_init
         self.dissolved_v_list.append(self.dissolved_v)
         interface_nodes = np.abs(inc.incidence.T) @ (edges.diams_initial - edges.diams > 0.1)
         pos_y = np.array(list(nx.get_node_attributes(graph, 'pos').values()))[:,1]
@@ -254,6 +254,7 @@ class Data():
 
     def plot_pressure_diff(self):
         plt.figure(figsize = (10, 7))
+        print("pressure t:", id(self.t), len(self.t), self.t[:3], self.t[-3:])
         #plt.yscale('log')
         plt.plot(self.t, self.pressure_diff / self.pressure[0], 'r')
         #plt.xlim(0, 3000)
@@ -403,6 +404,7 @@ class Data():
         plt.savefig(self.dirname + "/concentration_profile.png", bbox_inches="tight")
         plt.close()
 
+
     def compare_conc(self, sid, inc, graph, cb):
 
         conc = np.loadtxt("conc_prof.txt")
@@ -418,11 +420,11 @@ class Data():
         cb_vec = (np.abs(inc.incidence).T @ cb).ravel()
 
         # Choose x positions where you want vertical slices
-        x_slice = np.array([-200, 1899, 3797, 5583, 7370]) / 7400 * (np.max(pos_x) - sid.bound_x) + sid.bound_x
+        x_slice = np.array([0, 1899, 3797, 5583, 7213]) / 7400 * (np.max(pos_x) - sid.bound_x) + sid.bound_x
         #x_slice = np.linspace(sid.bound_x + 2, np.max(pos_x) - 2, 5)
 
         # Snap to actual node x's (keep one snapped value per requested slice)
-        atol = 1e-8
+        atol = 1 #e-8
         x_correct = np.array([pos_x[np.argmin(np.abs(pos_x - x))] for x in x_slice], dtype=float)
 
         # Prepare figure with exactly len(x_slice) panels
@@ -610,6 +612,8 @@ class Data():
     def plot_precipitate(self):
         plt.figure(figsize = (20, 15))
         #plt.yscale('log')
+        print("precip t:", id(self.t), len(self.t), self.t[:3], self.t[-3:])
+        print(len(self.dissolved_v_list))
         plt.plot(self.t, np.abs(self.dissolved_v_list), 'r')
         #plt.xlim(0, 3000)
         plt.xlabel('simulation time')

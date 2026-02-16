@@ -215,24 +215,113 @@ def compute_edge_Pe(edges, sid):
     w = np.clip(w, 0.0, 1.0)
     return w
 
-def additional_mixing(alpha_eff, sid, edges):
-    eps = sid.mixing_at_barrier  # 1% artificial mixing between the two interface channels
-    alpha_eff[edges.special[0], edges.special[1]] += eps
-    alpha_eff[edges.special[1], edges.special[0]] += eps
+def calculate_node_weights(edges, node_diams, inc, sid):
+    """
+    Calculates mixing weights w for nodes based on a Node Peclet number.
+    
+    Parameters:
+    - flow: array of edge flows
+    - node_diams: array of node diameters
+    - incidence: the incidence matrix (nodes x edges)
+    - Pe_c: critical Peclet number from sid
+    """
+    # 1. Calculate Total Throughput per node (Q_node)
+    # Total flow through node = 0.5 * sum of absolute flows of all connected edges
+    q_abs = np.abs(edges.flow)
+    Q_node = 0.5 * (np.abs(inc.incidence.T) @ q_abs)
+    
+    # 2. Define Characteristic Node Area (cross-section)
+    # A_node ~ d_node**2
+    d = np.asarray(node_diams, dtype=float)
+    A = d**2
+    
+    # 3. Calculate Node Velocity and Peclet Number
+    # u = Q_node / A
+    # Pe = u * d  => (Q_node / d**2) * d => Q_node / d
+    # We use a small epsilon to avoid division by zero for clogged/isolated nodes
+    Pe_node = np.zeros_like(d)
+    valid_d = d > 1e-15
+    Pe_node[valid_d] = Q_node[valid_d] / d[valid_d]
+    
+    # 4. w(Pe) = Pe / (Pe + Pe_c)
+    # High Pe -> w = 1 (Streamlined/Advection dominated)
+    # Low Pe  -> w = 0 (Mixed/Diffusion dominated)
+    w_node = np.zeros_like(Pe_node)
+    denom = Pe_node + sid.Pe_c
+    valid_w = denom > 0.0
+    w_node[valid_w] = Pe_node[valid_w] / denom[valid_w]
+    
+    # 5. Clamp and Return
 
-    # renormalize each column j so sum_k alpha_eff[k, j] = 1
-    col_sums = np.asarray(alpha_eff.sum(axis=0)).ravel()
-    inv_sum = np.zeros_like(col_sums)
-    mask = col_sums > 0
-    inv_sum[mask] = 1.0 / col_sums[mask]
-    alpha_eff = alpha_eff @ spr.diags(inv_sum)
-    return alpha_eff
+    w_node = np.clip(w_node, 0.0, 1.0)
+    w_edge = (spr.diags(edges.flow) @ inc.incidence > 0) @ w_node
+    return w_node, w_edge
 
-def find_alpha(sid, edges, inc):
+# def additional_mixing(alpha_eff, sid, edges):
+#     eps = sid.mixing_at_barrier  # 1% artificial mixing between the two interface channels
+#     alpha_eff[edges.special[0], edges.special[1]] += eps
+#     alpha_eff[edges.special[1], edges.special[0]] += eps
+
+#     # renormalize each column j so sum_k alpha_eff[k, j] = 1
+#     col_sums = np.asarray(alpha_eff.sum(axis=0)).ravel()
+#     inv_sum = np.zeros_like(col_sums)
+#     mask = col_sums > 0
+#     inv_sum[mask] = 1.0 / col_sums[mask]
+#     alpha_eff = alpha_eff @ spr.diags(inv_sum)
+#     return alpha_eff
+
+import numpy as np
+import scipy.sparse as spr
+
+def calculate_node_weights_with_dispersion_baked(edges, node_diams, inc, sid, eps=1e-15):
+    """
+    Same interface idea as your original: returns w_node,
+    but now w_node is reduced by an along-edge dispersion measure.
+
+    No new parameters: uses sid.Pe_c as the only scale.
+    """
+
+    q_abs = np.abs(edges.flow)
+
+    # --- your original node weight (junction micromixing) ---
+    Q_node = 0.5 * (np.abs(inc.incidence.T) @ q_abs)  # (nn,)
+    d_node = np.maximum(np.asarray(node_diams, float), eps)
+
+    Pe_node = Q_node / d_node
+    w_node = Pe_node / (Pe_node + sid.Pe_c + eps)
+    w_node = np.clip(w_node, 0.0, 1.0)
+
+    # --- dispersion accumulated on edges (heuristic, no new params) ---
+    d_edge = np.maximum(np.asarray(edges.diams, float), eps)
+    Pe_edge = q_abs / d_edge  # consistent with your Pe_node scaling
+
+    # "dispersion strength" in [0,1], increasing with flow and edge length
+    s_edge = 1.0 - np.exp(-edges.lens * (Pe_edge / (sid.Pe_c + eps)))
+    s_edge = np.clip(s_edge, 0.0, 1.0)
+
+    # map edge dispersion to nodes: average over incident edges
+    A = np.abs(inc.incidence.T)                  # (nn x ne)  node-edge adjacency (0/1)
+    deg = np.asarray(A @ np.ones_like(s_edge)).ravel()
+    deg = np.maximum(deg, 1.0)
+
+    s_node = np.asarray(A @ s_edge).ravel() / deg
+    s_node = np.clip(s_node, 0.0, 1.0)
+
+    # effective streamline weight at node after along-edge spreading
+    w_node_eff = np.clip(w_node * (1.0 - s_node), 0.0, 1.0)
+
+    return w_node_eff, s_edge, s_node
+
+
+def find_alpha(sid, edges, inc, node_diams):
     alpha_full = find_full_alpha(edges, inc)
     alpha_stream = find_alpha_stream(sid, edges, inc)
-    w = compute_edge_Pe(edges, sid)
-    alpha_eff = blend_alpha(alpha_stream, alpha_full, w)
-    alpha_eff = additional_mixing(alpha_eff, sid, edges)
-    return alpha_eff
+    #w = compute_edge_Pe(edges, sid)
+    w_node, w_edge = calculate_node_weights(edges, node_diams, inc, sid)
+    #w_node, w_edge, s_node = calculate_node_weights_with_dispersion_baked(edges, node_diams, inc, sid, eps=1e-15)
+    w_node = sid.w_node * np.ones(sid.nsq)
+    alpha_eff = blend_alpha(alpha_stream, alpha_full, w_edge)
+    #alpha_eff = additional_mixing(alpha_eff, sid, edges)
+    #return alpha_eff
+    return alpha_eff, alpha_full, alpha_stream, w_node
 
