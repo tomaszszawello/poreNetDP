@@ -71,10 +71,16 @@ class Data():
     slices_d: list = []
     slices_s: list = []
     slices_c: list = []
+    slices_cy0: list = []
+    slices_cy12: list = []
+    slices_cy1: list = []
     "channelization for slices through the whole system in a given time"
     slice_times: list = []
     "list of times of checking slice channelization"
     front_pos: list = []
+    front_y0: list = []
+    front_y12: list = []
+    front_y1: list = []
     q_in: list = []
     pe: list = []
     breakthrough_times: list = []
@@ -86,6 +92,18 @@ class Data():
         self.dirname = sid.dirname
         self.vol_init = np.sum(edges.diams ** 2 * edges.lens)
 
+    def save_file(self, data_array, file_name):
+        is_saved = False
+        while not is_saved: # prevents problems with opening text file
+            try:
+                file = open(self.dirname + '/' + file_name, 'w', \
+                    encoding = "utf-8")
+                np.savetxt(file, data_array)
+                file.close()
+                is_saved = True
+            except PermissionError:
+                pass
+
     def save_data(self) -> None:
         """ Save data to text file.
 
@@ -93,28 +111,38 @@ class Data():
         columns. If the simulation is continued from saved parameters, new data
         is appended to that previously collected.
         """
-        is_saved = False
-        while not is_saved: # prevents problems with opening text file
-            try:
-                file = open(self.dirname + '/params.txt', 'w', \
-                    encoding = "utf-8")
-                np.savetxt(file, np.array([self.t, self.dissolved_v_list, self.pressure, self.porosity, self.participation_ratio, self.cb_out, \
-                    self.cc_out], dtype = float).T)
-                file.close()
-                is_saved = True
-            except PermissionError:
-                pass
+        # is_saved = False
+        # while not is_saved: # prevents problems with opening text file
+        #     try:
+        #         file = open(self.dirname + '/params.txt', 'w', \
+        #             encoding = "utf-8")
+        #         np.savetxt(file, np.array([self.t, self.dissolved_v_list, self.pressure, self.porosity, self.participation_ratio, self.cb_out, \
+        #             self.cc_out], dtype = float).T)
+        #         file.close()
+        #         is_saved = True
+        #     except PermissionError:
+        #         pass
         # self slice data to slices.txt
-        is_saved = False
-        while not is_saved: # prevents problems with opening text file
-            try:
-                file = open(self.dirname + '/profiles.txt', 'w', \
-                    encoding = "utf-8")
-                np.savetxt(file, self.slices)
-                file.close()
-                is_saved = True
-            except PermissionError:
-                pass
+        # is_saved = False
+        # while not is_saved: # prevents problems with opening text file
+        #     try:
+        #         file = open(self.dirname + '/profiles.txt', 'w', \
+        #             encoding = "utf-8")
+        #         np.savetxt(file, self.slices)
+        #         file.close()
+        #         is_saved = True
+        #     except PermissionError:
+        #         pass
+        self.save_file(self.slices, 'profiles.txt')
+        self.save_file(self.slices_c, 'concentration_avr.txt')
+        self.save_file(self.slices_cy0, 'concentration_y0.txt')
+        self.save_file(self.slices_cy12, 'concentration_y12.txt')
+        self.save_file(self.slices_cy1, 'concentration_y1.txt')
+        self.save_file(self.slices_cy1, 'concentration_y1.txt')
+        self.slice_times = np.asarray(self.slice_times, dtype=float)
+        self.save_file(self.slice_times, 'slice_times.txt')
+        self.save_file(np.array([self.t, self.front_pos, self.front_y0, self.front_y12, self.front_y1]).T, 'front_pos.txt')
+    
         # is_saved = False
         # while not is_saved: # prevents problems with opening text file
         #     try:
@@ -166,7 +194,7 @@ class Data():
         #     * edges.outlet)) @ cb * sid.dt)
 
 
-    def collect_data(self, sid: SimInputData, inc: Incidence, edges: Edges, vols, triangles, \
+    def collect_data(self, sid: SimInputData, inc: Incidence, edges: Edges, graph: Graph, vols, triangles, \
         p: np.ndarray, cb: np.ndarray, cc: np.ndarray) -> None:
         """ Collect data from different vectors.
 
@@ -282,6 +310,19 @@ class Data():
         mask = vols.vol_a < 0.1 * vols.vol_a_0
         y = np.array(triangles.centers)[mask, 0]
         front = np.quantile(y, 0.95) if y.size else 0
+        pos_y = np.array(list(nx.get_node_attributes(graph, 'pos').values()))[:,1]
+        y0_mask = (np.array(triangles.centers)[:, 1] <= np.max(pos_y) * 0.05) & mask
+        y0 = np.array(triangles.centers)[y0_mask, 0]
+        front_y0 = np.quantile(y0, 0.95) if y0.size else 0
+        y12_mask = (np.array(triangles.centers)[:, 1] >= np.max(pos_y) * 0.45) & (np.array(triangles.centers)[:, 1] <= np.max(pos_y) * 0.55) & mask
+        y12 = np.array(triangles.centers)[y12_mask, 0]
+        front_y12 = np.quantile(y12, 0.95) if y12.size else 0
+        y1_mask = (np.array(triangles.centers)[:, 1] >= np.max(pos_y) * 0.95) & mask
+        y1 = np.array(triangles.centers)[y1_mask, 0]
+        front_y1 = np.quantile(y1, 0.95) if y1.size else 0
+        self.front_y0.append(front_y0)
+        self.front_y12.append(front_y12)
+        self.front_y1.append(front_y1)
         #self.front_pos.append(np.max(triangles.centers[np.where(vols.vol_a < 0.1 * vols.vol_a_0)][:,1]))
         self.front_pos.append(front)
         q_in_now = np.sum(np.abs(edges.diams ** 4 / edges.lens * (inc.inlet \
@@ -347,6 +388,7 @@ class Data():
             percentage of edges taking half of the flow in the slice
         """
         pos_x = np.array(list(nx.get_node_attributes(graph, 'pos').values()))[:,0]
+        pos_y = np.array(list(nx.get_node_attributes(graph, 'pos').values()))[:,1]
         # find edges crossing the given slice and their orientation - if edge
         # crosses the slice from left to right, it is marked with 1, if from
         # right to left - -1, if it doesn't cross - 0
@@ -359,6 +401,21 @@ class Data():
             cb_slice = np.average(cb_edges[np.where(cb_edges > 0)])
         else:
             cb_slice = 0
+        cb_edges_y0 = (spr.diags(edges.flow) @ inc.incidence > 0) @ (cb * (pos_y <= np.max(pos_y) * 0.05)) * slice_edges
+        if np.sum(cb_edges_y0):
+            cb_slice_y0 = np.average(cb_edges_y0[np.where(cb_edges_y0 > 0)])
+        else:
+            cb_slice_y0 = 0
+        cb_edges_y12 = (spr.diags(edges.flow) @ inc.incidence > 0) @ (cb * (pos_y >= np.max(pos_y) * 0.45) * (pos_y <= np.max(pos_y) * 0.55)) * slice_edges
+        if np.sum(cb_edges_y12):
+            cb_slice_y12 = np.average(cb_edges_y12[np.where(cb_edges_y12 > 0)])
+        else:
+            cb_slice_y12 = 0
+        cb_edges_y1 = (spr.diags(edges.flow) @ inc.incidence > 0) @ (cb * (pos_y >= np.max(pos_y) * 0.95)) * slice_edges
+        if np.sum(cb_edges_y1):
+            cb_slice_y1 = np.average(cb_edges_y1[np.where(cb_edges_y1 > 0)])
+        else:
+            cb_slice_y1 = 0
         # sort edges from maximum flow to minimum (taking into account
         # their orientation)
         slice_flow = np.array(sorted(slice_edges * np.abs(edges.flow), reverse = True))
@@ -389,7 +446,7 @@ class Data():
             if fraction_surface > total_surface / 2:
                 surface_50 = i + 1
                 break
-        return (flow_50, np.sum(slice_flow != 0), diams_50, np.sum(slice_diams != 0), surface_50, np.sum(surface_50 != 0), cb_slice)
+        return (flow_50, np.sum(slice_flow != 0), diams_50, np.sum(slice_diams != 0), surface_50, np.sum(surface_50 != 0), cb_slice, cb_slice_y0, cb_slice_y12, cb_slice_y1)
 
     def check_init_slice_channelization(self, graph: Graph, inc: Incidence, \
         edges: Edges, cb: np.ndarray) -> None:
@@ -414,17 +471,23 @@ class Data():
         channels_tab = []
         diams_tab = []
         surface_tab = []
-        c_tab = []
+        c_tab, cy0_tab, cy12_tab, cy1_tab = [], [], [], []
         for x in slices:
             res = self.check_channelization(graph, inc, edges, cb, x)
             channels_tab.append(res[0])
             diams_tab.append(res[2])
             surface_tab.append(res[4])
             c_tab.append(res[6])
+            cy0_tab.append(res[7])
+            cy12_tab.append(res[8])
+            cy1_tab.append(res[9])
         self.slices.append(channels_tab)
         self.slices_d.append(diams_tab)
         self.slices_s.append(surface_tab)
         self.slices_c.append(c_tab)
+        self.slices_cy0.append(cy0_tab)
+        self.slices_cy12.append(cy12_tab)
+        self.slices_cy1.append(cy1_tab)
         self.slice_times.append("{0}".format(str(round(time, 1) if time % 1 else int(time))))
 
     def plot_slice_channelization(self, graph: Graph) -> None:
@@ -627,7 +690,6 @@ class Data():
         to files slices.png, slices_no_div.png, slices_norm.png.
         """
         pos_x = np.array(list(nx.get_node_attributes(graph, 'pos').values()))[:,0]
-        # slices = np.linspace(np.min(pos_x), np.max(pos_x), 120)[10:-10]
         slices = np.linspace(np.min(pos_x), np.max(pos_x), 102)[1:-1]
         colors = ['C0', 'C1', 'C2', 'C3', 'C4', 'C5', 'C6', 'C7', 'C8', 'C9']
         plt.figure(figsize = (15, 10))
@@ -636,34 +698,57 @@ class Data():
             plt.plot(slices, channeling, label = self.slice_times[i+1], color = colors[i], linewidth = 5)
         plt.ylim(0, 1.05)
         plt.xlabel('x', fontsize = 60, style = 'italic')
-        # ax2.xaxis.label.set_color('white')
-        # ax2.tick_params(axis = 'x', colors='white')
-        #plt.xticks([],[])
         plt.subplots_adjust(wspace=0, hspace=0)
         plt.margins(tight = True)
         plt.ylabel('average concentration', fontsize = 50)
-        #plt.yticks([],[])
         plt.yticks([0, 0.5, 1],['0', '0.5', '1'])
-        handles, labels = plt.gca().get_legend_handles_labels()
-        #order = [0,4,1,5,2,6,3,7]
-        # order = []
-        # for i in range(len(handles) // 2):
-        #     order.append(i)
-        #     if i == len(handles) // 2 - 1:
-        #         if len(handles) % 2 == 0:
-        #             order.append(len(handles) // 2 + i)
-        #     else:
-        #         order.append(len(handles) // 2 + i)
         legend = plt.legend(loc="lower center", mode = "expand", ncol = 4, prop={'size': 40}, handlelength = 1, frameon=False, borderpad = 0, handletextpad = 0.4)
         for legobj in legend.legend_handles:
             legobj.set_linewidth(10.0)
-        #spine_color = 'blue'
-        # for spine in ax1.spines.values():
-        #     spine.set_linewidth(5)
-        #     spine.set_edgecolor(spine_color)
-        # for spine in ax2.spines.values():
-        #     spine.set_linewidth(5)
-        #     spine.set_edgecolor(spine_color)
-        # save file in the directory
         plt.savefig(self.dirname + "/concentration.png", bbox_inches="tight")
+        plt.close()
+        plt.figure(figsize = (15, 10))
+        plt.plot(slices, self.slices_cy0[1], linewidth = 5, color = 'black', label = '0.0')
+        for i, channeling in enumerate(self.slices_cy0[2:]):
+            plt.plot(slices, channeling, label = self.slice_times[i+1], color = colors[i], linewidth = 5)
+        plt.ylim(0, 1.05)
+        plt.xlabel('x', fontsize = 60, style = 'italic')
+        plt.subplots_adjust(wspace=0, hspace=0)
+        plt.margins(tight = True)
+        plt.ylabel('concentration at y=0', fontsize = 50)
+        plt.yticks([0, 0.5, 1],['0', '0.5', '1'])
+        legend = plt.legend(loc="lower center", mode = "expand", ncol = 4, prop={'size': 40}, handlelength = 1, frameon=False, borderpad = 0, handletextpad = 0.4)
+        for legobj in legend.legend_handles:
+            legobj.set_linewidth(10.0)
+        plt.savefig(self.dirname + "/concentration_y0.png", bbox_inches="tight")
+        plt.close()
+        plt.figure(figsize = (15, 10))
+        plt.plot(slices, self.slices_cy12[1], linewidth = 5, color = 'black', label = '0.0')
+        for i, channeling in enumerate(self.slices_cy12[2:]):
+            plt.plot(slices, channeling, label = self.slice_times[i+1], color = colors[i], linewidth = 5)
+        plt.ylim(0, 1.05)
+        plt.xlabel('x', fontsize = 60, style = 'italic')
+        plt.subplots_adjust(wspace=0, hspace=0)
+        plt.margins(tight = True)
+        plt.ylabel('concentration at y=1/2', fontsize = 50)
+        plt.yticks([0, 0.5, 1],['0', '0.5', '1'])
+        legend = plt.legend(loc="lower center", mode = "expand", ncol = 4, prop={'size': 40}, handlelength = 1, frameon=False, borderpad = 0, handletextpad = 0.4)
+        for legobj in legend.legend_handles:
+            legobj.set_linewidth(10.0)
+        plt.savefig(self.dirname + "/concentration_y12.png", bbox_inches="tight")
+        plt.close()
+        plt.figure(figsize = (15, 10))
+        plt.plot(slices, self.slices_cy1[1], linewidth = 5, color = 'black', label = '0.0')
+        for i, channeling in enumerate(self.slices_cy1[2:]):
+            plt.plot(slices, channeling, label = self.slice_times[i+1], color = colors[i], linewidth = 5)
+        plt.ylim(0, 1.05)
+        plt.xlabel('x', fontsize = 60, style = 'italic')
+        plt.subplots_adjust(wspace=0, hspace=0)
+        plt.margins(tight = True)
+        plt.ylabel('concentration at y = 1', fontsize = 50)
+        plt.yticks([0, 0.5, 1],['0', '0.5', '1'])
+        legend = plt.legend(loc="lower center", mode = "expand", ncol = 4, prop={'size': 40}, handlelength = 1, frameon=False, borderpad = 0, handletextpad = 0.4)
+        for legobj in legend.legend_handles:
+            legobj.set_linewidth(10.0)
+        plt.savefig(self.dirname + "/concentration_y1.png", bbox_inches="tight")
         plt.close()

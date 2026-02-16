@@ -15,9 +15,9 @@ class SimInputData:
     ''' Configuration class for the whole simulation.
     '''
     # GENERAL
-    n: int = 20
+    n: int = 50
     "network size along y (transverse to the flow)"
-    m: int = 20
+    m: int = 50
     "network size along x (parallel to the flow)"
     iters: int = 10000000
     "maximum number of iterations"
@@ -51,7 +51,7 @@ class SimInputData:
     include_diffusion = True
     ksi = 4.364 * 100 # Sh / chi ^ 2
     #Pe = Pe_L * 2 / (np.pi * chi0 ** 2)
-    Pe = 1. #Pe_L * 4 / (np.pi * chi0 ** 2)
+    Pe = 0.01 #Pe_L * 4 / (np.pi * chi0 ** 2)
     Da: float = 100 / Pe
     Da2 = 10
     grain_vol = 1
@@ -159,7 +159,7 @@ class SimInputData:
     "threshold for drawing of diameters"
 
     # INITIALIZATION
-    load: int = 2
+    load: int = 0
     ("type of loading: 0 - build new network based on config and start new \
      simulation, 1 - load previous network from load_name and continue \
      simulation, 2 - load template network from load_name and start new \

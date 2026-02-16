@@ -184,7 +184,7 @@ while t < tmax and i < iters and data.dissolved_v < sid.dissolved_v_max and not 
     # if breakthrough:
     #     break
 
-    data.collect_data(sid, inc, edges, vols, triangles, pressure, cb, cc)
+    data.collect_data(sid, inc, edges, graph, vols, triangles, pressure, cb, cc)
     # merge edges
     if sid.include_merging:
         print ('Merging')
@@ -225,7 +225,7 @@ if i != 1 and sid.load != 1 and not sid.debug:
     # save_VTK(sid, graph, edges, pressure, cb, \
     #     f'network_{t:.1f}.vtk')
 
-    #data.save_data()
+    #
     #data.plot_profile(graph)
     #Tr.plot_tracking(data, 100)
     # Dr.draw_flow_profile(sid, graph, edges, data, \
@@ -243,5 +243,6 @@ if i != 1 and sid.load != 1 and not sid.debug:
     data.plot_front(sid)
     data.plot_flow(sid)
     data.plot_pe(sid)
+    data.save_data()
 
 Dr.draw_triangles2(sid, triangles, graph, vols, f'tri_final_{t:.1f}.jpg')
