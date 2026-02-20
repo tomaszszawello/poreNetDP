@@ -14,7 +14,7 @@ import dissolution as Di
 import diffusion as Dif
 import draw_net as Dr
 import growth as Gr
-import merging_chat as Me
+import merging as Me
 import electroosmosis as Osm
 import precipitation as Pi
 import pressure as Pr
@@ -40,6 +40,7 @@ q_in = np.sum(np.abs(edges.diams ** 4 / edges.lens * (inc.inlet \
     @ pressure)))
 #sid.p_in = 2 * sid.n / q_in
 sid.qin = q_in
+sid.Q_in = 10000
 print(sid.p_in, sid.qin, q_in)
 Sv.save_config(sid)
 
@@ -61,6 +62,7 @@ while t < tmax and i < iters and data.dissolved_v < sid.dissolved_v_max and not 
         Dissolved {data.dissolved_v:.2f}/{sid.dissolved_v_max:.2f}'))
     print(np.sum(vols.vol_a), np.sum(vols.vol_a_0))
     print(np.max(edges.diams))
+    print('inlet: ', edges.inlet, 'outlet: ', edges.outlet)
     # initialize vectors
     #
 

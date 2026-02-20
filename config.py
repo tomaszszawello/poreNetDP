@@ -15,15 +15,15 @@ class SimInputData:
     ''' Configuration class for the whole simulation.
     '''
     # GENERAL
-    n: int = 50
+    n: int = 5
     "network size along y (transverse to the flow)"
-    m: int = 50
+    m: int = 5
     "network size along x (parallel to the flow)"
-    iters: int = 10000000
+    iters: int = 3#10000000
     "maximum number of iterations"
     
     "maximum time"
-    phi = 0.0001
+    phi = 0.001
     dissolved_v_max: float = 100000000.
     "maximum dissolved pore volume"
     plot_every: int = 100000
@@ -35,6 +35,7 @@ class SimInputData:
     "times of checking channelization"
 
     p_in = 1
+    frac_diam = 10
 
     # DISSOLUTION & PRECIPITATION
     Da_L = 100
@@ -51,12 +52,12 @@ class SimInputData:
     include_diffusion = True
     ksi = 4.364 * 100 # Sh / chi ^ 2
     #Pe = Pe_L * 2 / (np.pi * chi0 ** 2)
-    Pe = 0.01 #Pe_L * 4 / (np.pi * chi0 ** 2)
-    Da: float = 100 / Pe
-    Da2 = 10
+    Pe = 1 #Pe_L * 4 / (np.pi * chi0 ** 2)
+    Da2: float = 0.01
+    Da: float = Da2 / Pe
     grain_vol = 1
 
-    tmax: float = 5000.
+    tmax: float = 100000.
     track_every: int = tmax / 10
     inert_fraction = 0.7
 
@@ -117,7 +118,7 @@ class SimInputData:
     # TIME
     dt: float = 0.000001
     "initial timestep (if no adaptive timestep, timestep for whole simulation)"
-    growth_rate: float = 0.05
+    growth_rate: float = 0.2
     ("maximum percentage growth of an edges (used for finding adaptive \
      timestep)")
     dt_max: float = 50000.
@@ -147,11 +148,11 @@ class SimInputData:
     sigma_phi: float = 0#.2
 
     # DRAWING
-    figsize: float = 10.
+    figsize: float = 20.
     "figure size"
-    qdrawconst: float = 0.00001
+    qdrawconst: float = 0.01
     "constant for improving flow drawing"
-    ddrawconst: float = 0.1 #2400 / n * chi0 #10 / n
+    ddrawconst: float = 0.01 #2400 / n * chi0 #10 / n
     "constant for improving diameter drawing"
     draw_th_q: float = 0.1
     "threshold for drawing of flow"
@@ -171,15 +172,16 @@ class SimInputData:
     "name of loaded network"
 
     # GEOMETRY
-    geo: str = "rect" # WARNING - own is deprecated
+    #geo: str = "rect" # WARNING - own is deprecated
+    geo: str = "own"
     ("type of geometry: 'rect' - rectangular, 'own' - custom inlet and outlet \
      nodes, set in in/out_nodes_own")
     periodic: str = 'none'
     ("periodic boundary condition: 'none' - no PBC, 'top' - up and down, \
      'side' - left and right, 'all' - PBC everywhere")
-    in_nodes_own: np.ndarray = np.array([[20, 50]]) / 100 * n
+    in_nodes_own: np.ndarray = np.array([[0, 0]]) / 100 * n
     "custom outlet for 'own' geometry"
-    out_nodes_own: np.ndarray = np.array([[80, 50], [70, 25], [70, 75]]) \
+    out_nodes_own: np.ndarray = np.array([[0, 100]]) \
         / 100 * n
     "custom outlet for 'own' geometry"
 

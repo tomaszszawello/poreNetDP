@@ -49,7 +49,8 @@ def create_vector(sid: SimInputData, graph: Graph) -> spr.csc_matrix:
     p_vec = np.zeros(sid.nsq)
     for i, node in enumerate(graph.in_nodes):
         p_vec[node] = in_pressures[i]
-    return p_vec
+    #return p_vec
+    return graph.in_vec
 
 def solve_flow(sid: SimInputData, inc: Incidence, graph: Graph, edges: Edges, \
     pressure_b: spr.csc_matrix) -> np.ndarray:
@@ -103,9 +104,9 @@ def solve_flow(sid: SimInputData, inc: Incidence, graph: Graph, edges: Edges, \
     pressure = solve_equation(p_matrix, pressure_b)
     # normalize pressure in inlet nodes to match condition for constant inlet
     # flow
-    # q_in = np.abs(np.sum(edges.diams ** 4 / edges.lens * (inc.inlet \
-    #     @ pressure)))
-    # pressure *= sid.Q_in / q_in
+    q_in = np.abs(np.sum(edges.diams ** 4 / edges.lens * (inc.inlet \
+        @ pressure)))
+    pressure *= sid.Q_in / q_in
     # update flow
     edges.flow = cond * (inc.incidence @ pressure)
     flow_in = np.sum(spr.diags(np.abs(edges.flow)) @ (spr.diags(edges.flow) @ inc.incidence > 0) @ graph.in_vec)

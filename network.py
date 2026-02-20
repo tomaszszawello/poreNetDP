@@ -145,11 +145,15 @@ def set_geometry(sid: SimInputData, graph: Graph) -> None:
         in_nodes = []
         out_nodes = []
         for pos in in_nodes_pos:
-            in_nodes.append(find_node(pos))
+            in_nodes.append(find_node(graph, pos))
         for pos in out_nodes_pos:
-            out_nodes.append(find_node(pos))
+            out_nodes.append(find_node(graph, pos))
         graph.in_nodes = np.array(in_nodes)
         graph.out_nodes = np.array(out_nodes)
+        graph.in_vec = np.zeros(sid.nsq)
+        graph.in_vec[graph.in_nodes] = 1
+        graph.out_vec = np.zeros(sid.nsq)
+        graph.out_vec[graph.out_nodes] = 1
     else:
         raise ValueError(f"Unknown geometry type: {sid.geo}")
     sid.Q_in = sid.qin * 2 * len(graph.in_nodes)
@@ -367,9 +371,11 @@ def build_delaunay_net(sid: SimInputData, inc: Incidence) \
             #if (node1, node2) not in edge_list:
             if (node1, node2) not in edge_list:
                 if lens_tr[i] > 3:
+
                     continue
-                if pos[node1][0] == 0 and pos[node2][0] == 0:
-                    continue
+                # if pos[node1][0] == 0 and pos[node2][0] == 0:
+                #     continue
+
                 if pos[node1][0] == sid.n and pos[node2][0] == sid.n:
                     continue
                 edge_list[(node1, node2)] = edge_index
@@ -484,3 +490,8 @@ def build_delaunay_net(sid: SimInputData, inc: Incidence) \
     nx.set_node_attributes(graph, dict(zip(list(range(sid.nsq)), pos)), 'pos')
 
     return graph, edges, triangles
+
+def build_fracture(sid, inc, edges, graph):
+    pos_x = np.array(list(nx.get_node_attributes(graph, 'pos').values()))[:,0]
+    fracture_edges = np.abs(inc.incidence) @ (pos_x == 0) == 2
+    edges.diams[fracture_edges] = sid.frac_diam

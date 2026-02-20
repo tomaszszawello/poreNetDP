@@ -307,28 +307,43 @@ class Data():
         self.cc_out.append(self.delta_c)
         self.dissolved_v = (np.sum(edges.diams ** 2 * edges.lens) - self.vol_init) / self.vol_init
         self.dissolved_v_list.append(self.dissolved_v)
-        mask = vols.vol_a < 0.1 * vols.vol_a_0
+        mask = vols.vol_a < 0.9 * vols.vol_a_0
         y = np.array(triangles.centers)[mask, 0]
-        front = np.quantile(y, 0.95) if y.size else 0
+        front = np.quantile(y, 0.99) if y.size else 0
         pos_y = np.array(list(nx.get_node_attributes(graph, 'pos').values()))[:,1]
-        y0_mask = (np.array(triangles.centers)[:, 1] <= np.max(pos_y) * 0.05) & mask
+        y0_mask = (np.array(triangles.centers)[:, 1] >= np.max(pos_y) * 0.05) & (np.array(triangles.centers)[:, 1] <= np.max(pos_y) * 0.10) & mask
         y0 = np.array(triangles.centers)[y0_mask, 0]
-        front_y0 = np.quantile(y0, 0.95) if y0.size else 0
+        front_y0 = np.quantile(y0, 0.99) if y0.size else 0
         y12_mask = (np.array(triangles.centers)[:, 1] >= np.max(pos_y) * 0.45) & (np.array(triangles.centers)[:, 1] <= np.max(pos_y) * 0.55) & mask
         y12 = np.array(triangles.centers)[y12_mask, 0]
-        front_y12 = np.quantile(y12, 0.95) if y12.size else 0
-        y1_mask = (np.array(triangles.centers)[:, 1] >= np.max(pos_y) * 0.95) & mask
+        front_y12 = np.quantile(y12, 0.99) if y12.size else 0
+        y1_mask = (np.array(triangles.centers)[:, 1] >= np.max(pos_y) * 0.90) &(np.array(triangles.centers)[:, 1] <= np.max(pos_y) * 0.95) & mask
         y1 = np.array(triangles.centers)[y1_mask, 0]
-        front_y1 = np.quantile(y1, 0.95) if y1.size else 0
+        front_y1 = np.quantile(y1, 0.99) if y1.size else 0
         self.front_y0.append(front_y0)
         self.front_y12.append(front_y12)
         self.front_y1.append(front_y1)
         #self.front_pos.append(np.max(triangles.centers[np.where(vols.vol_a < 0.1 * vols.vol_a_0)][:,1]))
         self.front_pos.append(front)
-        q_in_now = np.sum(np.abs(edges.diams ** 4 / edges.lens * (inc.inlet \
-            @ p))) / sid.n
-        self.q_in.append(q_in_now)
-        self.pe.append(q_in_now * (sid.n / np.sum(edges.inlet * edges.diams)) ** 2 * sid.Pe)
+        
+
+        eps = 1e-30
+        q_edge = edges.diams**4 / edges.lens * (inc.inlet @ p)   # signed (check sign convention!)
+        mask_in = edges.inlet.astype(bool)
+
+        # keep only inflow (choose sign based on your convention)
+        # If q_edge > 0 means into the domain, use this:
+        q_in = np.maximum(q_edge, 0.0)
+        # If q_edge < 0 means into the domain, use this instead:
+        # q_in = np.maximum(-q_edge, 0.0)
+        self.q_in.append(np.sum(q_in))
+        N_in = int(mask_in.sum())
+        q_over_d2 = (q_in[mask_in] / (edges.diams[mask_in]**2 + eps))
+        q_over_d2_mean = q_over_d2.mean() if N_in else 0.0
+
+        # If sid.Pe was defined with d0=1 and q0=1 type normalization, you can scale by a reference:
+        Pe_eff = sid.Pe * q_over_d2_mean
+        self.pe.append(Pe_eff)
         # if self.delta_b - sid.Da * vol_a / 2 > 1e-5:
         #     raise ValueError("Mass lost")
 
