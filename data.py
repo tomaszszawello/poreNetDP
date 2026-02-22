@@ -105,8 +105,7 @@ class Data():
             try:
                 file = open(self.dirname + '/params.txt', 'w', \
                     encoding = "utf-8")
-                np.savetxt(file, np.array([self.t, self.dissolved_v_list, self.pressure, self.porosity, self.replaced, self.cb_out, \
-                    self.cc_out, self.vol_dissolved_list, self.vol_precipitated_list, self.delta_d_list], dtype = float).T)
+                np.savetxt(file, np.array([self.t, self.dissolved_v_list, self.pressure, self.porosity, self.replaced, self.vol_dissolved_list, self.vol_precipitated_list], dtype = float).T)
                 file.close()
                 is_saved = True
             except PermissionError:
@@ -182,7 +181,7 @@ class Data():
 
 
     def collect_data(self, sid: SimInputData, inc: Incidence, edges: Edges, vols, \
-        p: np.ndarray, cb: np.ndarray, cc: np.ndarray, cd: np.ndarray) -> None:
+        p: np.ndarray, cb: np.ndarray, cc: np.ndarray) -> None:
         """ Collect data from different vectors.
 
         This function extracts information such as permeability, quantity of
@@ -260,47 +259,47 @@ class Data():
         # delta = np.abs((np.abs(inc.incidence.T < 0) @ (np.abs(edges.flow) \
         #     * edges.inlet) - np.abs(inc.incidence.T > 0) @ (np.abs(edges.flow) \
         #     * edges.outlet)) @ cb * sid.dt)
-        if sid.include_diffusion:
-            print(f'J_in: {self.J_in}, J_out: {self.J_out}')
-            delta = (self.J_in - self.J_out) * sid.dt
-        else:
-            # delta = np.abs((np.abs(inc.incidence.T < 0) @ (np.abs(edges.flow) \
-            #     * edges.inlet) - np.abs(inc.incidence.T > 0) @ (np.abs(edges.flow) \
-            #     * edges.outlet)) @ cb * sid.dt)
-            delta = np.abs(np.abs(1 * ( inc.incidence.T @ spr.diags(edges.flow) > 0) @ (np.abs(edges.flow) \
-                 * edges.inlet)) @ cb - np.abs(1 * ( inc.incidence.T @ spr.diags(edges.flow) < 0) @ (np.abs(edges.flow) \
-                 * edges.outlet)) @ cb) * sid.dt
+        # if sid.include_diffusion:
+        #     print(f'J_in: {self.J_in}, J_out: {self.J_out}')
+        #     delta = (self.J_in - self.J_out) * sid.dt
+        # else:
+        #     # delta = np.abs((np.abs(inc.incidence.T < 0) @ (np.abs(edges.flow) \
+        #     #     * edges.inlet) - np.abs(inc.incidence.T > 0) @ (np.abs(edges.flow) \
+        #     #     * edges.outlet)) @ cb * sid.dt)
+        #     delta = np.abs(np.abs(1 * ( inc.incidence.T @ spr.diags(edges.flow) > 0) @ (np.abs(edges.flow) \
+        #          * edges.inlet)) @ cb - np.abs(1 * ( inc.incidence.T @ spr.diags(edges.flow) < 0) @ (np.abs(edges.flow) \
+        #          * edges.outlet)) @ cb) * sid.dt
         vol_dissolved = np.sum(edges.diams ** 2 * edges.lens) - self.vol_init
         vol_a = np.sum(vols.vol_a_0 - vols.vol_a)
         print(f'Zero volume: {np.sum(vols.vol_a == 0)}')
-        self.delta_b += delta
+        #self.delta_b += delta
         # delta2 = np.abs((np.abs(inc.incidence.T < 0) @ (np.abs(edges.flow) \
         #         * edges.inlet) - np.abs(inc.incidence.T > 0) @ (np.abs(edges.flow) \
         #         * edges.outlet)) @ cb * sid.dt)
         # print(f'Delta2: {delta2}')
         # print(f'Delta3: {(J_in - J_out2) * sid.dt}')
         # print(f'Delta4: {(J_in - J_out3) * sid.dt}')
-        print(f'Used concentration: {self.delta_b}, Dissolved volume: {sid.Da * vol_dissolved}, Dissolved volume A: {sid.Da * vol_a}')
+        #print(f'Used concentration: {self.delta_b}, Dissolved volume: {sid.Da * vol_dissolved}, Dissolved volume A: {sid.Da * vol_a}')
         #print(f'c - V: {(self.delta_b - sid.Da * vol_dissolved / 2) / self.delta_b}, c - V_A: {(self.delta_b - sid.Da * vol_a / 2) / self.delta_b}, V - V_A {(vol_dissolved - vol_a) / vol_dissolved}')
         #print(f'c - V: {(self.delta_b - sid.Da * vol_dissolved)}, c - V_A: {(self.delta_b - sid.Da * vol_a)}, V - V_A {(vol_dissolved - vol_a)}')
-        self.cb_out.append(self.delta_b)
-        delta_c = np.abs(np.abs(1 * ( inc.incidence.T @ spr.diags(edges.flow) > 0) @ (np.abs(edges.flow) \
-                 * edges.inlet)) @ cc - np.abs(1 * ( inc.incidence.T @ spr.diags(edges.flow) < 0) @ (np.abs(edges.flow) \
-                 * edges.outlet)) @ cc) * sid.dt
-        self.delta_c += delta_c
-        delta_d = np.abs(np.abs(1 * ( inc.incidence.T @ spr.diags(edges.flow) > 0) @ (np.abs(edges.flow) \
-                 * edges.inlet)) @ cd - np.abs(1 * ( inc.incidence.T @ spr.diags(edges.flow) < 0) @ (np.abs(edges.flow) \
-                 * edges.outlet)) @ cd) * sid.dt
-        self.delta_d += delta_d
-        self.delta_d_list.append(self.delta_d)
+        #self.cb_out.append(self.delta_b)
+        # delta_c = np.abs(np.abs(1 * ( inc.incidence.T @ spr.diags(edges.flow) > 0) @ (np.abs(edges.flow) \
+        #          * edges.inlet)) @ cc - np.abs(1 * ( inc.incidence.T @ spr.diags(edges.flow) < 0) @ (np.abs(edges.flow) \
+        #          * edges.outlet)) @ cc) * sid.dt
+        # self.delta_c += delta_c
+        # delta_d = np.abs(np.abs(1 * ( inc.incidence.T @ spr.diags(edges.flow) > 0) @ (np.abs(edges.flow) \
+        #          * edges.inlet)) @ cd - np.abs(1 * ( inc.incidence.T @ spr.diags(edges.flow) < 0) @ (np.abs(edges.flow) \
+        #          * edges.outlet)) @ cd) * sid.dt
+        # self.delta_d += delta_d
+        # self.delta_d_list.append(self.delta_d)
         # self.injected_d += np.abs(np.abs(1 * ( inc.incidence.T @ spr.diags(edges.flow) > 0) @ (np.abs(edges.flow) \
         #          * edges.inlet)) @ cd) * sid.dt
         # self.injected_list.append(self.injected_d)
-        print(f'Delta c_B: {self.delta_b}, Delta c_C: {self.delta_c}, Delta c_D: {self.delta_d}')
-        print(f'Delta c_B + Delta c_C - Delta c_D: {(delta - delta_c - delta_d)}')
+        #print(f'Delta c_B: {self.delta_b}, Delta c_C: {self.delta_c}, Delta c_D: {self.delta_d}')
+        #print(f'Delta c_B + Delta c_C - Delta c_D: {(delta - delta_c - delta_d)}')
         # if np.abs(delta - delta_c - delta_d) > 1e-3:
         #     raise ValueError
-        self.cc_out.append(self.delta_c)
+        #self.cc_out.append(self.delta_c)
         self.dissolved_v = np.sum(vols.vol_a) / np.sum(vols.vol_max)
         self.dissolved_v_list.append(self.dissolved_v)
         self.porosity.append(1 - np.sum(vols.vol_a + vols.vol_e) / np.sum(vols.vol_max))
@@ -622,16 +621,16 @@ class Data():
         plt.xlabel(r'injected B $\nu_\text{A} / V^0_\text{A}$', fontsize = 50)
         plt.savefig(self.dirname + '/replaced.png', bbox_inches="tight")
         plt.close()
-        plt.figure(figsize = (15, 10))
-        plt.title('Reacted D')
-        plt.plot(sid.cb_in * np.array(self.t) * sid.Q_in / (2 * sid.Da * sid.ne * sid.phi / (1 - sid.phi)), np.array(self.delta_d_list) / (2 * sid.Da * sid.ne * sid.phi / (1 - sid.phi)), linewidth = 5, color = 'black')
-        plt.grid()
-        plt.ylabel(r'reacted  D $\nu_\text{A} / V^0_\text{A}$', fontsize = 50)
-        #plt.subplots_adjust(wspace=0, hspace=0)
-        plt.margins(tight = True)
-        plt.xlabel(r'injected B $\nu_\text{A} / V^0_\text{A}$', fontsize = 50)
-        plt.savefig(self.dirname + '/reacted_d.png', bbox_inches="tight")
-        plt.close()
+        # plt.figure(figsize = (15, 10))
+        # plt.title('Reacted D')
+        # plt.plot(sid.cb_in * np.array(self.t) * sid.Q_in / (2 * sid.Da * sid.ne * sid.phi / (1 - sid.phi)), np.array(self.delta_d_list) / (2 * sid.Da * sid.ne * sid.phi / (1 - sid.phi)), linewidth = 5, color = 'black')
+        # plt.grid()
+        # plt.ylabel(r'reacted  D $\nu_\text{A} / V^0_\text{A}$', fontsize = 50)
+        # #plt.subplots_adjust(wspace=0, hspace=0)
+        # plt.margins(tight = True)
+        # plt.xlabel(r'injected B $\nu_\text{A} / V^0_\text{A}$', fontsize = 50)
+        # plt.savefig(self.dirname + '/reacted_d.png', bbox_inches="tight")
+        # plt.close()
 
     def check_porosity_profile(self, graph: Graph, inc: Incidence, edges: Edges, triangles: Triangles, \
         vols: Volumes, slice_x: float) -> tuple[int, float]:
