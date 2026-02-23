@@ -186,6 +186,159 @@ def kagome_from_delaunay(points: np.ndarray,
 
     return Gk
 
+import numpy as np
+import networkx as nx
+import scipy.spatial as spt
+
+def kagome_from_delaunay2(points: np.ndarray,
+                         max_edge_ratio: float = 1.8,
+                         store_maps: bool = True,
+                         prune_horizontal_boundary_edges: bool = True,
+                         angle_tol_deg: float = 8.0,
+                         boundary_band: float | None = None):
+    """
+    Build throat-centered Kagome network from Delaunay triangulation of cylinder centers,
+    with an optional post-processing step that removes near-horizontal Kagome edges
+    located close to the top/bottom boundaries (to avoid boundary channelization).
+
+    Parameters
+    ----------
+    points : (N,2) ndarray
+        Cylinder center coordinates.
+    max_edge_ratio : float
+        Skip Delaunay triangles that contain any side longer than max_edge_ratio * a0,
+        where a0 is estimated from short Delaunay edge lengths.
+    store_maps : bool
+        If True, store helpful metadata on nodes/edges.
+    prune_horizontal_boundary_edges : bool
+        If True, remove Kagome edges that are nearly horizontal and lie within
+        `boundary_band` from bottom/top.
+    angle_tol_deg : float
+        Edges with |dy|/len < sin(angle_tol) are considered "horizontal-ish".
+    boundary_band : float or None
+        Thickness of the top/bottom band in the same units as `points`.
+        If None, uses ~0.75*a0 (about one lattice spacing).
+
+    Returns
+    -------
+    Gk : nx.Graph
+        Kagome graph with node attribute 'pos' = (x,y).
+    """
+    tri = spt.Delaunay(points)
+    simplices = tri.simplices  # (nT, 3)
+
+    # --- estimate a0 from Delaunay edges ---
+    delaunay_edges = set()
+    for (i, j, k) in simplices:
+        delaunay_edges.add(tuple(sorted((i, j))))
+        delaunay_edges.add(tuple(sorted((j, k))))
+        delaunay_edges.add(tuple(sorted((k, i))))
+
+    edge_lens = []
+    for (i, j) in delaunay_edges:
+        edge_lens.append(np.linalg.norm(points[i] - points[j]))
+    edge_lens = np.asarray(edge_lens)
+    a0 = np.percentile(edge_lens, 10) if edge_lens.size else 1.0
+
+    if boundary_band is None:
+        boundary_band = 0.75 * a0
+
+    # --- map center-pair -> kagome node id ---
+    pair_to_node = {}
+    node_pos = {}
+    next_id = 0
+
+    def get_node_for_pair(i, j):
+        nonlocal next_id
+        key = (i, j) if i < j else (j, i)
+        if key in pair_to_node:
+            return pair_to_node[key]
+        nid = next_id
+        next_id += 1
+        pair_to_node[key] = nid
+        p = 0.5 * (points[key[0]] + points[key[1]])
+        node_pos[nid] = (float(p[0]), float(p[1]))
+        return nid
+
+    Gk = nx.Graph()
+
+    # --- create nodes + edges triangle-by-triangle ---
+    for (i, j, k) in simplices:
+        lij = np.linalg.norm(points[i] - points[j])
+        ljk = np.linalg.norm(points[j] - points[k])
+        lki = np.linalg.norm(points[k] - points[i])
+
+        if max(lij, ljk, lki) > max_edge_ratio * a0:
+            continue
+
+        n_ij = get_node_for_pair(i, j)
+        n_jk = get_node_for_pair(j, k)
+        n_ki = get_node_for_pair(k, i)
+
+        if n_ij not in Gk:
+            Gk.add_node(n_ij, pos=node_pos[n_ij])
+            if store_maps:
+                Gk.nodes[n_ij]["center_pair"] = (min(i, j), max(i, j))
+        if n_jk not in Gk:
+            Gk.add_node(n_jk, pos=node_pos[n_jk])
+            if store_maps:
+                Gk.nodes[n_jk]["center_pair"] = (min(j, k), max(j, k))
+        if n_ki not in Gk:
+            Gk.add_node(n_ki, pos=node_pos[n_ki])
+            if store_maps:
+                Gk.nodes[n_ki]["center_pair"] = (min(k, i), max(k, i))
+
+        Gk.add_edge(n_ij, n_jk)
+        Gk.add_edge(n_jk, n_ki)
+        Gk.add_edge(n_ki, n_ij)
+
+        if store_maps:
+            pore = tuple(sorted((int(i), int(j), int(k))))
+            Gk.edges[n_ij, n_jk]["pore_triangle"] = pore
+            Gk.edges[n_jk, n_ki]["pore_triangle"] = pore
+            Gk.edges[n_ki, n_ij]["pore_triangle"] = pore
+
+    # --- prune near-horizontal edges near top/bottom ---
+    if prune_horizontal_boundary_edges and Gk.number_of_edges() > 0:
+        pos = nx.get_node_attributes(Gk, "pos")
+        ys = np.array([pos[n][1] for n in Gk.nodes()], dtype=float)
+        y_min = float(ys.min())
+        y_max = float(ys.max())
+
+        sin_tol = np.sin(np.deg2rad(angle_tol_deg))
+        eps = 1e-15
+
+        to_remove = []
+        for u, v in Gk.edges():
+            xu, yu = pos[u]
+            xv, yv = pos[v]
+            dx = xv - xu
+            dy = yv - yu
+            L = (dx*dx + dy*dy) ** 0.5
+            if L < eps:
+                continue
+
+            # "horizontal-ish" if |dy|/L small
+            horizontalish = (abs(dy) / L) < sin_tol
+
+            # only if BOTH endpoints are in the same boundary band (bottom OR top)
+            in_bottom = (yu <= y_min + boundary_band) and (yv <= y_min + boundary_band)
+            in_top    = (yu >= y_max - boundary_band) and (yv >= y_max - boundary_band)
+
+            if horizontalish and (in_bottom or in_top):
+                to_remove.append((u, v))
+
+        if to_remove:
+            Gk.remove_edges_from(to_remove)
+
+        # remove isolated nodes created by pruning
+        isolates = list(nx.isolates(Gk))
+        if isolates:
+            Gk.remove_nodes_from(isolates)
+
+    return Gk
+
+
 class Graph(nx.graph.Graph):
     """ Contains network and all its properties.
 
@@ -968,7 +1121,11 @@ def build_delaunay_net(sid: SimInputData, inc: Incidence) -> tuple(Graph, Edges)
 
     centers, Lx, Ly = tri_centers_rect_symmetric(m_height=sid.m, n_length=sid.n, a=a)
 
-    graph_init = kagome_from_delaunay(centers, max_edge_ratio=1.8)
+    graph_init = kagome_from_delaunay2(centers,
+                                 max_edge_ratio=1.8,
+                                 prune_horizontal_boundary_edges=True,
+                                 angle_tol_deg=8.0,
+                                 boundary_band=0.9*a)  # if you know a
 
     remove_barrier_edges(graph_init, Lx=Lx, Ly=Ly, pillar_diam=0.5, x_frac=0.16)
 

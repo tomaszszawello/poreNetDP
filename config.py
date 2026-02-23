@@ -23,7 +23,7 @@ class SimInputData:
     "network size"
     iters: int = 100000000
     "maximum number of iterations"
-    tmax: float = 36
+    tmax: float = 36 * 4
     "maximum time"
     dissolved_v_max: float = 10
     "maximum dissolved volume (in terms of initial pore volume)"
@@ -45,7 +45,7 @@ class SimInputData:
     "list of time measures in which tracking is performed"
 
     # DISSOLUTION & PRECIPITATION
-    Da = 0.073
+    Da = 0.073 / 2
     #Da_eff: float = 0.026
     "effective Damkohler number"
     G: float = 1.05
@@ -66,7 +66,7 @@ class SimInputData:
     cut = 'intersections_up' # 'edges'
     pore_diam = 1.
     # INITIAL CONDITIONS
-    qin: float = 1.
+    qin: float = 4.
     "characteristic flow for inlet edge"
     cb_in: float = 1
     "inlet B concentration"
@@ -88,13 +88,15 @@ class SimInputData:
     cond_weight = 0.5
     w_node = 0.7
 
-    Pe_c = 0.1
+    Pe_c = 0.01
     "critical Pe for mixing; 0 for streamlined, infinity for full"
+    alpha_disp = 0#0.1
+    "additional mixing due to mechanical dispersion"
     mixing_at_barrier = 0#0.05
     "additional mixing right behind barrier"
 
     q_rate = 1
-    q_amp = 0.048 #
+    q_amp = 0.048 # 0.10
     q_period = tmax / 24#150
     q_trans = 0#q_period / 10
 

@@ -313,13 +313,37 @@ def calculate_node_weights_with_dispersion_baked(edges, node_diams, inc, sid, ep
     return w_node_eff, s_edge, s_node
 
 
+def calculate_node_weights2(edges, node_diams, inc, sid):
+    q_abs = np.abs(edges.flow)
+    Q_node = 0.5 * (np.abs(inc.incidence.T) @ q_abs)
+
+    d = np.asarray(node_diams, float)
+    valid = d > 1e-15
+
+    # velocity scale (nondim): u ~ Q / d^2
+    u = np.zeros_like(d)
+    u[valid] = Q_node[valid] / (d[valid]**2)
+
+    # Pe_mol ~ u*d  (nondim molecular diffusivity = 1)
+    Pe = np.zeros_like(d)
+    Pe[valid] = u[valid] * d[valid]     # = Q_node / d
+
+    # add mechanical dispersion: D_eff = 1 + alpha*Pe (or alpha*|u|)
+    Pe_eff = np.zeros_like(Pe)
+    Pe_eff[valid] = Pe[valid] / (1.0 + sid.alpha_disp * Pe[valid])
+
+    w = Pe_eff / (Pe_eff + sid.Pe_c)
+    w = np.clip(w, 0.0, 1.0)
+    w_edge = (spr.diags(edges.flow) @ inc.incidence > 0) @ w
+    return w, w_edge
+
 def find_alpha(sid, edges, inc, node_diams):
     alpha_full = find_full_alpha(edges, inc)
     alpha_stream = find_alpha_stream(sid, edges, inc)
     #w = compute_edge_Pe(edges, sid)
     w_node, w_edge = calculate_node_weights(edges, node_diams, inc, sid)
     #w_node, w_edge, s_node = calculate_node_weights_with_dispersion_baked(edges, node_diams, inc, sid, eps=1e-15)
-    w_node = sid.w_node * np.ones(sid.nsq)
+    #w_node = sid.w_node * np.ones(sid.nsq)
     alpha_eff = blend_alpha(alpha_stream, alpha_full, w_edge)
     #alpha_eff = additional_mixing(alpha_eff, sid, edges)
     #return alpha_eff
