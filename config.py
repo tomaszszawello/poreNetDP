@@ -15,7 +15,7 @@ class SimInputData:
     ''' Configuration class for the whole simulation.
     '''
     # GENERAL
-    n: int = 200
+    n: int = 50
     "network size along y (transverse to the flow)"
     m: int = 200
     "network size along x (parallel to the flow)"
@@ -29,8 +29,8 @@ class SimInputData:
     "frequency of plotting the results"
     
     "frequency of checking channelization"
-    #track_list = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
-    track_list = [1, 2, 5, 10]
+    track_list = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
+    #track_list = [1, 2, 5, 10]
     "times of checking channelization"
 
     # DISSOLUTION & PRECIPITATION
@@ -40,7 +40,7 @@ class SimInputData:
     # Da: float = 100#0.67 * 10 ** -1
     # "effective Damkohler number"
     # Pe = 100.
-    phi = 0.1
+    phi = 0.05
     #chi0 = (1 - (1 - phi) ** (1/3)) / np.sqrt(3)
     #chi0 = (1 / (1 - phi) ** (1/3) - 1) / np.sqrt(3)
     chi0 = np.sqrt(2 * phi / (np.pi * np.sqrt(3))) #4 * np.sqrt(phi) / np.pi
@@ -52,7 +52,7 @@ class SimInputData:
     
     G: float = 5.#Da * Pe / Sh * chi0 ** 2 / 4
     "diffusion to reaction ratio"
-    Da_eff: float = 1. #Da / (1 + G)
+    Da_eff: float = 0.75 #Da / (1 + G)
     Da = Da_eff * (1 + G)
     tmax = 100 * Da
     track_every: int = tmax / 10
@@ -67,8 +67,8 @@ class SimInputData:
     debug = False
     K: float = 0.1
     "precipitation to dissolution reaction rate"
-    Gamma: float = 0.49
-    "precipitation to dissolution acid capacity number"
+    Gamma: float = 2.01
+    "precipitation to dissolution molar volume / acid capacity number"
     merge_length: float = 1 / chi0
     "diameter scale to length scale ratio for merging"
     n_tracking = 2000
@@ -115,7 +115,7 @@ class SimInputData:
     it_alpha_th = 1e-2
     it_limit = 100
     c_th = 1e-2
-    Kp = 1#0.01
+    Kp = 1#1e-5#0.01
 
     # DIAMETERS
     noise: str = 'lognormal' #'file_lognormal_k'
@@ -128,7 +128,7 @@ class SimInputData:
     "initial dimensionless mean diameter"
     sigma_d0: float = 0.1
     "initial diameter standard deviation"
-    sigma_phi: float = 0.2
+    sigma_phi: float = 0.5
     "initial porosity lognormal deviation"
     dmin: float = 0.01
     "minimum diameter"
@@ -156,7 +156,7 @@ class SimInputData:
      simulation, 2 - load template network from load_name and start new \
      simulation")
     #load_name: str = 'diffusion/Pe0.00Da100.00/17'
-    load_name: str = 'singurindy/G5.00Daeff1.00/28'#/template/9'
+    load_name: str = 'new_singurindy/G5.00Daeff1.00/5'#/template/9'
     #load_name: str = 'singurindy/G5.00Daeff0.50/14'#/template/9'
     
     "name of loaded network"
@@ -165,7 +165,7 @@ class SimInputData:
     geo: str = "rect" # WARNING - own is deprecated
     ("type of geometry: 'rect' - rectangular, 'own' - custom inlet and outlet \
      nodes, set in in/out_nodes_own")
-    periodic: str = 'top'
+    periodic: str = 'top' #'top'
     ("periodic boundary condition: 'none' - no PBC, 'top' - up and down, \
      'side' - left and right, 'all' - PBC everywhere")
     in_nodes_own: np.ndarray = np.array([[20, 50]]) / 100 * n
@@ -189,7 +189,7 @@ class SimInputData:
     "total inlet flow (updated later)"
     #dirname: str = geo + str(n) + '/' + f'G{G:.2f}Daeff{Da_eff:.2f}'
     #dirname: str = 'singurindy/' + f'Pe{Pe_L:.2f}Da{Da_L:.2f}'
-    dirname: str = 'singurindy/' + f'G{G:.2f}Daeff{Da_eff:.2f}'
+    dirname: str = 'new_singurindy/' + f'G{G:.2f}Daeff{Da_eff:.2f}'
     "directory of simulation"
     initial_merging: int = 5
     "number of initial merging iterations"

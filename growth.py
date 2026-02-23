@@ -429,15 +429,15 @@ def solve_dp(sid: SimInputData, inc: Incidence, edges: Edges, cb: np.ndarray, \
         * (1 - np.exp(-sid.Da / (1 + sid.G * edges.diams) * edges.diams \
         * edges.lens / np.abs(edges.flow)))
     growth = np.array(np.ma.fix_invalid(growth, fill_value = 0))
-    shrink_cb = cb_in * np.abs(edges.flow)  / (sid.Da * edges.lens \
-        * edges.diams * sid.Gamma) / (sid.K - 1) * (sid.K * (1 - \
+    shrink_cb = cb_in * np.abs(edges.flow) * sid.Gamma / (sid.Da * edges.lens \
+        * edges.diams) / (sid.K - 1) * (sid.K * (1 - \
         np.exp(-sid.Da / (1 + sid.G * edges.diams) * edges.diams * edges.lens \
         / np.abs(edges.flow))) - (1 - np.exp(-sid.Da * sid.K / (1 + sid.G \
         * sid.K * edges.diams) * edges.diams * edges.lens \
         / np.abs(edges.flow))))
     shrink_cb = np.array(np.ma.fix_invalid(shrink_cb, fill_value = 0))
-    shrink_cc = cc_in * np.abs(edges.flow)  / (sid.Da * edges.lens \
-        * edges.diams * sid.Gamma) * (1 - np.exp(-sid.Da * sid.K / (1 + sid.G \
+    shrink_cc = cc_in * np.abs(edges.flow) * sid.Gamma / (sid.Da * edges.lens \
+        * edges.diams) * (1 - np.exp(-sid.Da * sid.K / (1 + sid.G \
         * sid.K * edges.diams) * edges.diams * edges.lens / np.abs(edges.flow)))
     shrink_cc = np.array(np.ma.fix_invalid(shrink_cc, fill_value = 0))
     change = (growth - shrink_cb - shrink_cc)
@@ -518,21 +518,117 @@ def solve_dp_vol(sid: SimInputData, inc: Incidence, edges: Edges, cb: np.ndarray
     #     * edges.diams * sid.Gamma) * (1 - np.exp(-sid.Da * sid.K / (1 + sid.G \
     #     * sid.K * edges.diams) * cd_in / sid.Kp * edges.diams * edges.lens / np.abs(edges.flow)))
     growth = cb_in * np.abs(edges.flow)  / sid.Da * (1 - exp_d)
-    shrink_cc = cc_in * np.abs(edges.flow)  / (sid.Da * sid.Gamma) * (1 - exp_p)
+    shrink_cc = cc_in * np.abs(edges.flow) * sid.Gamma / sid.Da * (1 - exp_p)
     # shrink_cc = cc_in * sid.Kp / cd_in * np.abs(edges.flow)  / (sid.Da * edges.lens \
      #    * edges.diams * sid.Gamma) * (1 - exp_p)
-    shrink_cb = edges.alpha_b * cb_in * cd_in * sid.K * np.abs(edges.flow) / (sid.Da * sid.Gamma) \
+    shrink_cb = edges.alpha_b * cb_in * cd_in * sid.K * np.abs(edges.flow) * sid.Gamma / sid.Da \
         * ((1 - exp_d) / (1 + sid.G * edges.diams * sid.K) - (1 - exp_p) * sid.Kp / (sid.K * cd_in * (1 + sid.G * edges.diams))) / ksi
     shrink_cc = np.array(np.ma.fix_invalid(shrink_cc, fill_value = 0)) 
     shrink_cb = np.array(np.ma.fix_invalid(shrink_cb, fill_value = 0)) 
     growth2 = cb_in * np.abs(edges.flow)  / sid.Da * (1 - exp_d2)
-    shrink_cc2 = cc_in * np.abs(edges.flow)  / (sid.Da * sid.Gamma) * (1 - exp_p2)
+    shrink_cc2 = cc_in * np.abs(edges.flow) * sid.Gamma / sid.Da * (1 - exp_p2)
     # shrink_cc = cc_in * sid.Kp / cd_in * np.abs(edges.flow)  / (sid.Da * edges.lens \
      #    * edges.diams * sid.Gamma) * (1 - exp_p)
-    shrink_cb2 = edges.alpha_b * cb_in * cd_in * sid.K * np.abs(edges.flow) / (sid.Da * sid.Gamma) \
+    shrink_cb2 = edges.alpha_b * cb_in * cd_in * sid.K * np.abs(edges.flow) * sid.Gamma / sid.Da \
         * ((1 - exp_d2) / (1 + sid.G * edges.diams * sid.K) - (1 - exp_p2) * sid.Kp / (sid.K * cd_in * (1 + sid.G * edges.diams))) / ksi
     shrink_cc2 = np.array(np.ma.fix_invalid(shrink_cc2, fill_value = 0)) 
     shrink_cb2 = np.array(np.ma.fix_invalid(shrink_cb2, fill_value = 0)) 
+    change = growth2 - np.abs(shrink_cc2) - np.abs(shrink_cb2)
+    #print(np.sum(inc.incidence @ (cc - cd + cb)))
+    return change, growth, np.abs(shrink_cc) + np.abs(shrink_cb)
+
+def solve_dp_kp(sid: SimInputData, inc: Incidence, edges: Edges, cb: np.ndarray, \
+    cc: np.ndarray, cd: np.ndarray) -> np.ndarray:
+    """ Updates diameters in case of dissolution + precipitation.
+
+    Parameters
+    -------
+    sid : simInputData class object
+        all config parameters of the simulation
+        Da : float
+        G : float
+        K : float
+        Gamma : float
+        at
+
+    inc : Incidence class object
+        matrices of incidence
+        incidence : scipy sparse csr matrix (ne x nsq)
+
+    edges : Edges class object
+        all edges in network and their parameters
+        diams : numpy ndarray (ne)
+        lens : numpy ndarray (ne)
+        flow : numpy ndarray (ne)
+        alpha_b : numpy ndarray (ne)
+
+    cb : numpy ndarray (nsq)
+        vector of substance B concentration
+
+    cc : numpy ndarray (nsq)
+        vector of substance C concentration
+
+    Returns
+    -------
+    change : numpy ndarray (ne)
+        change of diameter of each edge
+    """
+    # create list of concentrations which should be used for
+    # growth/shrink of each edge (upstream one)
+    growth_matrix = np.abs((spr.diags(edges.flow) @ inc.incidence > 0))
+    cb_in = growth_matrix @ cb
+    cc_in = growth_matrix @ cc
+    cd_in = growth_matrix @ cd
+    # upstream saturation ratio minus 1
+    epsS = 1e-3  # same order you used in Newton
+    Sminus1 = (cc_in * cd_in / sid.Kp) - 1.0
+    H = 0.5 * (1.0 + Sminus1 / np.sqrt(Sminus1*Sminus1 + epsS*epsS))  # ~0 undersat, ~1 supersat
+
+    # safest: gate precipitation as a whole
+    H = np.array(np.ma.fix_invalid(H, fill_value=0.0))
+    H = np.clip(H, 0.0, 1.0)
+
+    # use effective D for precipitation kinetics
+    cd_eff = cd_in * H
+    
+    ksi = cd_eff * sid.K / (1 + sid.K * sid.G * edges.diams) - sid.Kp / (1 + sid.G * edges.diams)
+    exp_p  = np.exp(-sid.Da * sid.K / (1 + sid.G * sid.K * edges.diams)
+                * (cd_eff / sid.Kp) * edges.diams * edges.lens / np.abs(edges.flow))
+    exp_p = np.array(np.ma.fix_invalid(exp_p, fill_value = 0))
+    exp_d = np.exp(-sid.Da / (1 + sid.G * edges.diams) * edges.diams * edges.lens / np.abs(edges.flow))
+    exp_d = np.array(np.ma.fix_invalid(exp_d, fill_value = 0))
+    exp_p2 = np.exp(-edges.alpha_c * sid.Da * sid.K / (1 + sid.G * sid.K * edges.diams)
+                * (cd_eff / sid.Kp) * edges.diams * edges.lens / np.abs(edges.flow))
+    exp_p2 = np.array(np.ma.fix_invalid(exp_p2, fill_value = 0))
+    exp_d2 = np.exp(-edges.alpha_b * sid.Da / (1 + sid.G * edges.diams) * edges.diams * edges.lens / np.abs(edges.flow))
+    exp_d2 = np.array(np.ma.fix_invalid(exp_d2, fill_value = 0))        
+    # growth = cb_in * np.abs(edges.flow)  / (sid.Da * edges.lens * edges.diams) \
+    #     * (1 - np.exp(-sid.Da / (1 + sid.G * edges.diams) * edges.diams \
+    #     * edges.lens / np.abs(edges.flow)))
+    # growth = np.array(np.ma.fix_invalid(growth, fill_value = 0))
+    # shrink_cc = cc_in * sid.Kp / cd_in * np.abs(edges.flow)  / (sid.Da * edges.lens \
+    #     * edges.diams * sid.Gamma) * (1 - np.exp(-sid.Da * sid.K / (1 + sid.G \
+    #     * sid.K * edges.diams) * cd_in / sid.Kp * edges.diams * edges.lens / np.abs(edges.flow)))
+    growth = cb_in * np.abs(edges.flow)  / sid.Da * (1 - exp_d)
+    shrink_cc = cc_in * np.abs(edges.flow) * sid.Gamma / sid.Da * (1 - exp_p)
+    # shrink_cc = cc_in * sid.Kp / cd_in * np.abs(edges.flow)  / (sid.Da * edges.lens \
+     #    * edges.diams * sid.Gamma) * (1 - exp_p)
+    shrink_cb = edges.alpha_b * cb_in * cd_in * sid.K * np.abs(edges.flow) * sid.Gamma / sid.Da \
+        * ((1 - exp_d) / (1 + sid.G * edges.diams * sid.K) - (1 - exp_p) * sid.Kp / (sid.K * cd_in * (1 + sid.G * edges.diams))) / ksi
+    shrink_cc = np.array(np.ma.fix_invalid(shrink_cc, fill_value = 0)) 
+    shrink_cb = np.array(np.ma.fix_invalid(shrink_cb, fill_value = 0)) 
+    growth2 = cb_in * np.abs(edges.flow)  / sid.Da * (1 - exp_d2)
+    shrink_cc2 = cc_in * np.abs(edges.flow) * sid.Gamma / sid.Da * (1 - exp_p2)
+    # shrink_cc = cc_in * sid.Kp / cd_in * np.abs(edges.flow)  / (sid.Da * edges.lens \
+     #    * edges.diams * sid.Gamma) * (1 - exp_p)
+    shrink_cb2 = edges.alpha_b * cb_in * cd_in * sid.K * np.abs(edges.flow) * sid.Gamma / sid.Da \
+        * ((1 - exp_d2) / (1 + sid.G * edges.diams * sid.K) - (1 - exp_p2) * sid.Kp / (sid.K * cd_in * (1 + sid.G * edges.diams))) / ksi
+    shrink_cc2 = np.array(np.ma.fix_invalid(shrink_cc2, fill_value = 0)) 
+    shrink_cb2 = np.array(np.ma.fix_invalid(shrink_cb2, fill_value = 0)) 
+    shrink_cc  *= H
+    shrink_cb  *= H
+    shrink_cc2 *= H
+    shrink_cb2 *= H
     change = growth2 - np.abs(shrink_cc2) - np.abs(shrink_cb2)
     #print(np.sum(inc.incidence @ (cc - cd + cb)))
     return change, growth, np.abs(shrink_cc) + np.abs(shrink_cb)

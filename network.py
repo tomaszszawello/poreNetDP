@@ -305,7 +305,9 @@ def build_delaunay_net(sid: SimInputData, inc: Incidence) \
     points_left_pbc = points.copy() + np.array([-sid.m, 0])
 
     if sid.periodic == 'none':
-        pos = points
+         # to avoid long edges near the network boundaries, we perform triangulation on a larger set of points;
+         # we cut edges crossing the boundaries later #pos = points
+        pos = np.concatenate([points, points_above_pbc, points_below_pbc])
     elif sid.periodic == 'top': 
         pos = np.concatenate([points, points_above_pbc, points_below_pbc])
     elif sid.periodic == 'side':
@@ -347,6 +349,9 @@ def build_delaunay_net(sid: SimInputData, inc: Incidence) \
 
         m_n3 = 0
         bound = False
+        if sid.periodic == 'none':
+            if n3 >= sid.nsq:
+                continue
         if n3 < sid.nsq:
             pass
         elif n2 < sid.nsq:

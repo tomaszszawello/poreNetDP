@@ -119,11 +119,13 @@ while t < tmax and i < iters and data.dissolved_v < sid.dissolved_v_max and not 
             # print(f'cc: {np.min(cc2)}, {np.max(cc2)}, cd: {np.min(cd2)}, {np.max(cd2)}')
             cc, cd = Pi.create_vector_nr(sid, graph, inc, edges, cb)
             cc, cd = Pi.solve_precipitation_nr9_vxx(sid, inc, graph, edges, vols, cb, cc, cd)             
+            #cc, cd = Pi.solve_precipitation_kp(sid, inc, graph, edges, vols, cb, cc, cd)
             #print(np.sum(np.abs(cc - cc2)), np.sum(np.abs(cd - cd2)))
             #np.savetxt('cc.txt', cc)
             #np.savetxt('cc2.txt', cc2)
         else:
             cc, cd = Pi.solve_precipitation_nr9_vxx(sid, inc, graph, edges, vols, cb, cc, cd)
+            #cc, cd = Pi.solve_precipitation_kp(sid, inc, graph, edges, vols, cb, cc, cd)
             #print(np.sum(np.abs(cc - cc2)), np.sum(np.abs(cd - cd2)))
     else:
         cc, cd = np.zeros(sid.nsq), np.zeros(sid.nsq)
