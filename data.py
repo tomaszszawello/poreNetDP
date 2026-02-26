@@ -544,7 +544,7 @@ class Data():
                 / edge_number, label = self.slice_times[i+1], color = colors[i], linewidth = 5)
         plt.ylim(0, 1.05)
         plt.xlabel(r'$x$ / L', fontsize = 60)
-        plt.xticks([0, 0.5, 1], '0', '0.5', '1')
+        plt.xticks([0, 0.5, 1], ['0', '0.5', '1'])
         # ax2.xaxis.label.set_color('white')
         # ax2.tick_params(axis = 'x', colors='white')
         #plt.xticks([],[])

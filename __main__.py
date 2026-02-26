@@ -47,9 +47,7 @@ import numpy as np
 
 flag_s = 1
 
-import scipy.sparse as spr
-print(sid.ne)
-raise ValueError
+
 # main loop
 # runs until we reach iteration limit or time limit or network is dissolved
 while t < tmax and i < iters and data.dissolved_v < sid.dissolved_v_max and not breakthrough and not clogged:

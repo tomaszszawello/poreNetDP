@@ -92,6 +92,7 @@ def update_diameters(sid: SimInputData, inc: Incidence, edges: Edges, graph: Gra
         #print(change_rate)
         if np.max(change_rate) == 0:
             breakthrough = True
+            dt_next = sid.dt
         else:
             dt_next = sid.growth_rate / float(np.max(change_rate))
         #print(dt_next)
@@ -146,7 +147,7 @@ def update_diameters(sid: SimInputData, inc: Incidence, edges: Edges, graph: Gra
         #         inc.incidence[ind, node] = 0
         #     for ind in inc.inlet.T[node].nonzero()[1]:
         #         inc.inlet[ind, node] = 0
-        keep_largest_component(inc)
+        #keep_largest_component(inc)
         #graph.in_vec = 1 * (np.abs(inc.incidence.T) @ edges.inlet == np.abs(inc.incidence.T) @ np.ones(sid.ne))
         #graph.out_vec = 1 * (np.abs(inc.incidence.T) @ edges.outlet == np.abs(inc.incidence.T) @ np.ones(sid.ne))
         print(f'in_vec: {np.sum(graph.in_vec)}, inlet: {np.sum(edges.inlet)}')

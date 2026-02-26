@@ -138,7 +138,7 @@ def solve_precipitation_nr9_vxx(sid, inc, graph, edges, vols, cb, cc, cd,
     floating = (~incident_active)
 
     if np.any(floating):
-        print("Floating nodes:", np.where(floating)[0])
+        #print("Floating nodes:", np.where(floating)[0])
         # Treat them as pseudo-Dirichlet: fix cc, cd = something
         cc[floating] = 0.0       # or initial guess, or neighbor's value
         cd[floating] = 0.0

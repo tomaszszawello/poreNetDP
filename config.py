@@ -40,7 +40,7 @@ class SimInputData:
     # Da: float = 100#0.67 * 10 ** -1
     # "effective Damkohler number"
     # Pe = 100.
-    phi = 0.05
+    phi = 0.2
     #chi0 = (1 - (1 - phi) ** (1/3)) / np.sqrt(3)
     #chi0 = (1 / (1 - phi) ** (1/3) - 1) / np.sqrt(3)
     chi0 = np.sqrt(2 * phi / (np.pi * np.sqrt(3))) #4 * np.sqrt(phi) / np.pi
@@ -52,9 +52,9 @@ class SimInputData:
     
     G: float = 5.#Da * Pe / Sh * chi0 ** 2 / 4
     "diffusion to reaction ratio"
-    Da_eff: float = 0.75 #Da / (1 + G)
+    Da_eff: float = 0.67 #Da / (1 + G)
     Da = Da_eff * (1 + G)
-    tmax = 100 * Da
+    tmax = 300 * Da
     track_every: int = tmax / 10
     "Damkohler number"
     # G = 50
@@ -150,13 +150,13 @@ class SimInputData:
     "threshold for drawing of diameters"
 
     # INITIALIZATION
-    load: int = 0
+    load: int = 2
     ("type of loading: 0 - build new network based on config and start new \
      simulation, 1 - load previous network from load_name and continue \
      simulation, 2 - load template network from load_name and start new \
      simulation")
     #load_name: str = 'diffusion/Pe0.00Da100.00/17'
-    load_name: str = 'new_singurindy/G5.00Daeff1.00/5'#/template/9'
+    load_name: str = 'new_singurindy/G5.00Daeff1.00/1'#/template/9'
     #load_name: str = 'singurindy/G5.00Daeff0.50/14'#/template/9'
     
     "name of loaded network"

@@ -20,7 +20,7 @@ import scipy.sparse as spr
 from config import SimInputData
 from network import Edges, Graph
 from incidence import Incidence
-from utils import solve_equation
+from utils import keep_largest_component, solve_equation
 
 
 def create_vector(sid: SimInputData, graph: Graph) -> spr.csc_matrix:
@@ -96,6 +96,9 @@ def solve_flow(sid: SimInputData, inc: Incidence, graph: Graph, edges: Edges, \
     p_matrix += spr.diags(diag - diag_old)
     # solve matrix @ pressure = pressure_b
     pressure = solve_equation(p_matrix, pressure_b)
+    if np.isnan(pressure).any():
+        keep_largest_component(inc)
+        pressure = solve_equation(p_matrix, pressure_b)
     # normalize pressure in inlet nodes to match condition for constant inlet
     # flow
     q_in = np.abs(np.sum(edges.diams ** 4 / edges.lens * (inc.inlet \
