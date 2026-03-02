@@ -192,7 +192,7 @@ while t < tmax and i < iters and data.dissolved_v < sid.dissolved_v_max and not 
     breakthrough, dt_next = Gr.update_diameters(sid, inc, edges, graph, vols, cb, cc, cd, data)
     # if breakthrough:
     #     break
-    data.collect_data(sid, inc, edges, vols, pressure, cb, cc, cd)
+    data.collect_data(sid, inc, edges, vols, pressure, cb, cc)
     if np.max(pressure) > data.pressure[0] / sid.min_perm:
         print('Network clogged.')
         clogged = True

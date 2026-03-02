@@ -30,7 +30,7 @@ def create_vector_nr(sid: SimInputData, graph: Graph, inc, edges, cb) -> spr.csc
     c_inc = 1 * (inc.incidence.T @ (spr.diags(edges.flow) \
         @ inc.incidence > 0) != 0)
     # find vector with non-diagonal coefficients
-    qc = edges.flow / (sid.K - 1) * (np.exp(-edges.alpha_b * sid.Da / (1 + sid.G * \
+    qc = edges.flow * (1 + sid.G * sid.K * edges.diams) / (sid.K - 1) * (np.exp(-edges.alpha_b * sid.Da / (1 + sid.G * \
         edges.diams) * edges.diams * edges.lens / np.abs(edges.flow)) - \
         np.exp(-edges.alpha_b * sid.Da * sid.K / (1 + sid.G * sid.K * edges.diams) \
         * edges.diams * edges.lens / np.abs(edges.flow)))

@@ -15,9 +15,9 @@ class SimInputData:
     ''' Configuration class for the whole simulation.
     '''
     # GENERAL
-    n: int = 50
+    n: int = 30
     "network size along y (transverse to the flow)"
-    m: int = 50
+    m: int = 90
     "network size along x (parallel to the flow)"
     iters: int = 100000
     "maximum number of iterations"
@@ -40,7 +40,7 @@ class SimInputData:
     # Da: float = 100#0.67 * 10 ** -1
     # "effective Damkohler number"
     # Pe = 100.
-    phi = 0.01
+    phi = 0.05
     #chi0 = (1 - (1 - phi) ** (1/3)) / np.sqrt(3)
     #chi0 = (1 / (1 - phi) ** (1/3) - 1) / np.sqrt(3)
     chi0 = np.sqrt(2 * phi / (np.pi * np.sqrt(3))) #4 * np.sqrt(phi) / np.pi
@@ -50,9 +50,9 @@ class SimInputData:
     #Pe = Pe_L * 2 / (np.pi * chi0 ** 2)
     Pe = Pe_L * 4 / (np.pi * chi0 ** 2)
     
-    G: float = 1.#Da * Pe / Sh * chi0 ** 2 / 4
+    G: float = 5.#Da * Pe / Sh * chi0 ** 2 / 4
     "diffusion to reaction ratio"
-    Da_eff: float = 2. #Da / (1 + G)
+    Da_eff: float = 1. #Da / (1 + G)
     Da = Da_eff * (1 + G)
     tmax = 500
     track_every: int = tmax / 10
@@ -65,7 +65,7 @@ class SimInputData:
     V_tot = (1 / chi0) ** 2 * 2 * np.sqrt(3) / (3 * np.pi)
 
     debug = False
-    K: float = 10
+    K: float = 0.1
     "precipitation to dissolution reaction rate"
     Gamma: float = 1.07 #1.18
     "dissolution  to precipitation molar volume/acid capacity number"
@@ -73,7 +73,8 @@ class SimInputData:
     "diameter scale to length scale ratio for merging"
     n_tracking = 2000
 
-    Ksp = 5000
+    Ksp = 200000
+    phi_merge = 0.95
 
     cb_0 = 1
     diffusion_exp_limit = 20
@@ -88,9 +89,9 @@ class SimInputData:
     # INCLUDE
     include_adt: bool = True
     "include adaptive timestep"
-    include_precipitation: bool = True
+    include_precipitation: bool = False
     "include precipitation"
-    include_merging: bool = False
+    include_merging: bool = True
     "include pore merging"
     include_volumes: bool = True
     "include pore volume tracking"
@@ -105,7 +106,7 @@ class SimInputData:
     cd_in: float = 1.
     "inlet D concentration"
     cA_in = 1.
-    cB_in = 0.5
+    cB_in = 0.0001
 
     # TIME
     dt: float = 0.000001

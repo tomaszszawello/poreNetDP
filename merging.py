@@ -414,13 +414,13 @@ def solve_merging_vols(sid: SimInputData, inc: Incidence, graph: Graph, vols: Vo
 
     """
     #while np.sum(1 * (vols.triangles @ (vols.vol_a == 0))):
-    while np.sum(1 * (vols.triangles @ (vols.vol_a + vols.vol_e == 0))):
+    while np.sum(1 * (vols.triangles @ (vols.vol_a + vols.vol_e < vols.vol_max * (1 - sid.phi_merge)))):
     #if True:
-        print(np.sum(1 * (vols.triangles @ (vols.vol_a == 0))))
+        print(np.sum(1 * (vols.triangles @ (vols.vol_a + vols.vol_e < vols.vol_max * (1 - sid.phi_merge)))))
         pos = nx.get_node_attributes(graph, 'pos')
         merge_edges = []
         merge_triangles = []
-        merge_matrix = spr.diags(1 * (vols.vol_a == 0)) @ vols.triangles.T
+        merge_matrix = spr.diags(1 * (vols.vol_a + vols.vol_e < vols.vol_max * (1 - sid.phi_merge))) @ vols.triangles.T
         if merge_matrix.sum():
             rows = list(set(merge_matrix.nonzero()[0]))
             for row in rows:
@@ -702,7 +702,7 @@ def solve_merging_vols(sid: SimInputData, inc: Incidence, graph: Graph, vols: Vo
             #fix_merging(sid, inc, graph, edges)
             # np.savetxt('inc.txt', inc.incidence.toarray())
             # np.savetxt('inl.txt', inc.inlet.toarray())
-                    
+
 
 def fix_connections(sid: SimInputData, inc: Incidence, graph: Graph, \
     edges: Edges):
