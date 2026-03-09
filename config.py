@@ -15,11 +15,11 @@ class SimInputData:
     ''' Configuration class for the whole simulation.
     '''
     # GENERAL
-    n: int = 5
+    n: int = 200
     "network size along y (transverse to the flow)"
-    m: int = 5
+    m: int = 200
     "network size along x (parallel to the flow)"
-    iters: int = 3#10000000
+    iters: int = 10000000
     "maximum number of iterations"
     
     "maximum time"
@@ -35,7 +35,7 @@ class SimInputData:
     "times of checking channelization"
 
     p_in = 1
-    frac_diam = 10
+    frac_diam = 100
 
     # DISSOLUTION & PRECIPITATION
     Da_L = 100
@@ -52,14 +52,14 @@ class SimInputData:
     include_diffusion = True
     ksi = 4.364 * 100 # Sh / chi ^ 2
     #Pe = Pe_L * 2 / (np.pi * chi0 ** 2)
-    Pe = 1 #Pe_L * 4 / (np.pi * chi0 ** 2)
-    Da2: float = 0.01
+    Pe = 0.01 #Pe_L * 4 / (np.pi * chi0 ** 2)
+    Da2: float = 1
     Da: float = Da2 / Pe
     grain_vol = 1
 
-    tmax: float = 100000.
+    tmax: float = 1000.
     track_every: int = tmax / 10
-    inert_fraction = 0.7
+    inert_fraction = 0.9
 
     M = 0.1
     cosm_in = 1.25
@@ -150,9 +150,9 @@ class SimInputData:
     # DRAWING
     figsize: float = 20.
     "figure size"
-    qdrawconst: float = 0.01
+    qdrawconst: float = 0.05
     "constant for improving flow drawing"
-    ddrawconst: float = 0.01 #2400 / n * chi0 #10 / n
+    ddrawconst: float = 0.05 #2400 / n * chi0 #10 / n
     "constant for improving diameter drawing"
     draw_th_q: float = 0.1
     "threshold for drawing of flow"
@@ -160,14 +160,14 @@ class SimInputData:
     "threshold for drawing of diameters"
 
     # INITIALIZATION
-    load: int = 0
+    load: int = 2
     ("type of loading: 0 - build new network based on config and start new \
      simulation, 1 - load previous network from load_name and continue \
      simulation, 2 - load template network from load_name and start new \
      simulation")
     #load_name: str = 'electro/Pe1.00Da1.00/5'
     #load_name: str = 'paper_diff/Pe1.00Da1.00/4'
-    load_name: str = 'fracture_diffusion/Pe0.10Da1000.00/0'
+    load_name: str = 'fracture_diffusion/Pe1.00Da1.00/5'
     
     "name of loaded network"
 
@@ -181,7 +181,7 @@ class SimInputData:
      'side' - left and right, 'all' - PBC everywhere")
     in_nodes_own: np.ndarray = np.array([[0, 0]]) / 100 * n
     "custom outlet for 'own' geometry"
-    out_nodes_own: np.ndarray = np.array([[0, 100]]) \
+    out_nodes_own: np.ndarray = np.array([[0, 100], [100, 0]]) \
         / 100 * n
     "custom outlet for 'own' geometry"
 

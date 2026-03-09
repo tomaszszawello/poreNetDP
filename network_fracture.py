@@ -279,21 +279,19 @@ def build_delaunay_net(sid: SimInputData, inc: Incidence) \
     graph : Graph class object
         network and all its properties
     """
-    points_left = np.linspace([0, 0], [0, sid.n - 1], sid.n) + \
-        np.array([0, 0.5])
-    points_right = np.linspace([0, 0], [0, sid.n - 1], sid.n) + \
-        np.array([sid.m, 0.5])
-    points_top = np.random.uniform(0.5, sid.m - 0.5, (sid.m, 2)) * \
-        np.array([1, 0]) + np.random.uniform(0, 1, (sid.m, 2)) * \
-        np.array([0, 1])
-    points_bottom = np.random.uniform(0.5, sid.m - 0.5, (sid.m, 2)) * \
-        np.array([1, 0]) + np.array([0, sid.n]) - \
-        np.random.uniform(0, 1, (sid.m, 2)) * np.array([0, 1])
-    points_middle = np.random.uniform(0.5, sid.m - 0.5, \
-        ((sid.m - 2) * (sid.n - 2) - 4, 2)) * np.array([1, 0]) + np.random.uniform(1, \
-        sid.n - 1, ((sid.m - 2) * (sid.n - 2) - 4, 2)) * np.array([0, 1])
-    points = np.concatenate((points_middle, points_left, points_right, \
-        points_top, points_bottom))
+    points_left = np.linspace([0, 0], [0, sid.n], sid.n)
+    points_bottom = np.linspace([1, 0], [sid.n, 0], sid.n - 1)
+    
+    n_middle = sid.n * sid.m - len(points_left) - len(points_bottom)
+
+    points_middle = np.column_stack([
+        np.random.uniform(0.5, sid.m - 0.5, n_middle),
+        np.random.uniform(1.0, sid.n - 0.5, n_middle)
+    ])
+    # points_middle = np.random.uniform(0.5, sid.m - 0.5, \
+    #     ((sid.m - 1) * (sid.n - 1) - 4, 2)) * np.array([1, 0]) + np.random.uniform(1, \
+    #     sid.n - 1, ((sid.m - 2) * (sid.n - 2) - 4, 2)) * np.array([0, 1])
+    points = np.concatenate((points_middle, points_left, points_bottom))
     points = np.array(sorted(points, key = lambda elem: (elem[0], elem[1])))
 
     points_above_pbc = points.copy() + np.array([0, sid.n])
@@ -491,8 +489,9 @@ def build_delaunay_net(sid: SimInputData, inc: Incidence) \
 
     return graph, edges, triangles
 
-def build_fracture(sid, inc, edges, graph):
+def build_fracture(sid, inc, edges, graph, vols):
     pos_x = np.array(list(nx.get_node_attributes(graph, 'pos').values()))[:,0]
     pos_y = np.array(list(nx.get_node_attributes(graph, 'pos').values()))[:,1]
     fracture_edges = (1 * (np.abs(inc.incidence) @ (pos_x == 0) == 2) + 1 * (np.abs(inc.incidence) @ (pos_y == 0) == 2)) > 0
     edges.diams[fracture_edges] = sid.frac_diam
+    vols.vol_a *= (1 - vols.triangles.T @ (edges.diams == sid.frac_diam))

@@ -102,13 +102,13 @@ def draw_flow(sid: SimInputData, graph: Graph, edges: Edges, \
     plt.scatter(x_out, y_out, s = 1000 / sid.n, facecolors = 'black', \
         edgecolors = 'white')
     if plot_type == 'q':
-        qs = np.abs(edges.flow) #/ edges.diams ** 2
+        qs = np.abs(edges.flow) * (edges.diams < sid.frac_diam) #/ edges.diams ** 2
         draw_const = sid.qdrawconst
     else:
         #qs = (1 - edges.boundary_list) * np.abs(edges.diams_draw - edges.diams_initial) * (edges.diams_initial > 0)
         #qs = (1 - edges.boundary_list) * edges.diams_draw * (edges.diams_draw - edges.diams_initial > 0.1) * (edges.diams_initial > 0)
         #qs = (1 - edges.boundary_list) * edges.diams_draw * (edges.diams_initial > 0)
-        qs = edges.diams
+        qs = edges.diams * (edges.diams < sid.frac_diam)
         #qs = (1 - edges.boundary_list) * edges.diams * (edges.diams > 3 * edges.diams_initial)
         draw_const = sid.ddrawconst
     nx.draw_networkx_edges(graph, pos, edges.edge_list, edge_color = 'k', \

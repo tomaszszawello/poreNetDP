@@ -63,6 +63,7 @@ while t < tmax and i < iters and data.dissolved_v < sid.dissolved_v_max and not 
     print(np.sum(vols.vol_a), np.sum(vols.vol_a_0))
     print(np.max(edges.diams))
     print('inlet: ', edges.inlet, 'outlet: ', edges.outlet)
+    print(edges.diams)
     # initialize vectors
     #
 
@@ -104,8 +105,8 @@ while t < tmax and i < iters and data.dissolved_v < sid.dissolved_v_max and not 
     #Me.fix_connections(sid, inc, graph, edges)
     #pressure = Pr.solve_flow(sid, inc, graph, edges, pressure_b)
     #data.check_data(edges)
-    Q_in = np.sum(edges.inlet * edges.flow)
-    Q_out = np.sum(edges.outlet * edges.flow)
+    Q_in = np.sum(edges.inlet * np.abs(edges.flow))
+    Q_out = np.sum(edges.outlet * np.abs(edges.flow))
     print('Q_in =', Q_in, 'Q_out =', Q_out)
     #print(edges.flow)
     #print(np.sum(vols.vol_a == 0), np.min(vols.vol_a))
@@ -115,7 +116,7 @@ while t < tmax and i < iters and data.dissolved_v < sid.dissolved_v_max and not 
     # find C concentration
     if sid.include_diffusion:
         if sid.include_volumes:
-            cb = Dif.solve_vol_scaling_chat(sid, inc, graph, edges, vols, cb_b, data)
+            cb = Dif.solve_vol_scaling_chat2(sid, inc, graph, edges, vols, cb_b, data)
             #cb = Dif.solve_diffusion_vol(sid, inc, graph, edges, vols, cb_b, data)
         else:
             cb = Dif.solve_diffusion_pe_fix(sid, inc, graph, edges, cb_b)
@@ -145,9 +146,6 @@ while t < tmax and i < iters and data.dissolved_v < sid.dissolved_v_max and not 
     cc = Pi.solve_precipitation(sid, inc, graph, edges, cb)
     # calculate ffp, draw figures
     if t == 0 and not sid.debug:
-        #data.check_data(edges)
-        data.check_init_slice_channelization(graph, inc, edges, cb)
-        data.check_slice_channelization(graph, inc, edges, cb, t)
         #Tr.track(sid, graph, inc, edges, data, pressure)
         Dr.draw_flow(sid, graph, edges, f'q_{t:.1f}.jpg', 'q')
         Dr.draw_flow(sid, graph, edges, f'd_{t:.1f}.jpg', 'd')
@@ -157,6 +155,9 @@ while t < tmax and i < iters and data.dissolved_v < sid.dissolved_v_max and not 
         #Dr.draw_nodes(sid, graph, edges, pressure, f'p_{t:.1f}.jpg', 'q')
         # save_VTK(sid, graph, edges, pressure, cb, \
         #     f'network_{t:.1f}.vtk')
+        #data.check_data(edges)
+        #data.check_init_slice_channelization(graph, inc, edges, cb)
+        #data.check_slice_channelization(graph, inc, edges, cb, t)
     else:
         #if data.dissolved_v // sid.track_every > iterator_dissolved:
         if t // sid.track_every > iterator_dissolved:
@@ -175,8 +176,8 @@ while t < tmax and i < iters and data.dissolved_v < sid.dissolved_v_max and not 
                 # save_VTK(sid, graph, edges, pressure, cb, \
                 #     f'network_{t:.1f}.vtk')
                 #data.check_data(edges)
-                data.check_slice_channelization(graph, inc, edges, cb, \
-                    t)
+                #data.check_slice_channelization(graph, inc, edges, cb, \
+                #    t)
                 #Tr.track(sid, graph, inc, edges, data, pressure)
     # grow/shrink diameters and update them in edges, update volumes with
     # dissolved/precipitated values, check if network dissolved, find new
@@ -219,7 +220,7 @@ while t < tmax and i < iters and data.dissolved_v < sid.dissolved_v_max and not 
 # to be able to continue it later
 if i != 1 and sid.load != 1 and not sid.debug:
     #data.check_data(edges)
-    data.check_slice_channelization(graph, inc, edges, cb, t)
+    #data.check_slice_channelization(graph, inc, edges, cb, t)
     
     #Tr.track(sid, graph, inc, edges, data, pressure)
     # Dr.draw_diams_profile(sid, graph, edges, data, \
@@ -241,10 +242,10 @@ if i != 1 and sid.load != 1 and not sid.debug:
     #np.savetxt(sid.dirname + '/tau_h.txt', np.array([np.sum(np.abs(edges.flow) * edges.lens) / (np.abs(Q_in) * sid.m)]))
     #Sv.save('/save.dill', sid, graph, inc, edges, triangles, vols)
     #data.plot_things(sid)
-    data.plot_c(graph)
-    data.plot_front(sid)
-    data.plot_flow(sid)
-    data.plot_pe(sid)
+    #data.plot_c(graph)
+    #data.plot_front(sid)
+    #data.plot_flow(sid)
+    #data.plot_pe(sid)
     data.save_data()
 
 Dr.draw_triangles2(sid, triangles, graph, vols, f'tri_final_{t:.1f}.jpg')

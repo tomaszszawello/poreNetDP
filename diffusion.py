@@ -1344,11 +1344,12 @@ def solve_vol_scaling_chat(sid: SimInputData, inc: Incidence, graph: Graph,
     # ---- helper: one ADR solve + change computation given edge alpha ----
     def solve_transport_and_change(alpha_edge):
         # safe inverse |flow|
-        M = spr.diags(edges.flow) @ inc.incidence  # edges x nodes
+        M = spr.diags(edges.flow) @ inc.incidence
 
-        # if incidence uses -1 at tail and +1 at head:
-        out_of_node = (M < 0).astype(float)   # flow leaves node
-        into_node   = (M > 0).astype(float)   # flow enters node
+        out_of_node = (M > 0).astype(float)
+        into_node   = (M < 0).astype(float)
+
+
 
         Qout = out_of_node.T @ np.abs(edges.flow)
         Qin  = into_node.T   @ np.abs(edges.flow)
@@ -1387,17 +1388,14 @@ def solve_vol_scaling_chat(sid: SimInputData, inc: Incidence, graph: Graph,
         # upstream / downstream
         F = spr.diags(edges.flow)
         zero_carrier = spr.diags(((edges.flow == 0) & (edges.diams > 0)).astype(float))
-        A_pos = ((F @ inc.incidence) > 0)
-        #Z_pos = ((zero_carrier @ inc.incidence) > 0)
-        A_neg = ((F @ inc.incidence) < 0)
-        #Z_neg = ((zero_carrier @ inc.incidence) < 0)
-        #upstream   = A_pos.maximum(Z_pos).astype(float)
-        #downstream = A_neg.maximum(Z_neg).astype(float)
-        Z_up = ((zero_carrier @ inc.incidence) < 0)   # tail (-1)
-        Z_dn = ((zero_carrier @ inc.incidence) > 0)   # head (+1)
+        A_pos = (M > 0).astype(float)
+        A_neg = (M < 0).astype(float)
+        Z_up = ((zero_carrier @ inc.incidence) > 0).astype(float)
+        Z_dn = ((zero_carrier @ inc.incidence) < 0).astype(float)
 
         upstream   = A_pos.maximum(Z_up).astype(float)
         downstream = A_neg.maximum(Z_dn).astype(float)
+
 
         downstream2 = downstream.multiply((1.0 - lam_plus_zero)[:, np.newaxis])
 
@@ -1547,6 +1545,263 @@ def solve_vol_scaling_chat(sid: SimInputData, inc: Incidence, graph: Graph,
         qc_in = sid.Pe * (upstream.T @ np.abs(edges.flow))
         print(qc_in[np.where(cb < 0)[0]])
         raise ValueError("Negative concentration detected")
+    return cb
+
+def solve_vol_scaling_chat2(
+    sid: SimInputData,
+    inc: Incidence,
+    graph: Graph,
+    edges: Edges,
+    vols: Volumes,
+    cb_vector,
+    data
+) -> np.ndarray:
+    """Calculate B concentration with tracking of A volume using a capacity projection."""
+
+    import numpy as np
+    import scipy.sparse as spr
+
+    eps = 1e-30
+
+    # --- Build edge→grain weights W (rows sum to 1). Here weights ∝ grain volume. ---
+    A = vols.triangles.tocsr().astype(float)                 # edges x grains adjacency
+    tri_w = np.asarray(vols.vol_a, dtype=float)              # n_grains
+    triangles_w = A @ spr.diags(tri_w)                       # edges x grains weighted
+    edge_vol = np.asarray(triangles_w.sum(axis=1)).ravel()   # row sums
+    inv_edge_vol = np.divide(
+        1.0, edge_vol,
+        out=np.zeros_like(edge_vol),
+        where=edge_vol > 0
+    )
+    W = spr.diags(inv_edge_vol) @ triangles_w                # edges x grains, row-normalized
+
+    # control variables: per-grain alphas
+    alpha_tr = (vols.vol_a > 0).astype(float)                # grains
+    alpha = np.asarray((W @ alpha_tr)).ravel()               # edges
+
+    def solve_transport_and_change(alpha_edge):
+        import numpy as np
+        import scipy.sparse as spr
+
+        F = spr.diags(edges.flow)
+        M = F @ inc.incidence
+
+        # Consistent with:
+        # edges.flow = cond * (inc.incidence @ pressure)
+        # => M > 0 : upstream / flow leaves node
+        # => M < 0 : downstream / flow enters node
+        out_of_node = (M > 0).astype(float)
+        into_node   = (M < 0).astype(float)
+
+        Qout = out_of_node.T @ np.abs(edges.flow)
+        Qin  = into_node.T   @ np.abs(edges.flow)
+
+        tol = 1e-14
+        dirichlet = (graph.in_vec > 0) & (Qin > Qout + tol)
+
+        # Keep present behavior unless you want to switch to Danckwerts-like inlet logic
+        in_vec = graph.in_vec  # or: dirichlet.astype(float)
+        cb_vector_local = np.concatenate([sid.cb_0 * in_vec, np.zeros(2 * sid.ne)])
+
+        abs_flow = np.abs(edges.flow)
+        inv_abs_flow = np.divide(
+            1.0, abs_flow,
+            out=np.zeros_like(abs_flow, dtype=float),
+            where=abs_flow > 0
+        )
+
+        # ---- exact lambdas ----
+        lam_root = np.sqrt(
+            abs_flow**2
+            + 4.0 * alpha_edge * sid.Da / (1.0 + sid.G * edges.diams) / sid.Pe * edges.diams**3
+        )
+
+        lam_plus_raw = sid.Pe / (2.0 * edges.diams**2) * (lam_root + abs_flow)
+        lam_minus_raw = sid.Pe / (2.0 * edges.diams**2) * (lam_root - abs_flow)
+
+        lam_plus_raw = np.array(np.ma.fix_invalid(lam_plus_raw, fill_value=0.0))
+        lam_minus_raw = np.array(np.ma.fix_invalid(lam_minus_raw, fill_value=0.0))
+
+        # High-Pe asymptotic switch based on exponent argument, not lambda alone
+        use_hp = (lam_plus_raw * edges.lens > sid.diffusion_exp_limit).astype(float)
+
+        # masked versions for the exact branch only
+        lam_plus_val  = lam_plus_raw  * (1.0 - use_hp)
+        lam_minus_val = lam_minus_raw * (1.0 - use_hp)
+
+        exp_plus_diag  = np.exp(lam_plus_val * edges.lens) * (1.0 - use_hp) + use_hp
+        exp_plus2_diag = np.exp(lam_plus_val * edges.lens) * (1.0 - use_hp)
+
+        # Always numerically safe
+        exp_minus_exact = np.exp(-lam_minus_raw * edges.lens)
+
+        exp_plus  = spr.diags(exp_plus_diag)
+        exp_plus2 = spr.diags(exp_plus2_diag)
+
+        # High-Pe attenuation of the slow / transported mode
+        exp_pe_fix = np.exp(
+            -alpha_edge * sid.Da / (1.0 + sid.G * edges.diams)
+            * edges.diams * edges.lens * inv_abs_flow
+        )
+        exp_pe_fix = np.array(np.ma.fix_invalid(exp_pe_fix, fill_value=1.0))
+
+        # ---- upstream / downstream selectors ----
+        zero_carrier = spr.diags(((edges.flow == 0) & (edges.diams > 0)).astype(float))
+
+        A_up = (M > 0).astype(float)
+        A_dn = (M < 0).astype(float)
+
+        Z_up = ((zero_carrier @ inc.incidence) > 0).astype(float)
+        Z_dn = ((zero_carrier @ inc.incidence) < 0).astype(float)
+
+        upstream   = A_up.maximum(Z_up).astype(float)
+        downstream = A_dn.maximum(Z_dn).astype(float)
+
+        # ---- flux blocks: exact branch only ----
+        flux_a = (
+            sid.Pe * spr.diags(abs_flow) @ exp_plus2 @ downstream
+            + spr.diags(lam_plus_val * edges.diams**2) @ upstream
+            - exp_plus @ spr.diags(lam_plus_val * edges.diams**2) @ downstream
+        ).multiply((1.0 - use_hp)[:, np.newaxis])
+
+        flux_b = (
+            sid.Pe * spr.diags(abs_flow) @ spr.diags(exp_minus_exact) @ downstream
+            - spr.diags(lam_minus_val * edges.diams**2) @ upstream
+            + spr.diags(exp_minus_exact) @ spr.diags(lam_minus_val * edges.diams**2) @ downstream
+        ).multiply((1.0 - use_hp)[:, np.newaxis])
+
+        # ---- asymptotic high-Pe branch ----
+        flux_b += (
+            sid.Pe * spr.diags(abs_flow)
+            @ spr.diags(use_hp * exp_pe_fix)
+            @ downstream
+        )
+
+        flux_a_in = flux_a.T.multiply((1.0 - in_vec)[:, np.newaxis])
+        flux_b_in = flux_b.T.multiply((1.0 - in_vec)[:, np.newaxis])
+
+        flow_fix_pe = -sid.Pe * downstream.T @ abs_flow
+        flow_fix_pe = flow_fix_pe * (1.0 - in_vec) + in_vec
+
+        # ---- zero-flow, zero-reaction linear-edge fix ----
+        zero_flow_fix = ((edges.flow == 0) & (alpha_edge == 0) & (edges.diams > 0)).astype(float)
+
+        flux_b += (
+            spr.diags(-edges.diams**2 * zero_flow_fix) @ upstream
+            + spr.diags(edges.diams**2 * zero_flow_fix) @ downstream
+        )
+
+        # ---- edge-end concentration relations ----
+        A_up_coeff = np.ones(sid.ne)
+        B_up_coeff = np.ones(sid.ne) - zero_flow_fix
+
+        A_dn_coeff = exp_plus_diag.copy()
+        B_dn_coeff = (1.0 - use_hp) * exp_minus_exact + use_hp * exp_pe_fix
+
+        # zero-flow linear override
+        zmask = zero_flow_fix.astype(bool)
+        A_dn_coeff[zmask] = 1.0
+        B_dn_coeff[zmask] = edges.lens[zmask]
+
+        cb_matrix = spr.vstack([
+            spr.hstack([spr.diags(flow_fix_pe), flux_a_in, flux_b_in]),
+            spr.hstack([-downstream, spr.diags(A_dn_coeff), spr.diags(B_dn_coeff)]),
+            spr.hstack([-upstream,  spr.diags(A_up_coeff), spr.diags(B_up_coeff)]),
+        ])
+
+        merge_diag = spr.diags((1.0 - inc.merge_vec))
+        cb_matrix = merge_diag @ cb_matrix @ merge_diag + spr.diags(inc.merge_vec.astype(float))
+
+        rows_empty = (cb_matrix.getnnz(axis=1) == 0)
+        if np.any(rows_empty):
+            cb_matrix = cb_matrix + spr.diags(rows_empty.astype(float))
+
+        res = solve_equation(cb_matrix, cb_vector_local)
+        cb = res[:sid.nsq]
+        edges.A = res[sid.nsq:sid.nsq + sid.ne]
+        edges.B = res[sid.nsq + sid.ne:]
+
+        # ---- edge loss rate ----
+        change_exact = (
+            (1.0 - use_hp)
+            * 2.0 * edges.diams**2 / (sid.Pe * sid.Da)
+            * (
+                edges.A * (np.exp(lam_plus_val * edges.lens) - 1.0) * lam_minus_val
+                + edges.B * (1.0 - np.exp(-lam_minus_val * edges.lens)) * lam_plus_val
+            )
+        )
+
+        change_pe_fix = (
+            use_hp
+            * 2.0 * edges.B * abs_flow / sid.Da
+            * (1.0 - exp_pe_fix)
+        )
+
+        change = change_exact + change_pe_fix
+        change = np.array(np.ma.fix_invalid(change, fill_value=0.0))
+
+        return cb, lam_plus_raw, lam_minus_raw, use_hp, change, exp_pe_fix
+
+    # ---- iterate: solve -> project -> re-solve ----
+    max_proj_iters = getattr(sid, "proj_iters", 3)
+
+    for k in range(max_proj_iters):
+        cb, lam_plus_raw, lam_minus_raw, use_hp, change, exp_pe_fix = solve_transport_and_change(alpha)
+
+        # predict per-grain loss this step
+        qg_hat = np.asarray((W.T @ change)).ravel() * sid.dt
+
+        # capacity projection
+        s = np.minimum(1.0, np.divide(vols.vol_a, qg_hat + eps))
+
+        if np.all(s >= 1.0 - 1e-12):
+            break
+
+        alpha_tr = np.clip(alpha_tr * s, 0.0, 1.0)
+        alpha = np.asarray((W @ alpha_tr)).ravel()
+
+    # recompute qg_hat only if needed
+    if 'qg_hat' not in locals() or qg_hat.shape[0] != vols.vol_a.shape[0]:
+        qg_hat = np.asarray((W.T @ change)).ravel() * sid.dt
+
+    # actual dissolved per grain
+    qg = np.minimum(vols.vol_a, qg_hat)
+    vols.vol_a = np.maximum(vols.vol_a - qg, 0.0)
+    vols.vol = vols.vol_a + vols.vol_e
+
+    edges.alpha = alpha
+
+    # ---- inlet flux ----
+    # Exact branch: J = |Q|(A+B) - (d^2/Pe)(lam+ A - lam- B)
+    # High-Pe branch: transported mode is B * exp_pe_fix at downstream,
+    # but the inlet-side flux contribution is still carried by B.
+    J_edge = (
+        (1.0 - use_hp)
+        * (
+            np.abs(edges.flow) * (edges.A + edges.B)
+            - (edges.diams**2 / sid.Pe) * (lam_plus_raw * edges.A - lam_minus_raw * edges.B)
+        )
+        + use_hp * (np.abs(edges.flow) * edges.B)
+    )
+
+    data.J_in = np.sum(edges.inlet * J_edge)
+
+    # ---- outlet flux ----
+    out_sel = ((inc.incidence.T @ spr.diags(edges.flow)) < 0).astype(float)
+    data.J_out = np.abs(out_sel @ (np.abs(edges.flow) * edges.outlet)) @ cb
+
+    # ---- sanity ----
+    if np.any(cb < -1e-2):
+        print(np.where(cb < 0)[0], cb[np.where(cb < 0)[0]])
+        F = spr.diags(edges.flow)
+        Z = spr.diags(((edges.flow == 0) & (edges.diams > 0)).astype(float))
+        A_pos = ((F @ inc.incidence) > 0)
+        Z_pos = ((Z @ inc.incidence) > 0)
+        upstream = A_pos.maximum(Z_pos).astype(float)
+        qc_in = sid.Pe * (upstream.T @ np.abs(edges.flow))
+        print(qc_in[np.where(cb < 0)[0]])
+        raise ValueError("Negative concentration detected")
+
     return cb
 
 # def solve_transport_and_change_danckwerts(alpha_edge):
