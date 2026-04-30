@@ -29,6 +29,21 @@ font = {'family' : 'Times New Roman',
 
 matplotlib.rc('font', **font)
 
+def draw(sid, graph, edges, triangles, vols, cb, t):
+    int_part  = int(t)
+    frac_part = int(100 * (t - int_part))
+    name = f"{int_part:04d}_{frac_part:02d}.jpg"
+    # draw_nodes(sid, graph, edges, cb, f'c_' + name, 'q')
+    # uniform_hist(sid, graph, edges, vols, cb, f'dreal_' + name, 'd')
+    if sid.include_volumes:
+        draw_triangles(sid, triangles, graph, vols, f'tri_' + name)
+    else:
+        draw_flow(sid, graph, edges, f'q_' + name, 'q')
+        if sid.include_precipitation:
+            draw_colored_edges(sid, graph, edges, f'd_' + name)
+        else:
+            draw_flow(sid, graph, edges, f'd_' + name, 'd')
+
 def draw_flow(sid: SimInputData, graph: Graph, edges: Edges, \
     name: str, plot_type: str) -> None:
     """ Draw the network with diameters/flow as edge width.
@@ -672,4 +687,64 @@ def uniform_hist(sid: SimInputData, graph: Graph, edges: Edges, vols: Volumes, \
     plt.yscale("log")
     # save file in the directory
     plt.savefig(sid.dirname + "/" + name)
+    plt.close()
+
+from matplotlib.colors import LinearSegmentedColormap
+
+# bright endpoints that stay vivid on a dark slide / projector
+cmap_custom = LinearSegmentedColormap.from_list(
+    "cyan_magenta_bright",
+    ["red",   # 0.0 → full-saturation cyan
+     "grey"]   # 1.0 → full-saturation magenta
+)
+
+def draw_colored_edges(sid: SimInputData, graph: Graph, edges: Edges, \
+    name: str) -> None:
+    """ Draw the network with diameters/flow as edge width.
+
+    """
+    # draw first panel for the network
+    plt.figure(figsize=(sid.figsize, sid.figsize))
+    spec = gridspec.GridSpec(ncols = 2, nrows = 1, width_ratios=[100, 1])
+    pos = nx.get_node_attributes(graph, 'pos')
+    ax1 = plt.subplot(spec[0])
+    plt.axis('equal')
+    plt.xlim(0, sid.n)
+    plt.ylim(0, sid.n)
+    # draw inlet and outlet nodes
+    x_in, y_in = [], []
+    for node in graph.in_nodes:
+        x_in.append(pos[node][0])
+        y_in.append(pos[node][1])
+    x_out, y_out = [], []
+    for node in graph.out_nodes:
+        x_out.append(pos[node][0])
+        y_out.append(pos[node][1])
+    plt.scatter(x_in, y_in, s = 1000 / sid.n, facecolors = 'white', \
+        edgecolors = 'black')
+    plt.scatter(x_out, y_out, s = 1000 / sid.n, facecolors = 'black', \
+        edgecolors = 'white')
+    qs1 = (1 - edges.boundary_list) * edges.diams_initial * 0.9 \
+        * (edges.diams <= edges.diams_initial / 5)
+    qs2 = (1 - edges.boundary_list) * edges.diams_initial * 0.9 \
+        * (edges.diams <= edges.diams_initial * 0.9) \
+        * (edges.diams > edges.diams_initial / 5)
+    qs3 = (1 - edges.boundary_list) * edges.diams \
+        * (edges.diams <= edges.diams_initial * 1.1) \
+        * (edges.diams > edges.diams_initial * 0.9)
+    qs4 = (1 - edges.boundary_list) * edges.diams \
+        * (edges.diams > edges.diams_initial * 1.1)
+    colors = np.clip(edges.diams / edges.diams_initial, 0, 1) #1 - (vols.triangles @ (vols.vol_e / vols.vol_max)) / edges.triangles
+    nx.draw_networkx_edges(graph, pos, edges.edge_list, edge_color = colors, \
+        edge_cmap=cmap_custom, edge_vmin=0, edge_vmax=1, width = sid.ddrawconst * np.array(qs1))
+    nx.draw_networkx_edges(graph, pos, edges.edge_list, edge_color = colors, \
+        edge_cmap=cmap_custom, edge_vmin=0, edge_vmax=1, width = sid.ddrawconst * np.array(qs2))
+    nx.draw_networkx_edges(graph, pos, edges.edge_list, edge_color = colors, \
+        edge_cmap=cmap_custom, edge_vmin=0, edge_vmax=1, width = sid.ddrawconst * np.array(qs3))
+    nx.draw_networkx_edges(graph, pos, edges.edge_list, edge_color = 'k', \
+        width = sid.ddrawconst * np.array(qs4))
+    #nx.draw_networkx_nodes(graph, pos, node_color = cd)
+    plt.subplots_adjust(wspace=0, hspace=0)
+    # save file in the directory
+    plt.savefig(sid.dirname + "/" + name, bbox_inches="tight")
     plt.close()

@@ -11,7 +11,6 @@ build(None) -> tuple[SimInputData, In.Incidence, De.Graph, In.Edges, Data]
     create class objects and initialize their parameters
 """
 
-import delaunay as De
 import network as Ne
 import incidence as In
 import save as Sv
@@ -23,7 +22,7 @@ from volumes import Volumes
 
 import numpy as np
 
-def build() -> tuple[SimInputData, In.Incidence, De.Graph, In.Edges, Volumes, Ne.Triangles, Data]:
+def build() -> tuple[SimInputData, In.Incidence, Ne.Graph, In.Edges, Volumes, Ne.Triangles, Data]:
     ''' Initialize main classes used in simulation based on config file.
 
     Create class objects and initialize their parameters. Make a simulation
@@ -54,23 +53,14 @@ def build() -> tuple[SimInputData, In.Incidence, De.Graph, In.Edges, Volumes, Ne
     # create incidence matrices, edges etc., save template of the simulation
     # and the configuration
     if SimInputData.load == 0:
-        print ('load 0')
+        print('Load 0: building new network')
         sid = SimInputData()
         make_dir(sid)
         inc = In.Incidence()
         graph, edges, triangles = Ne.build_delaunay_net(sid, inc)
-        inc.triangles = triangles.incidence
         Ne.set_geometry(sid, graph)
-        
-        # for i, nodes in enumerate(triangles.tlist):
-        #     n1, n2, n3 = nodes
-        #     if n1 in graph.in_nodes or n2 in graph.in_nodes or n3 in graph.in_nodes:
-        #         triangles.boundary[i] = 1
-        
-        In.create_matrices(sid, graph, inc, edges)
+        In.create_matrices(sid, graph, inc, edges, triangles)
         vols = Volumes(sid, inc, edges, triangles)
-        #edges.diams = np.sqrt(vols.triangles @ ((vols.vol_max - vols.vol) / np.array(np.sum(vols.triangles.T, axis = 1))[:, 0]) / edges.lens)
-        edges.diams_initial = edges.diams.copy()
         data = Data(sid, edges)
         Sv.save('/template.dill', sid, graph, inc, edges, triangles, vols)
         Sv.save_config(sid)
@@ -78,6 +68,7 @@ def build() -> tuple[SimInputData, In.Incidence, De.Graph, In.Edges, Volumes, Ne
     # simulation, from directory specified by load_name; based on that recreate
     # incidence and edges (with saved diameters), continue simulation
     elif SimInputData.load == 1:
+        print(f'Load 1: continuing simulation from {SimInputData.load_name}')
         sid, graph, inc, edges, triangles, vols = Sv.load(SimInputData.load_name+'/save.dill')
         data = Data(sid, edges)
         #data.load_data()
@@ -87,7 +78,7 @@ def build() -> tuple[SimInputData, In.Incidence, De.Graph, In.Edges, Volumes, Ne
     # to the geometry of the graph; save simulation in the load_name directory,
     # but in an additional folder named template, save new config there
     elif SimInputData.load == 2:
-        print ('load 2')
+        print(f'Load 2: new simulation from template {SimInputData.load_name}')
         sid = SimInputData()
         sid2, graph, inc, edges, triangles, vols \
             = Sv.load(SimInputData.load_name+'/template.dill')
@@ -101,25 +92,6 @@ def build() -> tuple[SimInputData, In.Incidence, De.Graph, In.Edges, Volumes, Ne
         make_dir(sid)
         data = Data(sid, edges)
         Sv.save_config(sid)
-    elif SimInputData.load == 3:
-        import network_custom as Nec
-        print ('load 3')
-        sid = SimInputData()
-        make_dir(sid)
-        inc = In.Incidence()
-        graph, edges, triangles = Nec.build_delaunay_net(sid, inc)
-        inc.triangles = triangles.incidence
-        #Ne.set_geometry(sid, graph)
-        
-        # for i, nodes in enumerate(triangles.tlist):
-        #     n1, n2, n3 = nodes
-        #     if n1 in graph.in_nodes or n2 in graph.in_nodes or n3 in graph.in_nodes:
-        #         triangles.boundary[i] = 1
-        
-        In.create_matrices(sid, graph, inc, edges)
-        vols = Volumes(sid, inc, edges, triangles)
-        edges.diams = np.sqrt(vols.triangles @ ((vols.vol_max - vols.vol_a - vols.vol_e) / np.array(np.sum(vols.triangles.T, axis = 1))[:, 0]) / edges.lens)
-        data = Data(sid, edges)
-        Sv.save('/template.dill', sid, graph, inc, edges, triangles, vols)
-        Sv.save_config(sid)
+    else:
+        raise ValueError(f"Unknown load type: {SimInputData.load}")
     return sid, inc, graph, edges, vols, triangles, data

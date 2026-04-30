@@ -57,10 +57,6 @@ class Data():
     t = []
     pressure = []
     porosity = []
-    order = []
-    participation_ratio = []
-    participation_ratio_nom = []
-    participation_ratio_denom = []
     cb_out = []
     cc_out = []
     delta_b = 0.
@@ -77,6 +73,8 @@ class Data():
     concentrations: list = []
     reactive_breakthrough_times: list = []
     track_times: list = []
+    vol_dissolved: float = 0.
+    vol_precipitated: float = 0.
 
     def __init__(self, sid: SimInputData, edges: Edges):
         self.dirname = sid.dirname
@@ -94,8 +92,7 @@ class Data():
             try:
                 file = open(self.dirname + '/params.txt', 'w', \
                     encoding = "utf-8")
-                np.savetxt(file, np.array([self.t, self.dissolved_v_list, self.pressure, self.porosity, self.participation_ratio, self.cb_out, \
-                    self.cc_out], dtype = float).T)
+                np.savetxt(file, np.array([self.t, self.dissolved_v_list, self.pressure, self.porosity], dtype = float).T)
                 file.close()
                 is_saved = True
             except PermissionError:
@@ -111,33 +108,14 @@ class Data():
                 is_saved = True
             except PermissionError:
                 pass
-        # is_saved = False
-        # while not is_saved: # prevents problems with opening text file
-        #     try:
-        #         file = open(self.dirname + '/track.txt', 'w', \
-        #             encoding = "utf-8")
-        #         np.savetxt(file, self.breakthrough_times)
-        #         file.close()
-        #         file = open(self.dirname + '/c_track.txt', 'w', \
-        #             encoding = "utf-8")
-        #         np.savetxt(file, self.concentrations)
-        #         file.close()
-        #         file = open(self.dirname + '/r_track.txt', 'w', \
-        #             encoding = "utf-8")
-        #         np.savetxt(file, self.reactive_breakthrough_times)
-        #         file.close()
-        #         is_saved = True
-        #     except PermissionError:
-        #         pass
 
     def load_data(self) -> None:
         data = np.loadtxt(self.dirname + '/params.txt').T
         self.t, self.dissolved_v_list, self.pressure, self.porosity, self.participation_ratio, self.cb_out, \
                     self.cc_out = list(data[0]), list(data[1]), list(data[2]), list(data[3]), list(data[4]), list(data[5]), list(data[6])
         self.dissolved_v = self.dissolved_v_list[-1]
-        #self.slices = list(np.loadtxt(self.dirname + '/slices.txt'))
 
-    def check_data(self, edges: Edges) -> None:
+    def check_data(self, sid: SimInputData, edges: Edges, pressure, cb, cc, cd, state) -> None:
         """ Check the key physical parameters of the simulation.
 
         This function calculates and checks if basic physical properties of the
@@ -151,15 +129,23 @@ class Data():
             inlet - edges connected to inlet nodes
             outlet - edges connected to outlet nodes
         """
-        Q_in = np.sum(edges.inlet * edges.flow)
-        Q_out = np.sum(edges.outlet * edges.flow)
+        Q_in = np.abs(np.sum(edges.inlet * edges.flow))
+        Q_out = np.abs(np.sum(edges.outlet * edges.flow))
         print('Q_in =', Q_in, 'Q_out =', Q_out)
-        if np.abs(np.abs(Q_in) - np.abs(Q_out)) > 1:
-            raise ValueError('Flow not matching!')
-        
-        # delta = np.abs((np.abs(inc.incidence.T < 0) @ (np.abs(edges.flow) \
-        #     * edges.inlet) - np.abs(inc.incidence.T > 0) @ (np.abs(edges.flow) \
-        #     * edges.outlet)) @ cb * sid.dt)
+        if np.abs(Q_in - Q_out) > 1e-2:
+            raise ValueError("Flow continuity error")
+        print('cb_min =', np.min(cb), 'cb_max =', np.max(cb))
+        if sid.include_precipitation:
+            print('cc_min =', np.min(cc), 'cc_max =', np.max(cc))
+            print('cd_min =', np.min(cd), 'cd_max =', np.max(cd))
+        # TO DO: fix mass balance check from collect_data
+        if np.max(edges.outlet * edges.diams) > sid.d_break:
+            state = True
+            print ('Network dissolved')
+        if np.max(pressure) > self.pressure[0] / sid.min_perm:
+            print('Network clogged')
+            state = True
+        return state
 
 
     def collect_data(self, sid: SimInputData, inc: Incidence, edges: Edges, vols, \
@@ -199,82 +185,12 @@ class Data():
         self.t.append(sid.old_t)
 
         self.pressure.append(np.max(p))
-        self.order.append((sid.ne - np.sum(edges.flow ** 2) ** 2 \
-            / np.sum(edges.flow ** 4)) / (sid.ne - 1))
-        pi = np.sum(edges.diams ** 2 * np.abs(edges.flow)) ** 2 / np.sum(edges.diams ** 2 \
-            * np.abs(edges.flow) ** 2) / sid.nsq
-        pi_prime = np.sum(edges.diams ** 2) / sid.nsq
-        self.participation_ratio_nom.append(pi)
-        self.participation_ratio_denom.append(pi_prime)
-        self.participation_ratio.append(pi / pi_prime)
-        # calculate the difference between inflow and outflow of each substance
 
-        # if sid.include_diffusion:
-
-        #     lam_plus_val = sid.Pe / 2 / edges.diams ** 2 * \
-        #         (np.sqrt(np.abs(edges.flow) ** 2 + 4 * edges.alpha * sid.Da / (1 + sid.G * edges.diams) / sid.Pe * edges.diams ** 3) + np.abs(edges.flow))
-        #     lam_plus_val = np.array(np.ma.fix_invalid(lam_plus_val, fill_value = 0))
-        #     lam_plus_zero = 1 * (lam_plus_val > sid.diffusion_exp_limit)
-        #     lam_plus_val = lam_plus_val * (1 - lam_plus_zero)
-        #     lam_minus_val = sid.Pe / 2 / edges.diams ** 2 * \
-        #         (np.sqrt(np.abs(edges.flow) ** 2 + 4 * edges.alpha * sid.Da / (1 + sid.G * edges.diams) / sid.Pe * edges.diams ** 3) - np.abs(edges.flow))
-        #     lam_minus_val = np.array(np.ma.fix_invalid(lam_minus_val, fill_value = 0))
-        #     # Not sure how to calculate J_out - should it be just q_out c_out (as we set dc/dx = 0 at the outlet? - do we for 100%?)
-        #     # But no matter how I calculate, I end up with a small error, there could be some small bug
-        #     #J_in2 = np.sum(edges.inlet * (np.abs(edges.flow) * (edges.A * (1 - lam_plus_zero) + edges.B) - (1 - lam_plus_zero) / sid.Pe * edges.diams ** 2 * (lam_plus_val * edges.A - lam_minus_val * edges.B)))
-        #     #J_in = np.sum(edges.inlet * (np.abs(edges.flow) * (edges.A + edges.B) - 1 / sid.Pe * edges.diams ** 2 *  (lam_plus_val * edges.A - lam_minus_val * edges.B)))
-        #     #J_out2 = np.sum((1 - lam_plus_zero) * edges.outlet * (np.abs(edges.flow) * (edges.A * np.exp(lam_plus_val * edges.lens) + edges.B * np.exp(-lam_minus_val * edges.lens)) - 1 / sid.Pe * edges.diams ** 2 *(lam_plus_val * edges.A * np.exp(lam_plus_val * edges.lens) - lam_minus_val * edges.B * np.exp(-lam_minus_val * edges.lens))) + lam_plus_zero * edges.outlet * edges.B * np.abs(edges.flow) * np.exp(-edges.alpha * sid.Da / (1 + sid.G * edges.diams) * edges.diams * edges.lens / np.abs(edges.flow)))
-        #     #J_out = np.sum(edges.outlet * (np.abs(edges.flow) * (edges.A * np.exp(lam_plus_val * edges.lens) + edges.B * np.exp(-lam_minus_val * edges.lens)) - 1 / sid.Pe * edges.diams ** 2 *(lam_plus_val * edges.A * np.exp(lam_plus_val * edges.lens) - lam_minus_val * edges.B * np.exp(-lam_minus_val * edges.lens))))
-        #     #J_out = np.sum(edges.outlet * (np.abs(edges.flow) * (edges.A * np.exp(lam_plus_val * edges.lens) + edges.B * np.exp(-lam_minus_val * edges.lens)) - 1 / sid.Pe * edges.diams ** 2 *(lam_plus_val * edges.A * np.exp(lam_plus_val * edges.lens) - lam_minus_val * edges.B * np.exp(-lam_minus_val * edges.lens))))
-        #     J_in = np.sum(edges.inlet * (np.abs(edges.flow) * (edges.A * (1 - lam_plus_zero) + edges.B) - (1 - lam_plus_zero) / sid.Pe * edges.diams ** 2 * (lam_plus_val * edges.A - lam_minus_val * edges.B)))
-        #     J_out = np.abs(np.abs(inc.incidence.T > 0) @ (np.abs(edges.flow) \
-        #          * edges.outlet)) @ cb
-        
-        # J_out3 = np.abs(np.abs(inc.incidence.T > 0) @ (np.abs(edges.flow) \
-        #     * edges.outlet)) @ cb
-        # print(f'lam plus zero: {np.sum(lam_plus_zero), np.sum(1 - lam_plus_zero)}')
-        
-        # print(f'J_in2: {J_in2 * sid.dt}, J_out2: {J_out2 * sid.dt}')
-        # print(f'delta J_adv: {(np.sum(edges.inlet * (np.abs(edges.flow) * (edges.A + edges.B)))-np.sum(edges.outlet * (np.abs(edges.flow) * (edges.A * np.exp(lam_plus_val * edges.lens) + edges.B * np.exp(-lam_minus_val * edges.lens))))) * sid.dt}')
-        # print(f'delta J_diff: {(np.sum(edges.inlet * (- 1 / sid.Pe * edges.diams ** 2 *  (lam_plus_val * edges.A - lam_minus_val * edges.B)))-np.sum(edges.outlet * (-1 / sid.Pe * edges.diams ** 2 *(lam_plus_val * edges.A * np.exp(lam_plus_val * edges.lens) - lam_minus_val * edges.B * np.exp(-lam_minus_val * edges.lens))))) * sid.dt}')
-
-        # delta = np.abs((np.abs(inc.incidence.T < 0) @ (np.abs(edges.flow) \
-        #     * edges.inlet) - np.abs(inc.incidence.T > 0) @ (np.abs(edges.flow) \
-        #     * edges.outlet)) @ cb * sid.dt)
-        
-        
-        if sid.include_diffusion:
-            print(f'J_in: {self.J_in}, J_out: {self.J_out}')
-            delta = (self.J_in - self.J_out) * sid.dt
-        else:
-            # delta = np.abs((np.abs(inc.incidence.T < 0) @ (np.abs(edges.flow) \
-            #     * edges.inlet) - np.abs(inc.incidence.T > 0) @ (np.abs(edges.flow) \
-            #     * edges.outlet)) @ cb * sid.dt)
-            delta = np.abs(np.abs(1 * ( inc.incidence.T @ spr.diags(edges.flow) > 0) @ (np.abs(edges.flow) \
-                 * edges.inlet)) @ cb - np.abs(1 * ( inc.incidence.T @ spr.diags(edges.flow) < 0) @ (np.abs(edges.flow) \
-                 * edges.outlet)) @ cb) * sid.dt / 2
-        vol_dissolved = np.sum(edges.diams ** 2 * edges.lens) - self.vol_init
-        vol_a = np.sum(vols.vol_a_0 - vols.vol_a)
         self.porosity.append(1 - np.sum(vols.vol_a) / np.sum(vols.vol_max))
-        self.delta_b += delta
-        # delta2 = np.abs((np.abs(inc.incidence.T < 0) @ (np.abs(edges.flow) \
-        #         * edges.inlet) - np.abs(inc.incidence.T > 0) @ (np.abs(edges.flow) \
-        #         * edges.outlet)) @ cb * sid.dt)
-        # print(f'Delta2: {delta2}')
-        # print(f'Delta3: {(J_in - J_out2) * sid.dt}')
-        # print(f'Delta4: {(J_in - J_out3) * sid.dt}')
-        print(f'Used concentration: {self.delta_b}, Dissolved volume: {sid.Da * vol_dissolved / 2}, Dissolved volume A: {sid.Da * vol_a / 2}')
-        print(f'c - V: {(self.delta_b - sid.Da * vol_dissolved / 2) / self.delta_b}, c - V_A: {(self.delta_b - sid.Da * vol_a / 2) / self.delta_b}, V - V_A {(vol_dissolved - vol_a) / vol_dissolved}')
-        self.cb_out.append(self.delta_b)
-        delta = np.abs((np.abs(inc.incidence.T < 0) @ (np.abs(edges.flow) \
-            * edges.inlet) - np.abs(inc.incidence.T > 0) @ (np.abs(edges.flow) \
-            * edges.outlet)) @ cc * sid.dt)
-        self.delta_c += delta
-        self.cc_out.append(self.delta_c)
+
         self.dissolved_v = (np.sum(edges.diams ** 2 * edges.lens) - self.vol_init) / self.vol_init
         self.dissolved_v_list.append(self.dissolved_v)
-        # if self.delta_b - sid.Da * vol_a / 2 > 1e-5:
-        #     raise ValueError("Mass lost")
+
 
     def plot_data(self) -> None:
         """ Plot data from text file.
@@ -404,94 +320,6 @@ class Data():
         self.slices_s.append(surface_tab)
         self.slice_times.append("{0}".format(str(round(time, 1) if time % 1 else int(time))))
 
-    def plot_slice_channelization(self, graph: Graph) -> None:
-        """ Plots slice data from text file.
-
-        This function loads the data from text file slices.txt and plots them
-        to files slices.png, slices_no_div.png, slices_norm.png.
-        """
-        pos_x = np.array(list(nx.get_node_attributes(graph, 'pos').values()))[:,0]
-        slices = np.linspace(np.min(pos_x), np.max(pos_x), 102)[1:-1]
-        edge_number  = np.array(self.slices[0])
-        plt.figure(figsize = (10, 10))
-        for i, channeling in enumerate(self.slices[1:]):
-            plt.plot(slices, np.array(channeling) / edge_number, \
-                    label = self.slice_times[i])
-        plt.xlabel('x')
-        plt.ylabel('channeling [%]')
-        plt.legend(loc='center left', bbox_to_anchor=(1, 0.5))
-        plt.savefig(self.dirname + '/slices.png')
-        plt.close()
-        plt.figure(figsize = (10, 10))
-        for i, channeling in enumerate(self.slices[1:]):
-            plt.plot(slices, np.array(channeling) / np.array(self.slices[1]), \
-                label = self.slice_times[i])
-        plt.xlabel('x')
-        plt.ylabel('channeling [initial]')
-        plt.legend(loc='center left', bbox_to_anchor=(1, 0.5))
-        plt.savefig(self.dirname + '/slices_norm.png')
-        plt.close()
-        plt.figure(figsize = (10, 10))
-        for i, channeling in enumerate(self.slices[1:]):
-            plt.plot(slices, channeling, label = self.slice_times[i])
-        plt.xlabel('x')
-        plt.ylabel('channeling [edge number]')
-        plt.legend(loc='center left', bbox_to_anchor=(1, 0.5))
-        plt.savefig(self.dirname + '/slices_no_div.png')
-        plt.close()
-
-    def plot_slice_channelization_v2(self, sid: SimInputData, graph: Graph) -> None:
-        """ Plots slice data from text file.
-
-        This function loads the data from text file slices.txt and plots them
-        to files slices.png, slices_no_div.png, slices_norm.png.
-        """
-        pos_x = np.array(list(nx.get_node_attributes(graph, 'pos').values()))[:,0]
-        slices = np.linspace(np.min(pos_x), np.max(pos_x), 102)[1:-1]
-        edge_number  = np.array(self.slices[0])
-        i_start = 5
-        i_division = sid.dissolved_v_max // sid.track_every // 5
-        plt.figure(figsize = (10, 10))
-        for i, channeling in enumerate(self.slices[1:]):
-            if i < i_start:
-                plt.plot(slices, (edge_number - 2 * np.array(channeling)) / edge_number, \
-                        label = self.slice_times[i])
-        plt.xlabel('x')
-        plt.ylabel('flow focusing index')
-        plt.ylim(0, 1)
-        plt.legend(loc='center left', bbox_to_anchor=(1, 0.5))
-        plt.savefig(self.dirname + '/slices_start.png')
-        plt.close()
-        plt.figure(figsize = (10, 10))
-        for i, channeling in enumerate(self.slices[1:]):
-            if i % i_division == 0:
-                plt.plot(slices, (edge_number - 2 * np.array(channeling)) / edge_number, \
-                        label = self.slice_times[i])
-        plt.xlabel('x')
-        plt.ylabel('flow focusing index')
-        plt.ylim(0, 1)
-        plt.legend(loc='center left', bbox_to_anchor=(1, 0.5))
-        plt.savefig(self.dirname + '/slices.png')
-        plt.close()
-
-    def plot_participation(self, sid: SimInputData):
-        plt.figure(figsize = (10, 10))
-        plt.title('Participation ratio')
-        ax_p = plt.subplot()
-        ax_p.set_title('Participation ratio')
-        ax_p.set_ylim(0, 1)
-        ax_p.set_xlim(0, sid.dissolved_v_max / self.vol_init)
-        ax_p.set_xlabel('dissolved v')
-        ax_p.set_ylabel('participation ratio')
-        ax_p2 = ax_p.twinx()
-        x = np.linspace(0, sid.dissolved_v_max / self.vol_init, len(self.participation_ratio))
-        ax_p2.plot(x, self.participation_ratio_nom, label = "pi", color='green', linestyle='dashed')
-        ax_p2.plot(x, self.participation_ratio_denom, label = "pi'", color='red', linestyle='dashed')
-        ax_p.plot(x, self.participation_ratio)
-        ax_p2.legend()
-        plt.savefig(self.dirname + '/participation_ratio.pdf')
-        plt.close()
-
     def plot_profile(self, graph: Graph) -> None:
         """ Plots slice data from text file.
 
@@ -504,9 +332,6 @@ class Data():
         edge_number  = np.array(self.slices[0])
         colors = ['C0', 'C1', 'C2', 'C3', 'C4', 'C5', 'C6', 'C7', 'C8', 'C9']
         plt.figure(figsize = (15, 10))
-        plt.plot([], [], ' ', label=' ')
-        plt.plot([], [], ' ', label=' ')
-        plt.plot([], [], ' ', label=' ')
         plt.plot(slices, np.array((edge_number - 2 * np.array(self.slices[1])) \
             / edge_number), linewidth = 5, color = 'black', label = '0.0')
         for i, channeling in enumerate(self.slices[2:]):
@@ -523,26 +348,31 @@ class Data():
         #plt.yticks([],[])
         plt.yticks([0, 0.5, 1],['0', '0.5', '1'])
         handles, labels = plt.gca().get_legend_handles_labels()
-        #order = [0,4,1,5,2,6,3,7]
+        n_labels = len(labels)
+        ncol = max(1, int(np.ceil(n_labels / 2)))
+        nrow = int(np.ceil(n_labels / ncol))
+
         order = []
-        for i in range(len(handles) // 2):
-            order.append(i)
-            if i == len(handles) // 2 - 1:
-                if len(handles) % 2 == 0:
-                    order.append(len(handles) // 2 + i)
-            else:
-                order.append(len(handles) // 2 + i)
-        legend = plt.legend([handles[idx] for idx in order],[labels[idx] for idx in order], loc="lower center", mode = "expand", ncol = 4, prop={'size': 40}, handlelength = 1, frameon=False, borderpad = 0, handletextpad = 0.4)
+        for j in range(ncol):
+            for i in range(nrow):
+                idx = i * ncol + j
+                if idx < n_labels:
+                    order.append(idx)
+
+        legend = plt.legend(
+            [handles[idx] for idx in order],
+            [labels[idx] for idx in order],
+            loc = "lower right",
+            ncol = ncol,
+            prop = {'size': 30},
+            handlelength = 1,
+            frameon = False,
+            borderpad = 0,
+            handletextpad = 0.4,
+            columnspacing = 0.8
+        )
         for legobj in legend.legend_handles:
             legobj.set_linewidth(10.0)
-        #spine_color = 'blue'
-        # for spine in ax1.spines.values():
-        #     spine.set_linewidth(5)
-        #     spine.set_edgecolor(spine_color)
-        # for spine in ax2.spines.values():
-        #     spine.set_linewidth(5)
-        #     spine.set_edgecolor(spine_color)
-        # save file in the directory
         plt.savefig(self.dirname + "/profile.png", bbox_inches="tight")
         plt.close()
 

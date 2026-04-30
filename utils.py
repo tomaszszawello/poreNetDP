@@ -62,16 +62,16 @@ def initialize_iterators(sid: SimInputData) -> tuple[int, float, int, float, \
     t : float
         time iterator in range from old time to sum of old and new
 
-    breakthrough : bool
+    state : bool
         parameter stating if the system was dissolved (if diameter of output
-        edge grew at least to sid.d_break)
+        edge grew at least to sid.d_break) or clogged
     """
     iters = sid.old_iters + sid.iters
     tmax = sid.old_t + sid.tmax
     i = sid.old_iters
     t = sid.old_t
-    breakthrough = False
-    return iters, tmax, i, t, breakthrough
+    state = False
+    return iters, tmax, i, t, state
 
 def update_iterators(sid: SimInputData, i: int, t: float, dt_next: float) -> \
     tuple[int, float]:
@@ -129,3 +129,47 @@ def make_dir(sid: SimInputData) -> None:
             i += 1
     if not os.path.isdir(sid.dirname):
         os.makedirs(sid.dirname)
+
+import numpy as np
+import scipy.sparse as sp
+from scipy.sparse.csgraph import connected_components
+
+def keep_largest_component(inc):
+    """
+    Parameters
+    ----------
+    inc : scipy.sparse.csc_matrix (n_nodes × n_edges)
+        Signed incidence matrix (+1/−1) of an undirected network.
+
+    Returns
+    -------
+    inc_pruned : csc_matrix
+        Copy of `inc` where rows (nodes) outside the largest
+        connected component have been zeroed.
+    keep_mask : ndarray, bool
+        True for nodes kept; False for zeroed rows.
+    """
+    # 1. Build an undirected node-adjacency matrix:  A = |inc| · |inc|ᵀ
+    A = abs(inc.incidence).astype(bool).astype(int)     # 0/1 matrix keeps multiplication cheap
+    G = A @ A.T
+    G.setdiag(0)                              # remove self-loops
+    G.eliminate_zeros()
+
+    # 2. Connected components of the node graph
+    ncomp, labels = connected_components(G, directed=False)
+
+    if ncomp <= 1:                            # already one component → return unchanged
+        return None
+
+    # 3. Largest component
+    largest = np.argmax(np.bincount(labels))
+    keep_mask = labels == largest
+
+    # 4. Zero rows outside that component
+    inc_pruned = inc.incidence.copy().tolil()           # easier row assignment
+    inc_pruned[~keep_mask, :] = 0             # zero unwanted nodes
+    inc.incidence = inc_pruned.tocsc()
+    inlet_pruned = inc.inlet.copy().tolil()
+    inlet_pruned[~keep_mask, :] = 0 
+    inc.inlet = inlet_pruned.tocsc()
+    return None

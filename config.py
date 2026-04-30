@@ -12,92 +12,82 @@ import numpy as np
 
 
 class SimInputData:
-    ''' Configuration class for the whole simulation.
+    ''' Configuration class for the simulation.
     '''
     # GENERAL
-    n: int = 100
+    n: int = 50
     "network size along y (transverse to the flow)"
-    m: int = 100
+    m: int = 50
     "network size along x (parallel to the flow)"
     iters: int = 10000000
     "maximum number of iterations"
-    tmax: float = 2000000000.
+    tmax: float = 1000.
     "maximum time"
-    phi = 0.23
+    
     dissolved_v_max: float = 1.
     "maximum dissolved pore volume"
     plot_every: int = 100000
     "frequency of plotting the results"
-    track_every: int = dissolved_v_max / 10
+    track_every: int = tmax / 10
     "frequency of checking channelization"
     track_list = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
     #track_list = [1, 2, 5, 10]
     "times of checking channelization"
 
     # DISSOLUTION & PRECIPITATION
-    Da_L = 100
-    Pe_L = 10
-    # Da: float = 100#0.67 * 10 ** -1
-    # "effective Damkohler number"
-    # Pe = 100.
-
-    #chi0 = (1 - (1 - phi) ** (1/3)) / np.sqrt(3)
-    #chi0 = (1 / (1 - phi) ** (1/3) - 1) / np.sqrt(3)
-    #chi0 = 4 * np.sqrt(phi) / np.pi
+    Da_eff: float = 1
+    "effective Damkohler number"
+    G: float = 5.
+    "transport parameter (reaction to transverse diffusion)"
+    
+    Pe = 100.
+    "Peclet number (only if include_diffusion = 1)"
+    phi = 0.23
+    "porosity (physical if include_volumes = 1; otherwise just setting chi0)"
     chi0 = 2 * np.sqrt(phi) / np.pi / np.sqrt(3)
-    Sh = 4
-    include_diffusion = True
-    Da = 2 #Da_L * np.pi * chi0 / (m)
-    #Pe = Pe_L * 2 / (np.pi * chi0 ** 2)
-    Pe = 155 #Pe_L * 4 / (np.pi * chi0 ** 2)
+    "pore aspect ratio"
+    Da: float = Da_eff * (1 + G)
+    "Damkohler number"
+
+    
     
     inert_fraction = 0.27
-
-    M = 0.1
-    cosm_in = 1.25
-    cosm_out = 0.75
-
-    G: float = Da * Pe / Sh * chi0 ** 2 / 4
-    "diffusion to reaction ratio"
-    Da_eff: float = Da / (1 + G)
-    "Damkohler number"
-    # G = 50
-    # Da_eff = 5
-    #Da = Da_eff * (1 + G)
-    #V_tot = (1 / chi0) ** 2 * np.sqrt(6) / 6 / np.pi
+    "average fraction of inert mineral in grains"
     V_tot = (1 / chi0) ** 2 * 3 / 4 / np.pi
-
-    debug = False
+    "grain total volume"
 
     K: float = 0.5
     "precipitation to dissolution reaction rate"
-    Gamma: float = 2.
-    "precipitation to dissolution acid capacity number"
+    Gamma: float = 2.01
+    "precipitation to dissolution molar volume / acid capacity number"
     merge_length: float = 1 / chi0
     "diameter scale to length scale ratio for merging"
     n_tracking = 2000
+
+
+    debug = False
+
+    min_perm = 1e-3
 
     cb_0 = 1
     diffusion_exp_limit = 20
     "threshold above which we set the lambda+ solution for concentration to zero"
 
-    c_th = 0.01
-
-    initial_pipe = False
-    pipe_diam = 5
-    pipe_width = 2
-    phi_max = 1
 
     # INCLUDE
     include_adt: bool = True
     "include adaptive timestep"
-    include_cc: bool = False
+    include_diffusion = True
+    "include diffusion for dissolution"
+    include_precipitation: bool = False
     "include precipitation"
     include_merging: bool = True
     "include pore merging"
     include_volumes: bool = True
     "include pore volume tracking"
-    include_electroosmosis: bool = False
+
+    flow_bc: str = "q" # "p"
+    "flow boundary condition: constant total flow rate or constant pressure"
 
     # INITIAL CONDITIONS
     qin: float = 1.
@@ -106,6 +96,8 @@ class SimInputData:
     "inlet B concentration"
     cc_in: float = 0.
     "inlet C concentration"
+    cd_in: float = 1.
+    "inlet D concentration"
 
     # TIME
     dt: float = 0.000001
@@ -118,14 +110,16 @@ class SimInputData:
 
     it_alpha_th = 1e-5
     it_limit = 100
+    c_th = 1e-2
+    Kp = 1#1e-5#0.01
 
     # DIAMETERS
-    noise: str = 'file_lognormal_k'
+    noise: str = 'lognormal'
     ("type of noise in diameters distribution: 'gaussian', 'lognormal', \
     'klognormal', 'file_lognormal_d', 'file_lognormal_k'")
     noise_filename: str = 'n200lam20r1.dat' #'n200lam20r1.dat'
     #noise_filename: str = 'n100m300lam30r01.dat' #'n200lam20r1.dat'
-    rock_filename: str = 'n200lam20r2.dat'
+    rock_filename: str = 'n200lam20r1.dat'
     "name of file with initial diameters if noise == file_"
     d0: float = 1.
     "initial dimensionless mean diameter"
@@ -137,7 +131,8 @@ class SimInputData:
     "maximum diameter"
     d_break: float = 4.
     "minimal diameter of outlet edge for network to be dissolved"
-    sigma_phi: float = 0#.2
+    sigma_phi: float = 0.5
+    "initial porosity lognormal deviation"
 
     # DRAWING
     figsize: float = 10.
@@ -160,7 +155,6 @@ class SimInputData:
     #load_name: str = 'electro/Pe1.00Da1.00/5'
     #load_name: str = 'paper_diff/Pe1.00Da1.00/4'
     load_name: str = 'paper_diff/Pe1.00Da1.00/3/template/37'
-    
     "name of loaded network"
 
     # GEOMETRY
@@ -189,8 +183,10 @@ class SimInputData:
     "total time of simulation"
     Q_in = 1.
     "total inlet flow (updated later)"
+    p_in = 0.
+    "inlet pressure (updated later, if flow_bc is constant pressure)"
     #dirname: str = geo + str(n) + '/' + f'G{G:.2f}Daeff{Da_eff:.2f}'
-    dirname: str = 'linda/' + f'Pe{Pe:.2f}Da{Da:.2f}'
+    dirname: str = 'integration/' + f'Pe{Pe:.2f}Da{Da:.2f}'
     "directory of simulation"
     initial_merging: int = 5
     "number of initial merging iterations"

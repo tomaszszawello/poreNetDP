@@ -43,15 +43,35 @@ class Volumes():
         self.vol_d_min = self.triangles.T @ (sid.dmin ** 2 \
             * edges.lens / edges.triangles)
         "minimal volume that emptiness must take in each triangle"
-        normal = np.random.randn(len(triangles.volume))
-        phi_var = np.exp(1+ sid.sigma_phi * normal)
-        phi_var /= np.average(phi_var)
+        # normal = np.random.randn(len(triangles.volume))
+        # phi_var = np.exp(1+ sid.sigma_phi * normal)
+        # phi_var /= np.average(phi_var)
         
-        self.vol = (1 - np.clip(sid.phi * phi_var, 0.01, 0.9)) * triangles.volume
+        # self.vol = (1 - np.clip(sid.phi * phi_var, 0.01, 0.9)) * triangles.volume
         #self.vol = (1 - sid.phi) * triangles.volume
-        self.initialize_rocks_from_file(sid, triangles)
+        #self.initialize_rocks_from_file(sid, triangles)
         "total volume of rock in the triangle"
         #self.vol_a = self.vol.copy()
+        if sid.noise == 'file_lognormal_k':
+            raw = np.loadtxt(sid.noise_filename).T
+            z = (raw - raw.mean()) / raw.std()
+            z = np.clip(z, -1, 1)  # avoid extreme tails
+            phi = []
+            for n1, n2, n3 in triangles.tlist:
+                phi.append((z[n1 // sid.n, n1 % sid.n] + \
+                    z[n2 // sid.n, n2 % sid.n] + z[n3 // sid.n, n3 % sid.n]) / 3)
+            phi = np.array(phi)
+            phi_min = 0.01
+            phi_max = 0.99
+            phi_field = phi_min + (phi_max - phi_min) * (phi - phi.min()) / (phi.max() - phi.min())
+            self.vol_a = (1 - phi_field) * triangles.volume
+        elif sid.noise == 'lognormal':
+            normal = np.random.randn(len(triangles.volume))
+            phi_var = np.exp(1+ sid.sigma_phi * normal)
+            phi_var /= np.average(phi_var)            
+            self.vol_a = (1 - np.clip(sid.phi * phi_var, 0.01, 0.9)) * triangles.volume
+        else:
+             self.vol_a = (1 - sid.phi) * triangles.volume
         "volume of substance A (dissolved) (ntr)"
         self.vol_a_0 = self.vol_a.copy()
         "initial volume of substance A"
@@ -71,22 +91,22 @@ class Volumes():
         #self.initialize_rocks(sid)
         
 
-    def initialize_rocks(self, sid):
-        inert = np.random.randint(0, sid.ntr, size=int(sid.inert_fraction * sid.ntr))
-        self.vol_a[inert] = 0
-        self.vol_e[inert] = self.vol[inert]
+    # def initialize_rocks(self, sid):
+    #     inert = np.random.randint(0, sid.ntr, size=int(sid.inert_fraction * sid.ntr))
+    #     self.vol_a[inert] = 0
+    #     self.vol_e[inert] = self.vol[inert]
 
-    def initialize_rocks_from_file(self, sid, triangles):
-        mineral = np.loadtxt(sid.rock_filename)
-        threshold = np.quantile(mineral, 1 - sid.inert_fraction)
-        mineral_array = 1 * (mineral > threshold)
-        mineral_fraction = []
-        for n1, n2, n3 in triangles.tlist:
-            mineral_fraction.append((mineral_array[n1 // sid.n, n1 % sid.n] + \
-                mineral_array[n2 // sid.n, n2 % sid.n] + mineral_array[n3 // sid.n, n3 % sid.n]) / 3)
-        mineral_fraction = np.array(mineral_fraction)
-        self.vol_a = self.vol * (1 - mineral_fraction)
-        self.vol_e = self.vol * mineral_fraction
+    # def initialize_rocks_from_file(self, sid, triangles):
+    #     mineral = np.loadtxt(sid.rock_filename)
+    #     threshold = np.quantile(mineral, 1 - sid.inert_fraction)
+    #     mineral_array = 1 * (mineral > threshold)
+    #     mineral_fraction = []
+    #     for n1, n2, n3 in triangles.tlist:
+    #         mineral_fraction.append((mineral_array[n1 // sid.n, n1 % sid.n] + \
+    #             mineral_array[n2 // sid.n, n2 % sid.n] + mineral_array[n3 // sid.n, n3 % sid.n]) / 3)
+    #     mineral_fraction = np.array(mineral_fraction)
+    #     self.vol_a = self.vol * (1 - mineral_fraction)
+    #     self.vol_e = self.vol * mineral_fraction
 
 
     def find_edge_surface(self, edges):

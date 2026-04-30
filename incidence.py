@@ -21,7 +21,7 @@ import numpy as np
 import scipy.sparse as spr
 
 from config import SimInputData
-from network import Edges, Graph
+from network import Edges, Graph, Triangles
 
 
 class Incidence():
@@ -54,6 +54,8 @@ class Incidence():
     "connections of edges with inlet nodes (ne x nsq)"
     merge: spr.csr_matrix = spr.csr_matrix(0)
     "threshold values for edge merging (ne x ne)"
+    triangles: spr.csr_matrix = spr.csr_matrix(0)
+    "connections of edges with grains (ntr x ne?)"
     plot: spr.csr_matrix = spr.csr_matrix(0)
     "matrix for plotting diameters with merging (ne x ne)"
     merge_vec: np.ndarray
@@ -63,7 +65,7 @@ class Incidence():
 
 
 def create_matrices(sid: SimInputData, graph: Graph, inc: Incidence, \
-    edges: Edges) -> None:
+    edges: Edges, triangles: Triangles) -> None:
     """ Create incidence matrices and edges class for graph parameters.
 
     This function takes the network and based on its properties creates
@@ -188,5 +190,6 @@ def create_matrices(sid: SimInputData, graph: Graph, inc: Incidence, \
     inc.merge_vec = np.zeros(sid.nsq + 2 * sid.ne)
     inc.head = np.array(head)
     inc.tail = np.array(tail)
+    inc.triangles = triangles.incidence
     edges.inlet = in_edges
     edges.outlet = out_edges
