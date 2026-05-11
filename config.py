@@ -24,7 +24,7 @@ class SimInputData:
     tmax: float = 1000.
     "maximum time"
     
-    dissolved_v_max: float = 1.
+    dissolved_v_max: float = 10.
     "maximum dissolved pore volume"
     plot_every: int = 100000
     "frequency of plotting the results"
@@ -48,18 +48,18 @@ class SimInputData:
     "pore aspect ratio"
     Da: float = Da_eff * (1 + G)
     "Damkohler number"
-
-    
-    
     inert_fraction = 0.27
     "average fraction of inert mineral in grains"
     V_tot = (1 / chi0) ** 2 * 3 / 4 / np.pi
     "grain total volume"
-
     K: float = 0.5
     "precipitation to dissolution reaction rate"
     Gamma: float = 2.01
     "precipitation to dissolution molar volume / acid capacity number"
+    A: float = 1
+    "nucleation rate pre-factor"
+    c_sat: float = 1/1000.
+    "saturation limit"
     merge_length: float = 1 / chi0
     "diameter scale to length scale ratio for merging"
     n_tracking = 2000
@@ -77,14 +77,16 @@ class SimInputData:
     # INCLUDE
     include_adt: bool = True
     "include adaptive timestep"
-    include_diffusion = True
+    include_diffusion = False
     "include diffusion for dissolution"
-    include_precipitation: bool = False
+    include_precipitation: bool = True
     "include precipitation"
-    include_merging: bool = True
+    include_merging: bool = False
     "include pore merging"
-    include_volumes: bool = True
+    include_volumes: bool = False
     "include pore volume tracking"
+    include_nucleation: bool = False
+    "include nucleation (requires precipitation)"
 
     flow_bc: str = "q" # "p"
     "flow boundary condition: constant total flow rate or constant pressure"
