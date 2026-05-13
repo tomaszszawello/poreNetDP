@@ -1,8 +1,9 @@
 """ Functions used for kinetic model of nucleation and growth in the network
 
-Assumes mass balance of the form q cB ~ (1-f) cB and q cC ~ (1 - f) cB - f cC 
-where 0 < f < 1 is a scalar function of time
+    Assumes mass balance of the form q cB ~ (1-f) cB and q cC ~ (1 - f) cB - f cC 
+    where 0 < f < 1 is a scalar function of time
 
+    
 """
 import numpy as np
 
@@ -81,8 +82,9 @@ def get_average_rates(sid, edges, cC_profiles):
 # ==================== VARIOUS IMPLEMENTATIONS AND EXTENSIONS OF AVRAMI ======================
 # ============================================================================================
 
+
 def update_frac_transformed_global_method_ordinary(sid, edges, cC_profiles, dt):
-    """ Direct application of the KJMA kinetic model of nucleation and growth  
+    """ Direct application of the KJMA kinetic model to each edge of the network
 
     Returns
     --------
@@ -100,3 +102,35 @@ def update_frac_transformed_global_method_ordinary(sid, edges, cC_profiles, dt):
     print(f"    Nuclei number stats: {sid.A}, {np.min(N):.2f}, {np.max(N):.2f}, {np.mean(N):.2f}, {N}, {avg_velocity}") 
     
     return 1.0 - np.exp(-edges.A_ext)
+
+def update_frac_transformed_global_isotropic_area(sid, edges, cC_profiles, old_diams, dt):
+    """ Extends KJMA model to account for nucleation and growth on a deformable substrate:
+        Assumes a pore edge distorts only in one dimension and that grains stretch with the
+        substrate itself
+
+        Parameters
+        ----------
+        old_diams : np.ndarray
+            edge diameters at the previous time step
+
+        Returns
+        --------
+        f : np.ndarray 
+            fraction of transformed area in each edge
+    """
+    avg_nucleation_rate, avg_velocity = get_average_rates(sid, edges, cC_profiles)
+    
+    # Dilution factor
+    A_pore_old = 2 * np.pi * old_diams * edges.lens  # Old area
+    A_pore = 2 * np.pi * edges.diams * edges.lens    # Curr. area
+    scale_factor = A_pore_old / A_pore
+
+    # Integrating factor 
+    edges.N_tot = (edges.N_tot + avg_nucleation_rate * dt) * scale_factor
+    edges.P_ext = (edges.P_ext + 2*np.pi*avg_velocity*edges.N_tot*dt) * np.sqrt(scale_factor)
+    edges.A_ext = (edges.A_ext + avg_velocity*edges.P_ext*dt)
+
+    N = edges.N_tot * 2. * np.pi * edges.diams * edges.lens
+    print(f"    Nuclei number stats: {sid.A}, {np.min(N):.2f}, {np.max(N):.2f}, {np.mean(N):.2f}, {N}, {avg_velocity}") 
+
+    return 1 - np.exp(-edges.A_ext)

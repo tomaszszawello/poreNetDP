@@ -19,6 +19,7 @@ import precipitation as Pi
 import pressure as Pr
 import save as Sv
 import tracking as Tr
+import nucleation as Nu
 
 from build import build
 from utils import initialize_iterators, update_iterators
