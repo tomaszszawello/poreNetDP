@@ -90,6 +90,8 @@ while t < tmax and i < iters and not state:
             cc, cd = Pi.solve_precipitation(sid, inc, graph, edges, cb), np.zeros(sid.nsq)
     else:
         cc, cd = np.zeros(sid.nsq), np.zeros(sid.nsq)
+
+
     # calculate ffp, draw figures
     if t == 0 and not sid.debug:
         data.check_init_slice_channelization(graph, inc, edges)
