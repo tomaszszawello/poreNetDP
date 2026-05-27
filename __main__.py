@@ -41,10 +41,11 @@ iters, tmax, i, t, state = initialize_iterators(sid)
 iterator_dissolved = 0
 
 
-
-
 if sid.include_diffusion and sid.include_precipitation:
     raise ValueError("Unsupported: this combination is not yet available")
+
+# Fraction of area available for preciptiation 
+frac_trans = np.zeros_like(edges.diams) + 1e-25
 
 # main loop
 # runs until we reach iteration limit or time limit or network is dissolved
@@ -78,7 +79,10 @@ while t < tmax and i < iters and not state:
         if sid.include_volumes:
             cb = Di.solve_dissolution_nr(sid, inc, graph, edges, vols, cb_b)
         else:
-            cb = Di.solve_dissolution(sid, inc, graph, edges, cb_b)
+            if sid.include_nucleation:
+                cb = Di.solve_dissolution(sid, inc, graph, edges, cb_b, frac_trans)
+            else:
+                cb = Di.solve_dissolution(sid, inc, graph, edges, cb_b)
 
     if sid.include_precipitation:
         if sid.include_volumes:

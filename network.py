@@ -267,7 +267,6 @@ class Edges():
         self.N_tot = np.zeros_like(diams) # nuclei
         self.P_ext = np.zeros_like(diams) # perimeter
         self.A_ext = np.zeros_like(diams) # extended area
-        self.f     = np.zeros_like(diams) + 1e-25
 
 def build_delaunay_net(sid: SimInputData, inc: Incidence) \
     -> tuple[Graph, Edges, Triangles]:
