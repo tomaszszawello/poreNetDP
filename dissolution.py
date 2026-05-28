@@ -90,7 +90,7 @@ def solve_dissolution(sid: SimInputData, inc: Incidence, graph: Graph, \
         @ inc.incidence > 0) != 0)
     # find vector with non-diagonal coefficients
     qc = edges.flow * np.exp(-np.abs(sid.Da / (1 + sid.G * edges.diams) \
-        * edges.diams * edges.lens / edges.flow))
+            * edges.diams * edges.lens / edges.flow))
     qc = np.array(np.ma.fix_invalid(qc, fill_value = 0))
     qc_matrix = np.abs(inc.incidence.T @ spr.diags(qc) @ inc.incidence)
     cb_matrix = cb_inc.multiply(qc_matrix)
@@ -106,15 +106,16 @@ def solve_dissolution(sid: SimInputData, inc: Incidence, graph: Graph, \
     return cb
 
 def solve_dissolution_nucleation(sid: SimInputData, inc: Incidence, graph: Graph, \
-        edges: Edges, cb_b: spr.csc_matrix, frac_transformed: spr.csc_matrix) -> np.ndarray:
-    """ Calculate B concentration with passivated fraction @frac_transformed
+    edges: Edges, cb_b: spr.csc_matrix) -> np.ndarray:
+    """ Calculate B concentration with passivated fraction
+    TODO: Unfortunate code duplication here - want to preserve main-loop logic
     """
     # find incidence for cb (only upstream flow matters)
     cb_inc = 1 * (inc.incidence.T @ (spr.diags(edges.flow) \
         @ inc.incidence > 0) != 0)
     # find vector with non-diagonal coefficients
-    qc = edges.flow * np.exp(-np.abs((1 - frac_transformed) * sid.Da / (1 + sid.G * edges.diams) \
-        * edges.diams * edges.lens / edges.flow))
+    qc = edges.flow * np.exp(-np.abs((1 - edges.ftrans) * sid.Da / (1 + sid.G * edges.diams) \
+            * edges.diams * edges.lens / edges.flow))
     qc = np.array(np.ma.fix_invalid(qc, fill_value = 0))
     qc_matrix = np.abs(inc.incidence.T @ spr.diags(qc) @ inc.incidence)
     cb_matrix = cb_inc.multiply(qc_matrix)

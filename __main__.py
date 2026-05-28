@@ -23,9 +23,10 @@ import nucleation as Nu
 
 from build import build
 from utils import initialize_iterators, update_iterators
-from utils_vtk import save_VTK
+#from utils_vtk import save_VTK
 
 import numpy as np
+import pandas as pd
 
 # initialize main classes
 sid, inc, graph, edges, vols, triangles, data = build()
@@ -43,9 +44,10 @@ iterator_dissolved = 0
 
 if sid.include_diffusion and sid.include_precipitation:
     raise ValueError("Unsupported: this combination is not yet available")
-
-# Fraction of area available for preciptiation 
-frac_trans = np.zeros_like(edges.diams) + 1e-25
+if sid.include_nucleation and not sid.include_precipitation:
+    raise ValueError("Unsupported: sid.include_nucleation requires sid.include_precipitation")
+if sid.include_nucleation and (sid.include_diffusion or sid.include_volumes):
+    raise ValueError("Unsupported: TODO: enable sid.include_volumes")
 
 # main loop
 # runs until we reach iteration limit or time limit or network is dissolved
@@ -57,7 +59,6 @@ while t < tmax and i < iters and not state:
     pressure_b = Pr.create_vector(graph)
     pressure = Pr.solve_flow(sid, inc, graph, edges, pressure_b)
     
-
     if sid.include_diffusion:
         if sid.include_volumes:
             cb_b = Dif.create_vector_danckwerts(sid, inc, graph, edges)
@@ -80,7 +81,7 @@ while t < tmax and i < iters and not state:
             cb = Di.solve_dissolution_nr(sid, inc, graph, edges, vols, cb_b)
         else:
             if sid.include_nucleation:
-                cb = Di.solve_dissolution(sid, inc, graph, edges, cb_b, frac_trans)
+                cb = Di.solve_dissolution_nucleation(sid, inc, graph, edges, cb_b)
             else:
                 cb = Di.solve_dissolution(sid, inc, graph, edges, cb_b)
 
@@ -122,6 +123,13 @@ while t < tmax and i < iters and not state:
     # timestep
     print ('Updating diameters')
     state, dt_next = Gr.update_diameters(sid, inc, edges, vols, data, cb, cc, cd)
+
+    if sid.include_nucleation:
+        print ('Updating transformed fraction')
+        ccr = Nu.reconstruct_cC_profiles(sid, edges, inc, cb, cc, n_pts=100)
+        Nu.update_frac_transformed_explicit(sid, edges, ccr, sid.dt)
+        #edges.ftrans = np.clip(edges.ftrans, 1e-18, 0.99999)
+
     data.collect_data(sid, inc, edges, vols, pressure, cb, cc)
     state = data.check_data(sid, edges, pressure, cb, cc, cd, state)
     # merge edges

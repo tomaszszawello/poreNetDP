@@ -28,16 +28,16 @@ class SimInputData:
     "maximum dissolved pore volume"
     plot_every: int = 100000
     "frequency of plotting the results"
-    track_every: int = tmax / 10
+    track_every: int = tmax / 2
     "frequency of checking channelization"
     track_list = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
     #track_list = [1, 2, 5, 10]
     "times of checking channelization"
 
     # DISSOLUTION & PRECIPITATION
-    Da_eff: float = 1
+    Da_eff: float = 1.25
     "effective Damkohler number"
-    G: float = 5.
+    G: float = 0.
     "transport parameter (reaction to transverse diffusion)"
     
     Pe = 100.
@@ -54,9 +54,9 @@ class SimInputData:
     "grain total volume"
     K: float = 0.5
     "precipitation to dissolution reaction rate"
-    Gamma: float = 2.01
+    Gamma: float = 0.1
     "precipitation to dissolution molar volume / acid capacity number"
-    A: float = 1
+    A: float = 10
     "nucleation rate pre-factor"
     c_sat: float = 1/1000.
     "saturation limit"
@@ -75,7 +75,7 @@ class SimInputData:
 
 
     # INCLUDE
-    include_adt: bool = True
+    include_adt: bool = False
     "include adaptive timestep"
     include_diffusion = False
     "include diffusion for dissolution"
@@ -85,7 +85,7 @@ class SimInputData:
     "include pore merging"
     include_volumes: bool = False
     "include pore volume tracking"
-    include_nucleation: bool = False
+    include_nucleation: bool = True
     "include nucleation (requires precipitation)"
 
     flow_bc: str = "q" # "p"
@@ -102,12 +102,12 @@ class SimInputData:
     "inlet D concentration"
 
     # TIME
-    dt: float = 0.000001
+    dt: float = 0.01
     "initial timestep (if no adaptive timestep, timestep for whole simulation)"
     growth_rate: float = 0.05
     ("maximum percentage growth of an edges (used for finding adaptive \
      timestep)")
-    dt_max: float = 50000.
+    dt_max: float = 0.01
     "maximum timestep (for adaptive)"
 
     it_alpha_th = 1e-5

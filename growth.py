@@ -70,7 +70,11 @@ def update_diameters(sid: SimInputData, inc: Incidence, edges: Edges, \
         if sid.include_volumes:
             change, dissolve, precipitate = solve_dp_vol(sid, inc, edges, cb, cc, cd)
         else:
-            change = solve_dp(sid, inc, edges, cb, cc)
+            if sid.include_nucleation:
+                print("C")
+                change = solve_dp_nucleation(sid, inc, edges, cb, cc)
+            else:
+                change = solve_dp(sid, inc, edges, cb, cc)
     else:
         if sid.include_diffusion:
             if sid.include_volumes:
@@ -147,6 +151,7 @@ def update_diameters(sid: SimInputData, inc: Incidence, edges: Edges, \
             vol_a_dissolved = np.array(np.ma.fix_invalid(vol_a_dissolved, fill_value = 0))
     else:
         #diams_new = edges.diams + change * sid.dt / edges.diams / edges.lens / 2
+        # Only makes sense if change is a volume? 
         diams_new = np.sqrt(edges.diams ** 2 + change * sid.dt / edges.lens)
         diams_new = np.array(np.ma.fix_invalid(diams_new, fill_value = 0))
         diams_new = diams_new * (diams_new >= sid.dmin) \
@@ -362,6 +367,40 @@ def solve_dp(sid: SimInputData, inc: Incidence, edges: Edges, cb: np.ndarray, \
     shrink_cc = np.array(np.ma.fix_invalid(shrink_cc, fill_value = 0))
     change = (growth - shrink_cb - shrink_cc)
     return change
+
+def solve_dp_nucleation(sid: SimInputData, inc: Incidence, edges: Edges, cb: np.ndarray, \
+    cc: np.ndarray) -> np.ndarray:
+    """ Gets change of VOLUME in case of dissolution + precipitation + nucleation.
+    """
+    # create list of concentrations which should be used for
+    # growth/shrink of each edge (upstream one)
+    growth_matrix = np.abs((spr.diags(edges.flow) @ inc.incidence > 0))
+    cb_in = growth_matrix @ cb
+    cc_in = growth_matrix @ cc
+
+    #growth = cb_in * np.abs(edges.flow)  / (sid.Da * edges.lens * edges.diams) \
+    growth = cb_in * np.abs(edges.flow)  / sid.Da \
+        * (1 - np.exp(-(1 - edges.ftrans) * sid.Da / (1 + sid.G * edges.diams) * edges.diams \
+        * edges.lens / np.abs(edges.flow)))
+    growth = np.array(np.ma.fix_invalid(growth, fill_value = 0))
+
+    f_ratio = edges.ftrans / (1 - edges.ftrans)
+    K_pref = f_ratio * (1 + sid.G * edges.diams) / (1 + sid.G * sid.K * edges.diams)
+    shrink_cb = cb_in * np.abs(edges.flow)  / (sid.Da * sid.Gamma) \
+            / (K_pref * sid.K - 1) * (K_pref * sid.K * (1 - \
+        np.exp(-(1 - edges.ftrans) * sid.Da / (1 + sid.G * edges.diams) * edges.diams * edges.lens \
+        / np.abs(edges.flow))) - (1 - np.exp(-edges.ftrans * sid.Da * sid.K / (1 + sid.G \
+        * sid.K * edges.diams) * edges.diams * edges.lens \
+        / np.abs(edges.flow)))) 
+
+    shrink_cb = np.array(np.ma.fix_invalid(shrink_cb, fill_value = 0))
+    shrink_cc = cc_in * np.abs(edges.flow) / (sid.Da * sid.Gamma) * \
+            (1 - np.exp(-edges.ftrans * sid.Da * sid.K / (1 + sid.G \
+        * sid.K * edges.diams) * edges.diams * edges.lens / np.abs(edges.flow)))
+    shrink_cc = np.array(np.ma.fix_invalid(shrink_cc, fill_value = 0))
+    change = (growth - shrink_cb - shrink_cc)
+    return change
+
 
 def solve_d_vol(sid, inc, edges, vols, cb):
     growth_matrix = np.abs((spr.diags(edges.flow) @ inc.incidence > 0))

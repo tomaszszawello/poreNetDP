@@ -6,6 +6,7 @@
     
 """
 import numpy as np
+import scipy.sparse as spr
 
 def reconstruct_cC_profiles(sid, edges, inc, cb, cc, n_pts=20):
     """ Reconstructs analytical cC profile in each edge:
@@ -14,9 +15,7 @@ def reconstruct_cC_profiles(sid, edges, inc, cb, cc, n_pts=20):
     Parameters
     ----------
     n_pts : number of points to reconstruct 
-
     ... 
-
     Returns
     --------
     profiles : np.ndarray 
@@ -29,9 +28,9 @@ def reconstruct_cC_profiles(sid, edges, inc, cb, cc, n_pts=20):
     cC0 = (inlet_matrix @ cc)[:, np.newaxis]
     
     q_eps = np.abs(edges.flow) + 1e-25 # Everything breaks without this
-    E1 = (1 - edges.f) * sid.Da / (1 + sid.G * edges.diams) * edges.diams * edges.lens / q_eps
+    E1 = (1 - edges.ftrans) * sid.Da / (1 + sid.G * edges.diams) * edges.diams * edges.lens / q_eps
     E1 = E1[:, np.newaxis]
-    E2 = edges.f * (sid.Da * sid.K) / (1 + sid.G * sid.K * edges.diams) * edges.diams * edges.lens / q_eps
+    E2 = edges.ftrans * (sid.Da * sid.K) / (1 + sid.G * sid.K * edges.diams) * edges.diams * edges.lens / q_eps
     E2 = E2[:, np.newaxis]
 
     x_hat = np.linspace(0., 1., n_pts)[np.newaxis, :] 
@@ -54,7 +53,6 @@ def get_average_rates(sid, edges, cC_profiles):
     avg_velocity : np.ndarray 
         average growth velocity in each edge
     """
-    # Constants
     H_growth = sid.K / sid.Gamma  
     S = np.maximum(cC_profiles, 0) / sid.c_sat
     J_nucl = np.zeros_like(S)
@@ -72,18 +70,16 @@ def get_average_rates(sid, edges, cC_profiles):
 
     # Update edge here
     # TODO: move somewhere appropriate
-    edges.avg_nucl.append(avg_nucleation_rate)
-    edges.avg_ccon.append(avg_driving_force)
-    edges.avg_ssat.append(np.trapezoid(S, x=xi_grid, axis=1))
+    #edges.avg_nucl.append(avg_nucleation_rate)
+    #edges.avg_ccon.append(avg_driving_force)
+    #edges.avg_ssat.append(np.trapezoid(S, x=xi_grid, axis=1))
 
     return avg_nucleation_rate, avg_velocity 
 
 # ============================================================================================
-# ==================== VARIOUS IMPLEMENTATIONS AND EXTENSIONS OF AVRAMI ======================
+# ================== VARIOUS IMPLEMENTATIONS AND GENERALISATIONS OF AVRAMI ===================
 # ============================================================================================
-
-
-def update_frac_transformed_global_method_ordinary(sid, edges, cC_profiles, dt):
+def update_frac_transformed_explicit(sid, edges, cC_profiles, dt):
     """ Direct application of the KJMA kinetic model to each edge of the network
 
     Returns
@@ -101,9 +97,9 @@ def update_frac_transformed_global_method_ordinary(sid, edges, cC_profiles, dt):
     N = edges.N_tot * 2. * np.pi * edges.diams * edges.lens
     print(f"    Nuclei number stats: {sid.A}, {np.min(N):.2f}, {np.max(N):.2f}, {np.mean(N):.2f}, {N}, {avg_velocity}") 
     
-    return 1.0 - np.exp(-edges.A_ext)
+    edges.ftrans = 1.0 - np.exp(-edges.A_ext)
 
-def update_frac_transformed_global_isotropic_area(sid, edges, cC_profiles, old_diams, dt):
+def update_frac_transformed_isotropic(sid, edges, cC_profiles, old_diams, dt):
     """ Extends KJMA model to account for nucleation and growth on a deformable substrate:
         Assumes a pore edge distorts only in one dimension and that grains stretch with the
         substrate itself

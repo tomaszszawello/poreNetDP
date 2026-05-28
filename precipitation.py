@@ -67,10 +67,33 @@ def create_vector(sid: SimInputData, inc: Incidence, graph: Graph, \
     cb_inc = np.abs(inc.incidence.T @ (spr.diags(edges.flow) \
         @ inc.incidence > 0))
     # find vector with non-diagonal coefficients
-    qc = edges.flow / (sid.K - 1) * (np.exp(-sid.Da / (1 + sid.G * \
+    K_pref = (1 + sid.G * edges.diams) / (1 + sid.G * sid.K * edges.diams)
+    qc = edges.flow / (K_pref * sid.K - 1) * (np.exp(-sid.Da / (1 + sid.G * \
         edges.diams) * edges.diams * edges.lens / np.abs(edges.flow)) - \
         np.exp(-sid.Da * sid.K / (1 + sid.G * sid.K * edges.diams) \
         * edges.diams * edges.lens / np.abs(edges.flow)))
+    qc_matrix = np.abs(inc.incidence.T @ spr.diags(qc) @ inc.incidence)
+    cb_matrix = cb_inc.multiply(qc_matrix)
+    cb_matrix.setdiag(np.zeros(sid.nsq)) # set diagonal to zero
+    cc_b = -cb_matrix @ cb
+    cc_b = cc_b * (1 - graph.in_vec) + graph.in_vec * sid.cc_in
+    return cc_b
+
+def create_vector_nucleation(sid: SimInputData, inc: Incidence, graph: Graph, \
+    edges: Edges, cb: np.ndarray) -> spr.csc_matrix:
+    """ Creates vector result for C concentration calculation with nucleation
+    """
+    # find incidence for cb (only upstream flow matters)
+    cb_inc = np.abs(inc.incidence.T @ (spr.diags(edges.flow) \
+        @ inc.incidence > 0))
+    # find vector with non-diagonal coefficients
+    f_ratio = edges.ftrans / (1 - edges.ftrans)
+    K_pref = f_ratio * (1 + sid.G * edges.diams) / (1 + sid.G * sid.K * edges.diams)
+    qc = edges.flow / (K_pref * sid.K - 1) * (np.exp(-(1 - edges.ftrans) * sid.Da / (1 + sid.G * \
+        edges.diams) * edges.diams * edges.lens / np.abs(edges.flow)) - \
+        np.exp(-edges.ftrans * sid.Da * sid.K / (1 + sid.G * sid.K * edges.diams) \
+        * edges.diams * edges.lens / np.abs(edges.flow)))
+
     qc_matrix = np.abs(inc.incidence.T @ spr.diags(qc) @ inc.incidence)
     cb_matrix = cb_inc.multiply(qc_matrix)
     cb_matrix.setdiag(np.zeros(sid.nsq)) # set diagonal to zero
@@ -161,7 +184,10 @@ def solve_precipitation(sid: SimInputData, inc: Incidence, graph: Graph, \
         vector of substance C concentration
     """
     if sid.include_precipitation:
-        return solve(sid, inc, graph, edges, cb)
+        if sid.include_nucleation:
+            return solve_nucleation(sid, inc, graph, edges, cb)
+        else:
+            return solve(sid, inc, graph, edges, cb)
     else:
         return np.zeros(sid.nsq)
 
@@ -212,6 +238,31 @@ def solve(sid: SimInputData, inc: Incidence, graph: Graph, edges: Edges, \
     cc_b = create_vector(sid, inc, graph, edges, cb)
     cc = solve_equation(cc_matrix, cc_b)
     return cc
+
+def solve_nucleation(sid: SimInputData, inc: Incidence, graph: Graph, edges: Edges, \
+    cb: np.ndarray) -> np.ndarray:
+    """ Calculate C concentration with nucleation / passivation
+    This function solves the advection-reaction equation for substance C
+    concentration. We assume precipitation is always possible.
+    """
+    # find incidence for cc (only upstream flow matters)
+    cc_inc = np.abs(inc.incidence.T @ (spr.diags(edges.flow) \
+        @ inc.incidence > 0))
+    # find vector with non-diagonal coefficients
+    qc = edges.flow * np.exp(-edges.ftrans * sid.Da * sid.K / (1 + sid.G * sid.K * \
+        edges.diams) * edges.diams * edges.lens / np.abs(edges.flow))
+    qc_matrix = np.abs(inc.incidence.T @ spr.diags(qc) @ inc.incidence)
+    cc_matrix = cc_inc.multiply(qc_matrix)
+    # find diagonal coefficients (inlet flow for each node)
+    diag = -np.abs(inc.incidence.T) @ np.abs(edges.flow) / 2
+    diag = diag * (1 - graph.in_vec + graph.out_vec) + graph.in_vec
+    diag += 1 * (diag == 0)
+    diag_old = cc_matrix.diagonal()
+    cc_matrix += spr.diags(diag - diag_old)
+    cc_b = create_vector_nucleation(sid, inc, graph, edges, cb)
+    cc = solve_equation(cc_matrix, cc_b)
+    return cc
+
 
 def solve_precipitation_nr9_vxx(sid, inc, graph, edges, vols, cb, cc, cd,
                         tol: float = 1e-2,
