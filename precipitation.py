@@ -66,11 +66,13 @@ def create_vector(sid: SimInputData, inc: Incidence, graph: Graph, \
     # find incidence for cb (only upstream flow matters)
     cb_inc = np.abs(inc.incidence.T @ (spr.diags(edges.flow) \
         @ inc.incidence > 0))
-    # find vector with non-diagonal coefficients
-    qc = edges.flow / (sid.K - 1) * (np.exp(-sid.Da / (1 + sid.G * \
+    # find vector with non-diagonal coefficients (note 0/0 for large G d...)
+    K_pref = ((1 + sid.G * edges.diams) / (1 + sid.G * sid.K * edges.diams)) 
+    qc = edges.flow / (K_pref * sid.K - 1) * (np.exp(-sid.Da / (1 + sid.G * \
         edges.diams) * edges.diams * edges.lens / np.abs(edges.flow)) - \
         np.exp(-sid.Da * sid.K / (1 + sid.G * sid.K * edges.diams) \
         * edges.diams * edges.lens / np.abs(edges.flow)))
+    
     qc_matrix = np.abs(inc.incidence.T @ spr.diags(qc) @ inc.incidence)
     cb_matrix = cb_inc.multiply(qc_matrix)
     cb_matrix.setdiag(np.zeros(sid.nsq)) # set diagonal to zero
