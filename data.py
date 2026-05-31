@@ -396,3 +396,55 @@ class Data():
         plt.savefig(self.dirname + '/porosity.png', bbox_inches="tight")
         plt.close()
     
+#=================== 
+# FREE FUNCTIONS
+#===================
+def find_left_to_right_path(sid, edges, graph, start_node=8):
+    """ Gets a random path from inlet to outlet that moves +ve horiz. direction
+    TODO: Paths passing through PBC not checked
+    Parameters:
+    --------
+    ...
+    Returns:
+    --------
+    path_nodes : list
+        List of node indices forming the path
+    path_edges : list
+        List of edge tuples [(n0, n1), (n1, n2), ...] 
+            - used with nx's edgelist parameter
+    path_edge_idxs : list
+        List of edge indices 
+            - explicit index to edges.<property>
+    """
+    pos = nx.get_node_attributes(graph, 'pos')
+    path_nodes = [start_node]
+    path_edges = []
+    path_edge_idxs = [] # 1D list -
+
+    while start_node not in graph.out_nodes:
+        # Get all neighbors
+        neighbors = list(graph.neighbors(start_node))
+        valid_next = []
+        x_start_node = pos[start_node][0]
+        # Pick the neighbour that moves us in + x dir
+        for n in neighbors:
+            x_next = pos[n][0]
+            if x_next > x_start_node:
+                valid_next.append(n)
+        
+        if not valid_next:
+            break
+        # Choose one random forward neighbor
+        # TODO: Largest incremeent instead of random valid?
+        next_node = random.choice(valid_next)
+        path_nodes.append(next_node)
+        path_edges.append((start_node, next_node))
+
+        u, v = start_node, next_node
+        if (u, v) in edges.edge_list:
+            path_edge_idxs.append(edges.edge_list.index((u, v)))
+        elif (v, u) in edges.edge_list:
+            path_edge_idxs.append(edges.edge_list.index((v, u)))
+
+        start_node = next_node
+    return path_nodes, path_edges, path_edge_idxs
