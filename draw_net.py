@@ -44,6 +44,50 @@ def draw(sid, graph, edges, triangles, vols, cb, t):
         else:
             draw_flow(sid, graph, edges, f'd_' + name, 'd')
 
+def draw_flow_both(sid: SimInputData, graph: Graph, edges: Edges, \
+        name: str, title: str) -> None:
+    """ Draw the network with diameters/flow as edge width
+    """
+    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(sid.figsize * 2, sid.figsize))
+    fig.suptitle(title, fontsize=15)
+
+    pos = nx.get_node_attributes(graph, 'pos')
+    if sid.include_cc_passivation:
+        # Copper 
+        edge_colors = plt.cm.copper_r(mcolors.Normalize(0, 1)(edges.f)) 
+        norm = mcolors.Normalize(vmin=0.0, vmax=1.0)
+        # Copper with power scale
+        #norm = mcolors.PowerNorm(gamma=2.0, vmin=0.0, vmax=1.0)
+        #edge_colors = plt.cm.copper_r(norm(edges.f))
+        # Magma 
+        #norm = mcolors.Normalize(vmin=0.0, vmax=1.0)
+        #edge_colors = plt.cm.magma_r(norm(edges.f))
+    else:
+        edge_colors = 'k'
+
+    # Pre-calculate shared node coordinates
+    xi, yi = zip(*[pos[n] for n in graph.in_nodes])
+    xo, yo = zip(*[pos[n] for n in graph.out_nodes])
+
+    for ax, plot_option in zip([ax1, ax2], ['d', 'q']):
+        ax.set_aspect('equal')
+        ax.set_axis_off() # Disabling axes is faster than styling them
+        ax.scatter(xi, yi, s=1000/sid.n, fc='white', ec='black', zorder=3)
+        ax.scatter(xo, yo, s=1000/sid.n, fc='black', ec='white', zorder=3)
+        if plot_option == 'q':
+            qs = (1 - edges.boundary_list) * np.abs(edges.flow)
+            w = sid.qdrawconst * np.array(qs)
+        else:
+            qs = (1 - edges.boundary_list) * (edges.diams * (edges.diams > 0))
+            w = sid.ddrawconst * np.array(qs)
+        nx.draw_networkx_edges(graph, pos, edgelist=edges.edge_list, 
+                               edge_color=edge_colors, width=w, ax=ax)
+    plt.tight_layout() # TODO: Remove vertical white space ...
+    fig.savefig(f"{sid.dirname}/{name}", bbox_inches="tight", dpi=300)
+    plt.close(fig)
+    gc.collect()
+
+
 def draw_flow(sid: SimInputData, graph: Graph, edges: Edges, \
     name: str, plot_type: str) -> None:
     """ Draw the network with diameters/flow as edge width.

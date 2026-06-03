@@ -21,6 +21,10 @@ import networkx as nx
 import numpy as np
 import scipy.sparse as spr
 
+import random
+import matplotlib.cm as cm
+import matplotlib.colors as mcolors
+
 from config import SimInputData
 from network import Edges, Graph
 from incidence import Incidence
@@ -183,11 +187,8 @@ class Data():
             vector of current substance C concentration
         """
         self.t.append(sid.old_t)
-
         self.pressure.append(np.max(p))
-
         self.porosity.append(1 - np.sum(vols.vol_a) / np.sum(vols.vol_max))
-
         self.dissolved_v = (np.sum(edges.diams ** 2 * edges.lens) - self.vol_init) / self.vol_init
         self.dissolved_v_list.append(self.dissolved_v)
 
@@ -395,56 +396,189 @@ class Data():
         plt.ylabel(r'$\phi$', fontsize = 50)
         plt.savefig(self.dirname + '/porosity.png', bbox_inches="tight")
         plt.close()
-    
-#=================== 
-# FREE FUNCTIONS
-#===================
-def find_left_to_right_path(sid, edges, graph, start_node=8):
-    """ Gets a random path from inlet to outlet that moves +ve horiz. direction
-    TODO: Paths passing through PBC not checked
-    Parameters:
-    --------
-    ...
-    Returns:
-    --------
-    path_nodes : list
-        List of node indices forming the path
-    path_edges : list
-        List of edge tuples [(n0, n1), (n1, n2), ...] 
-            - used with nx's edgelist parameter
-    path_edge_idxs : list
-        List of edge indices 
-            - explicit index to edges.<property>
-    """
-    pos = nx.get_node_attributes(graph, 'pos')
-    path_nodes = [start_node]
-    path_edges = []
-    path_edge_idxs = [] # 1D list -
 
-    while start_node not in graph.out_nodes:
-        # Get all neighbors
-        neighbors = list(graph.neighbors(start_node))
-        valid_next = []
-        x_start_node = pos[start_node][0]
-        # Pick the neighbour that moves us in + x dir
-        for n in neighbors:
-            x_next = pos[n][0]
-            if x_next > x_start_node:
-                valid_next.append(n)
+    def check_timescale_sep(self, sid: SimInputData, inc: Incidence, edges: Edges, \
+            old_ftrans, edge_probe_idxs):
+        """ Checks time scale separation when nucleation is present
+        """
         
-        if not valid_next:
-            break
-        # Choose one random forward neighbor
-        # TODO: Largest incremeent instead of random valid?
-        next_node = random.choice(valid_next)
-        path_nodes.append(next_node)
-        path_edges.append((start_node, next_node))
+        radii = edges.diams / 2.0
+        V_pore_initial = np.sum( (radii**2) * edges.lens)
 
-        u, v = start_node, next_node
-        if (u, v) in edges.edge_list:
-            path_edge_idxs.append(edges.edge_list.index((u, v)))
-        elif (v, u) in edges.edge_list:
-            path_edge_idxs.append(edges.edge_list.index((v, u)))
+        dt = sid.dt
+        if len(self.t) > 2:
+            dt = self.t[-1] - self.t[-2]
+        tau_porevol = V_pore_initial / sid.Q_in
+        tau_porevol_i = (edges.lens * (edges.diams/ 2.)**2)  / np.abs(edges.flow + 1e-25)
+        df_dt = (edges.ftrans - old_ftrans) / dt
+        tau_pass_i = (1 - edges.ftrans) / np.abs(df_dt)
+        tau_ratio = tau_porevol_i / tau_pass_i
+        
+        print(f"Initial Pore Volume:  {V_pore_initial:.4f}")
+        print(f"Fluid Flush Time:     {tau_porevol:.4f} units")
 
-        start_node = next_node
-    return path_nodes, path_edges, path_edge_idxs
+        print(f"Ratio series: {self.t[-1]:5f}, {tau_ratio[edge_probe_idxs]}")
+        print(f"Ratio data: {self.t[-1]:5f}, {len(np.where(tau_ratio > 1.)[0])/len(edges.diams):5f}, {sid.Da_eff}, {sid.K}, {sid.Gamma}")
+    
+class Probe: 
+    """ Visualisation and debug tool.
+        Easy access and visualisation for local network data at (for now) pre-defined locations
+        
+        Basic idea is that we might want to look at concentraion profile in a particular edge,
+        or the passivated fraction in an edge, node pressure etc etc. often as a function of time
+        Moreover we don't want to track and plot this data for every edge/node in the network
+
+        TODO: add ratio data time series plots
+    """
+
+    start_node = 0
+    probe_type = ""
+    edge_probe_idxs = []
+    node_probe_idxs = []
+    edge_probe_tuples = []  
+    def __init__(self, sid, edges: Edges, graph: Graph, snode=20, opts=None, total_nodes=None):
+        """ 
+        Parameters
+        -------
+        ...
+        snode : np.int
+            index of an inlet node
+        opts : string
+            path 
+                random oriented path through the network
+            grid
+                square grid of nodes with one attached edge   
+        """
+        self.start_node = snode
+        self.probe_type = opts
+        
+        if opts == "path": 
+
+            lr_nodes, lr_path, lr_idx = self.get_left_to_right_path(sid, edges, graph)
+            
+            # TODO: add a 'total' 
+            len_subset = int(0.1*len(lr_nodes)) # default 10%
+            if total_nodes is not None:
+                len_subset = total_nodes
+            probe_sl = slice(1,len(lr_nodes), len_subset)
+
+            self.node_probe_idxs = np.array(lr_nodes[probe_sl])
+            self.edge_probe_tuples = np.array(lr_path[probe_sl]) 
+            self.edge_probe_idxs = np.array(lr_idx[probe_sl])
+        elif opts == "grid":
+            print("TODO")
+            # TODO: Want an approximately square grid of nodes on the network. 
+            # e.g. 9 nodes that are approx. equi-distant apart and then 9 edges 
+            # that are attached to these nodes, such that each edge has the
+            # same flow direction , i.e. flow in each edge is +ve
+        else:
+            raise ValueError('ERROR: should this be an erorr?')
+
+    def show_probes(self, sid: SimInputData, edges: Edges, graph: Graph):
+        """ Displays the network with probes highlighted  
+
+        TODO: Path that wraps across P.B. won't be drawn correctly 
+        TODO: Does not adapt to merging 
+        TODO: Add optional args to a relevant draw_net.py function instead of code dupe.
+        """
+        fig, axs = plt.subplots(figsize=(sid.figsize, sid.figsize))
+        title=""
+        fig.suptitle(title, fontsize=15)
+
+        pos = nx.get_node_attributes(graph, 'pos')
+        if sid.include_nucleation:
+            edge_colors = plt.cm.copper_r(mcolors.Normalize(0, 1)(edges.ftrans)) 
+            norm = mcolors.Normalize(vmin=0.0, vmax=1.0)
+        else:
+            edge_colors = 'k'
+        cmap = plt.get_cmap('tab10') 
+        probe_colors = {node_idx: cmap(i % 10) for i, node_idx in enumerate(self.node_probe_idxs)}
+
+        # Pre-calculate shared node coordinates
+        xi, yi = zip(*[pos[n] for n in graph.in_nodes])
+        xo, yo = zip(*[pos[n] for n in graph.out_nodes])
+        axs.set_aspect('equal')
+        axs.set_xlim([-0.5, sid.n + 0.5])
+        axs.set_ylim([-0.5, sid.n + 0.5])
+        axs.set_axis_off() # Disabling axs is faster than styling them
+        axs.scatter(xi, yi, s=1000/sid.n, fc='white', ec='black', zorder=3)
+        axs.scatter(xo, yo, s=1000/sid.n, fc='black', ec='white', zorder=3)
+        axs.margins(0)
+        qs = (1 - edges.boundary_list) * (edges.diams * (edges.diams > 0))
+        w = sid.ddrawconst * np.array(qs)
+
+        # Draw the full network
+        nx.draw_networkx_edges(graph, pos, edgelist=edges.edge_list, 
+                               edge_color=edge_colors, width=w, ax=axs)
+        # Highlight selected edges along a path in the network
+        nx.draw_networkx_edges(graph, pos, edgelist = self.edge_probe_tuples, edge_color='red', \
+                width = w *2, alpha=1.0, ax=axs)
+        # Highlight selected nodes along path
+        all_pos = nx.get_node_attributes(graph, 'pos')
+        for node_idx in self.node_probe_idxs:
+            x, y = all_pos[node_idx]
+            c = probe_colors[node_idx]
+            axs.scatter(x, y, s=120, color=c, alpha=1)#, label=f'Node {node_idx}')
+            axs.text(x, y + (sid.n * 0.05), str(node_idx), 
+                        fontsize=9, fontweight='bold', ha='center', color='red')
+
+        plt.tight_layout()
+        plt.show()
+        plt.close()
+
+    def get_left_to_right_path(self, sid, edges: Edges, graph: Graph):
+        """ Gets a random path from inlet to outlet that moves +ve horiz. direction
+        TODO: Paths passing through PBC not checked
+        Parameters:
+        --------
+        ...
+        Returns:
+        --------
+        path_nodes : list
+            List of node indices forming the path
+        path_edges : list
+            List of edge tuples [(n0, n1), (n1, n2), ...] 
+                - used with nx's edgelist parameter
+        path_edge_idxs : list
+            List of edge indices 
+                - explicit index to edges.<property>
+        """
+    
+        if self.start_node > sid.n:
+            #TODO: Choose a random valid start instead
+            raise ValueError("ERROR @find_left_to_right_path(): Invalid starting node.")
+        pos = nx.get_node_attributes(graph, 'pos')
+        path_nodes = [self.start_node]
+        path_edges = []     # edge between node indices
+        path_edge_idxs = [] # the edge itself
+        snode = self.start_node 
+
+        while snode not in graph.out_nodes:
+            # Get all neighbors
+            neighbors = list(graph.neighbors(snode))
+            valid_next = []
+            snode_x = pos[snode][0]
+            #snode = pos[snode][0]
+            # Pick the neighbour that moves us in + x dir
+            for n in neighbors:
+                x_next = pos[n][0]
+                if x_next > snode_x:
+                    valid_next.append(n)
+            
+            if not valid_next:
+                break
+            # Choose one random forward neighbor
+            # TODO: Could expand for more 'specific' path types
+            #       e.g. largest incrememnt instead of random valid
+            next_node = random.choice(valid_next)
+            path_nodes.append(next_node)
+            path_edges.append((snode, next_node))
+    
+            u, v = snode, next_node
+            if (u, v) in edges.edge_list:
+                path_edge_idxs.append(edges.edge_list.index((u, v)))
+            elif (v, u) in edges.edge_list:
+                path_edge_idxs.append(edges.edge_list.index((v, u)))
+    
+            snode = next_node
+        return path_nodes, path_edges, path_edge_idxs

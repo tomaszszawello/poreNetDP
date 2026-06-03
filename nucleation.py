@@ -8,6 +8,26 @@
 import numpy as np
 import scipy.sparse as spr
 
+def reconstruct_cB_profiles(sid, edges, inc, cb, n_pts=20):
+    """
+    Reconstructs analytical cB profile in each edge. 
+    
+    Returns:
+    --------
+    profiles : np.ndarray 
+    """
+    
+    # upstream nodes to edges
+    #cb_inc = 1 * (inc.incidence.T @ (spr.diags(edges.flow) @ inc.incidence > 0) != 0)
+    inlet_matrix = 1 * ((spr.diags(edges.flow) @ inc.incidence) > 0) 
+    cB0 = (inlet_matrix @ cb)[:, np.newaxis]
+    q_eps = np.abs(edges.flow) + 1e-25 # Everything breaks without this
+    E1 = (1 - edges.f) * sid.Da / (1 + sid.G * edges.diams) * edges.diams * edges.lens / q_eps
+    E1 = E1[:, np.newaxis]
+    # Reconstruct... 
+    x_hat = np.linspace(0, 1, n_pts)[np.newaxis, :] 
+    return cB0 * np.exp(-E1 * x_hat)
+
 def reconstruct_cC_profiles(sid, edges, inc, cb, cc, n_pts=20):
     """ Reconstructs analytical cC profile in each edge:
     c_C(x) = c_B0 / (E_2 / E_1 - 1) * (exp(-E_1 x) -  exp(-E_2 x)) + c_C0 * exp(-E2 x)

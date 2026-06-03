@@ -20,6 +20,7 @@ import pressure as Pr
 import save as Sv
 import tracking as Tr
 import nucleation as Nu
+import data as Da # DELME
 
 from build import build
 from utils import initialize_iterators, update_iterators
@@ -41,13 +42,17 @@ if sid.include_merging and not sid.include_volumes:
 iters, tmax, i, t, state = initialize_iterators(sid)
 iterator_dissolved = 0
 
-
 if sid.include_diffusion and sid.include_precipitation:
     raise ValueError("Unsupported: this combination is not yet available")
 if sid.include_nucleation and not sid.include_precipitation:
     raise ValueError("Unsupported: sid.include_nucleation requires sid.include_precipitation")
 if sid.include_nucleation and (sid.include_diffusion or sid.include_volumes):
     raise ValueError("Unsupported: TODO: enable sid.include_volumes")
+
+# probe initialisation
+path_probe = Da.Probe(sid, edges, graph, snode=8, opts="path")
+path_probe.show_probes(sid, edges, graph)
+
 
 # main loop
 # runs until we reach iteration limit or time limit or network is dissolved
@@ -111,8 +116,7 @@ while t < tmax and i < iters and not state:
             print('Drawing')
             iterator_dissolved += 1
             if iterator_dissolved in sid.track_list:
-                data.check_slice_channelization(graph, inc, edges, \
-                    t)
+                data.check_slice_channelization(graph, inc, edges, t)
                 Dr.draw(sid, graph, edges, triangles, vols, cb, t)
                 # save_VTK(sid, graph, edges, pressure, cb, \
                 #     f'network_{t:.1f}.vtk')
@@ -124,6 +128,7 @@ while t < tmax and i < iters and not state:
     print ('Updating diameters')
     state, dt_next = Gr.update_diameters(sid, inc, edges, vols, data, cb, cc, cd)
 
+    old_ftrans = edges.ftrans # scope..
     if sid.include_nucleation:
         print ('Updating transformed fraction')
         ccr = Nu.reconstruct_cC_profiles(sid, edges, inc, cb, cc, n_pts=100)
@@ -131,6 +136,7 @@ while t < tmax and i < iters and not state:
         #edges.ftrans = np.clip(edges.ftrans, 1e-18, 0.99999)
 
     data.collect_data(sid, inc, edges, vols, pressure, cb, cc)
+    data.check_timescale_sep(sid, inc, edges, old_ftrans, edge_probe_idxs)
     state = data.check_data(sid, edges, pressure, cb, cc, cd, state)
     # merge edges
     if sid.include_merging:
@@ -140,7 +146,6 @@ while t < tmax and i < iters and not state:
         else:
             Me.solve_merging(sid, inc, graph, edges)
     # update physical parameters in data
-    
     i, t = update_iterators(sid, i, t, dt_next)
 
 # save data from the last iteration of simulation, save the whole simulation
