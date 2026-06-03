@@ -79,6 +79,7 @@ class Data():
     track_times: list = []
     vol_dissolved: float = 0.
     vol_precipitated: float = 0.
+    flush_to_passivation_ratio = [] # 
 
     def __init__(self, sid: SimInputData, edges: Edges):
         self.dirname = sid.dirname
@@ -135,22 +136,41 @@ class Data():
         """
         Q_in = np.abs(np.sum(edges.inlet * edges.flow))
         Q_out = np.abs(np.sum(edges.outlet * edges.flow))
-        print('Q_in =', Q_in, 'Q_out =', Q_out)
         if np.abs(Q_in - Q_out) > 1e-2:
             raise ValueError("Flow continuity error")
-        print('cb_min =', np.min(cb), 'cb_max =', np.max(cb))
-        if sid.include_precipitation:
-            print('cc_min =', np.min(cc), 'cc_max =', np.max(cc))
-            print('cd_min =', np.min(cd), 'cd_max =', np.max(cd))
         # TO DO: fix mass balance check from collect_data
         if np.max(edges.outlet * edges.diams) > sid.d_break:
             state = True
-            print ('Network dissolved')
+            print("Network dissolved")
         if np.max(pressure) > self.pressure[0] / sid.min_perm:
-            print('Network clogged')
             state = True
+            print("Network clogged")
         return state
 
+    def summarise_data(self, sid: SimInputData, edges: Edges, pressure, cb, cc, cd, state):
+        """ Pretty format for runtime variables
+        """
+        print(f"  Params   | [Da_eff :  K   :  G   : Gamma]")
+        print(f"           | [ {sid.Da_eff:.2f}  : {sid.K:.2f} : {sid.G:.2f} : {sid.Gamma:.2f}]")
+        Q_in = np.abs(np.sum(edges.inlet * edges.flow))
+        Q_out = np.abs(np.sum(edges.outlet * edges.flow))
+        print(f"  Flow           | Q_in: {Q_in:<10.4f} Q_out: {Q_out:.4f}")
+        print(f"  Min/max conc.  | cb:  [{np.min(cb):.4f}, {np.max(cb):.4f}]")
+        if sid.include_precipitation:
+            print(f"             | cc:  [{np.min(cc):.4f}, {np.max(cc):.4f}]")
+            print(f"             | cd:  [{np.min(cd):.4f}, {np.max(cd):.4f}]")
+        if sid.include_nucleation:
+            N = edges.N_tot * 2. * np.pi * edges.diams * edges.lens
+            N_preview = np.array2string(N, precision=2, separator=', ', edgeitems=2, threshold=5)
+            print(f"  Nuclei     | A     : {sid.A:.4g}")
+            print(f"             | Bounds: [{np.min(N):.2f}, {np.max(N):.2f}]")
+            print(f"             | Mean #: {np.mean(N):.2f}")
+            print(f"             | N     : {N_preview}")
+            F_preview = np.array2string(edges.ftrans, precision=2, separator=', ', edgeitems=2, threshold=5)
+            print(f"  Passiv.    | Bounds: [{np.min(edges.ftrans):.2f}, {np.max(edges.ftrans):.2f}]")
+            print(f"             | Mean  : {np.mean(edges.ftrans):.2f}")
+            print(f"             | f(t)  : {F_preview}")
+    
 
     def collect_data(self, sid: SimInputData, inc: Incidence, edges: Edges, vols, \
         p: np.ndarray, cb: np.ndarray, cc: np.ndarray) -> None:
@@ -191,6 +211,7 @@ class Data():
         self.porosity.append(1 - np.sum(vols.vol_a) / np.sum(vols.vol_max))
         self.dissolved_v = (np.sum(edges.diams ** 2 * edges.lens) - self.vol_init) / self.vol_init
         self.dissolved_v_list.append(self.dissolved_v)
+        
 
 
     def plot_data(self) -> None:
@@ -397,28 +418,34 @@ class Data():
         plt.savefig(self.dirname + '/porosity.png', bbox_inches="tight")
         plt.close()
 
-    def check_timescale_sep(self, sid: SimInputData, inc: Incidence, edges: Edges, \
-            old_ftrans, edge_probe_idxs):
-        """ Checks time scale separation when nucleation is present
+    def check_timescale_sep(self, sid: SimInputData, inc: Incidence, edges: Edges, old_ftrans):
+        """ Checks for time scale separation between passivation flush time
+        Parameters
+        -------
+            old_ftrans : np.ndarray
+                f(t-1)
+            edge_probe_idxs : np.ndarray
+            TODO: move local ratio elsewhere 
         """
-        
-        radii = edges.diams / 2.0
-        V_pore_initial = np.sum( (radii**2) * edges.lens)
-
+        V_pore_initial = np.sum(((edges.diams / 2.0)**2) * edges.lens)
         dt = sid.dt
         if len(self.t) > 2:
             dt = self.t[-1] - self.t[-2]
+
         tau_porevol = V_pore_initial / sid.Q_in
         tau_porevol_i = (edges.lens * (edges.diams/ 2.)**2)  / np.abs(edges.flow + 1e-25)
         df_dt = (edges.ftrans - old_ftrans) / dt
+        # Time it would take to fully passivate at the current rate df/dt
         tau_pass_i = (1 - edges.ftrans) / np.abs(df_dt)
-        tau_ratio = tau_porevol_i / tau_pass_i
-        
+        tau_ratio = tau_porevol_i / tau_pass_i # ratio per edge
+        # Number of edges which transmit less than 1 pore volume during the passivation time
+        global_ratio = len(np.where(tau_ratio > 1.)[0])/len(edges.diams)
+        self.flush_to_passivation_ratio.append(global_ratio)
+
         print(f"Initial Pore Volume:  {V_pore_initial:.4f}")
         print(f"Fluid Flush Time:     {tau_porevol:.4f} units")
-
-        print(f"Ratio series: {self.t[-1]:5f}, {tau_ratio[edge_probe_idxs]}")
-        print(f"Ratio data: {self.t[-1]:5f}, {len(np.where(tau_ratio > 1.)[0])/len(edges.diams):5f}, {sid.Da_eff}, {sid.K}, {sid.Gamma}")
+        #print(f"Ratio series: {self.t[-1]:5f}, {tau_ratio[edge_probe_idxs]}")
+        print(f"Ratio data: {self.t[-1]:5f}, {sid.Da_eff}, {sid.K}, {sid.Gamma}")
     
 class Probe: 
     """ Visualisation and debug tool.
@@ -456,75 +483,28 @@ class Probe:
 
             lr_nodes, lr_path, lr_idx = self.get_left_to_right_path(sid, edges, graph)
             
-            # TODO: add a 'total' 
-            len_subset = int(0.1*len(lr_nodes)) # default 10%
-            if total_nodes is not None:
-                len_subset = total_nodes
-            probe_sl = slice(1,len(lr_nodes), len_subset)
+            # TODO: fix this - len_subset is not length but increment of the sequence
+            len_subset = total_nodes
+            if total_nodes is None:
+                len_subset = int(0.1*len(lr_nodes)) # default 10%
+            probe_sl = slice(1, len(lr_nodes), len_subset)
 
             self.node_probe_idxs = np.array(lr_nodes[probe_sl])
             self.edge_probe_tuples = np.array(lr_path[probe_sl]) 
             self.edge_probe_idxs = np.array(lr_idx[probe_sl])
         elif opts == "grid":
+            # if total_nodes is not a square number, make it square
             print("TODO")
-            # TODO: Want an approximately square grid of nodes on the network. 
+            # TODO: Want an approximately square grid of nodes on the network 
+            # (assume a square network, sid.n = sid.m). 
             # e.g. 9 nodes that are approx. equi-distant apart and then 9 edges 
             # that are attached to these nodes, such that each edge has the
             # same flow direction , i.e. flow in each edge is +ve
+            # since the network is formed (delaunay) from uniform random points on
+            # sid.n x sid.m, i suggest finding nodes on the network that are cllosest to 
+            # points on a square integer grid. 
         else:
             raise ValueError('ERROR: should this be an erorr?')
-
-    def show_probes(self, sid: SimInputData, edges: Edges, graph: Graph):
-        """ Displays the network with probes highlighted  
-
-        TODO: Path that wraps across P.B. won't be drawn correctly 
-        TODO: Does not adapt to merging 
-        TODO: Add optional args to a relevant draw_net.py function instead of code dupe.
-        """
-        fig, axs = plt.subplots(figsize=(sid.figsize, sid.figsize))
-        title=""
-        fig.suptitle(title, fontsize=15)
-
-        pos = nx.get_node_attributes(graph, 'pos')
-        if sid.include_nucleation:
-            edge_colors = plt.cm.copper_r(mcolors.Normalize(0, 1)(edges.ftrans)) 
-            norm = mcolors.Normalize(vmin=0.0, vmax=1.0)
-        else:
-            edge_colors = 'k'
-        cmap = plt.get_cmap('tab10') 
-        probe_colors = {node_idx: cmap(i % 10) for i, node_idx in enumerate(self.node_probe_idxs)}
-
-        # Pre-calculate shared node coordinates
-        xi, yi = zip(*[pos[n] for n in graph.in_nodes])
-        xo, yo = zip(*[pos[n] for n in graph.out_nodes])
-        axs.set_aspect('equal')
-        axs.set_xlim([-0.5, sid.n + 0.5])
-        axs.set_ylim([-0.5, sid.n + 0.5])
-        axs.set_axis_off() # Disabling axs is faster than styling them
-        axs.scatter(xi, yi, s=1000/sid.n, fc='white', ec='black', zorder=3)
-        axs.scatter(xo, yo, s=1000/sid.n, fc='black', ec='white', zorder=3)
-        axs.margins(0)
-        qs = (1 - edges.boundary_list) * (edges.diams * (edges.diams > 0))
-        w = sid.ddrawconst * np.array(qs)
-
-        # Draw the full network
-        nx.draw_networkx_edges(graph, pos, edgelist=edges.edge_list, 
-                               edge_color=edge_colors, width=w, ax=axs)
-        # Highlight selected edges along a path in the network
-        nx.draw_networkx_edges(graph, pos, edgelist = self.edge_probe_tuples, edge_color='red', \
-                width = w *2, alpha=1.0, ax=axs)
-        # Highlight selected nodes along path
-        all_pos = nx.get_node_attributes(graph, 'pos')
-        for node_idx in self.node_probe_idxs:
-            x, y = all_pos[node_idx]
-            c = probe_colors[node_idx]
-            axs.scatter(x, y, s=120, color=c, alpha=1)#, label=f'Node {node_idx}')
-            axs.text(x, y + (sid.n * 0.05), str(node_idx), 
-                        fontsize=9, fontweight='bold', ha='center', color='red')
-
-        plt.tight_layout()
-        plt.show()
-        plt.close()
 
     def get_left_to_right_path(self, sid, edges: Edges, graph: Graph):
         """ Gets a random path from inlet to outlet that moves +ve horiz. direction
@@ -582,3 +562,56 @@ class Probe:
     
             snode = next_node
         return path_nodes, path_edges, path_edge_idxs
+
+    def show_probes(self, sid: SimInputData, edges: Edges, graph: Graph):
+        """ Displays the network with probes highlighted  
+
+        TODO: Path that wraps across P.B. won't be drawn correctly 
+        TODO: Does not adapt to merging 
+        TODO: Add optional args to a relevant draw_net.py function instead of code dupe.
+        """
+        fig, axs = plt.subplots(figsize=(sid.figsize, sid.figsize))
+        title=""
+        fig.suptitle(title, fontsize=15)
+
+        pos = nx.get_node_attributes(graph, 'pos')
+        if sid.include_nucleation:
+            edge_colors = plt.cm.copper_r(mcolors.Normalize(0, 1)(edges.ftrans)) 
+            norm = mcolors.Normalize(vmin=0.0, vmax=1.0)
+        else:
+            edge_colors = 'k'
+        cmap = plt.get_cmap('tab10') 
+        probe_colors = {node_idx: cmap(i % 10) for i, node_idx in enumerate(self.node_probe_idxs)}
+
+        # Pre-calculate shared node coordinates
+        xi, yi = zip(*[pos[n] for n in graph.in_nodes])
+        xo, yo = zip(*[pos[n] for n in graph.out_nodes])
+        axs.set_aspect('equal')
+        axs.set_xlim([-0.5, sid.n + 0.5])
+        axs.set_ylim([-0.5, sid.n + 0.5])
+        axs.set_axis_off() # Disabling axs is faster than styling them
+        axs.scatter(xi, yi, s=1000/sid.n, fc='white', ec='black', zorder=3)
+        axs.scatter(xo, yo, s=1000/sid.n, fc='black', ec='white', zorder=3)
+        axs.margins(0)
+        qs = (1 - edges.boundary_list) * (edges.diams * (edges.diams > 0))
+        w = sid.ddrawconst * np.array(qs)
+
+        # Draw the full network
+        nx.draw_networkx_edges(graph, pos, edgelist=edges.edge_list, 
+                               edge_color=edge_colors, width=w, ax=axs)
+        # Highlight selected edges along a path in the network
+        nx.draw_networkx_edges(graph, pos, edgelist = self.edge_probe_tuples, edge_color='red', \
+                width = w *2, alpha=1.0, ax=axs)
+        # Highlight selected nodes along path
+        all_pos = nx.get_node_attributes(graph, 'pos')
+        for node_idx in self.node_probe_idxs:
+            x, y = all_pos[node_idx]
+            c = probe_colors[node_idx]
+            axs.scatter(x, y, s=120, color=c, alpha=1)#, label=f'Node {node_idx}')
+            axs.text(x, y + (sid.n * 0.05), str(node_idx), 
+                        fontsize=9, fontweight='bold', ha='center', color='red')
+
+        plt.tight_layout()
+        plt.show()
+        plt.close()
+

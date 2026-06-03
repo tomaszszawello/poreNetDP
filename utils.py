@@ -13,6 +13,7 @@ solve_equation(spr.csr_matrix, spr.csc_matrix) -> spr.csc_matrix
 import os
 import scipy.sparse as spr
 import scipy.sparse.linalg as sprlin
+import math
 
 from config import SimInputData
 
@@ -107,6 +108,21 @@ def update_iterators(sid: SimInputData, i: int, t: float, dt_next: float) -> \
     sid.old_t += sid.dt # update simulation time in configuration class
     sid.dt = dt_next
     return i, t
+
+def stop_condition(sid : SimInputData, t, i, iterator_dissolved) -> bool:
+    """ Interrupt condition for main loop 
+    """
+    if sid.track_type == "dissolved":
+        return t // sid.track_every > iterator_dissolved
+    elif sid.track_type == "time":
+        ratio = t / sid.track_every
+        return math.isclose(ratio, round(ratio), rel_tol=1e-9, abs_tol=1e-9)
+    elif sid.track_type == "iterate":
+        return i % sid.track_every == 0
+    else:
+        print("WARNING: Tracking disabled.")
+        return False
+
 
 def make_dir(sid: SimInputData) -> None:
     """ Create directory for the simulation.

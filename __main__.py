@@ -23,7 +23,7 @@ import nucleation as Nu
 import data as Da # DELME
 
 from build import build
-from utils import initialize_iterators, update_iterators
+from utils import initialize_iterators, update_iterators, stop_condition
 #from utils_vtk import save_VTK
 
 import numpy as np
@@ -50,9 +50,8 @@ if sid.include_nucleation and (sid.include_diffusion or sid.include_volumes):
     raise ValueError("Unsupported: TODO: enable sid.include_volumes")
 
 # probe initialisation
-path_probe = Da.Probe(sid, edges, graph, snode=8, opts="path")
+path_probe = Da.Probe(sid, edges, graph, snode=8, opts="path", total_nodes=5)
 path_probe.show_probes(sid, edges, graph)
-
 
 # main loop
 # runs until we reach iteration limit or time limit or network is dissolved
@@ -71,7 +70,6 @@ while t < tmax and i < iters and not state:
             cb_b = Dif.create_vector(sid, graph)
     else:
         cb_b = Di.create_vector(sid, graph)
-    
     
     # find B concentration
     print ('Solving concentration')
@@ -102,7 +100,6 @@ while t < tmax and i < iters and not state:
     else:
         cc, cd = np.zeros(sid.nsq), np.zeros(sid.nsq)
 
-
     # calculate ffp, draw figures
     if t == 0 and not sid.debug:
         data.check_init_slice_channelization(graph, inc, edges)
@@ -112,16 +109,18 @@ while t < tmax and i < iters and not state:
         #     f'network_{t:.1f}.vtk')
         #Tr.track(sid, graph, inc, edges, data, pressure)
     else:
-        if t // sid.track_every > iterator_dissolved:
-            print('Drawing')
+        if stop_condition(sid, t, i, iterator_dissolved):
+            print(f'Drawing at (i, t, dissolved) = ({i}, {t:3f}, {iterator_dissolved})')
             iterator_dissolved += 1
-            if iterator_dissolved in sid.track_list:
+            if sid.track_type == "dissolved" and iterator_dissolved in sid.track_list:
                 data.check_slice_channelization(graph, inc, edges, t)
                 Dr.draw(sid, graph, edges, triangles, vols, cb, t)
                 # save_VTK(sid, graph, edges, pressure, cb, \
                 #     f'network_{t:.1f}.vtk')
                 #Tr.track(sid, graph, inc, edges, data, pressure)
-    
+            else:
+                Dr.draw_flow_both(sid, graph, edges, "file", "")
+
     # grow/shrink diameters and update them in edges, update volumes with
     # dissolved/precipitated values, check if network dissolved, find new
     # timestep
@@ -136,8 +135,10 @@ while t < tmax and i < iters and not state:
         #edges.ftrans = np.clip(edges.ftrans, 1e-18, 0.99999)
 
     data.collect_data(sid, inc, edges, vols, pressure, cb, cc)
-    data.check_timescale_sep(sid, inc, edges, old_ftrans, edge_probe_idxs)
+    data.check_timescale_sep(sid, inc, edges, old_ftrans)
+    data.summarise_data(sid, edges, pressure, cb, cc, cd, state)
     state = data.check_data(sid, edges, pressure, cb, cc, cd, state)
+    
     # merge edges
     if sid.include_merging:
         print ('Merging')

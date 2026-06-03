@@ -17,6 +17,9 @@ import matplotlib.pyplot as plt
 import networkx as nx
 import numpy as np
 
+import matplotlib.colors as mcolors
+matplotlib.use('Agg')
+
 from config import SimInputData
 from data import Data
 from network import Edges, Graph
@@ -46,15 +49,15 @@ def draw(sid, graph, edges, triangles, vols, cb, t):
 
 def draw_flow_both(sid: SimInputData, graph: Graph, edges: Edges, \
         name: str, title: str) -> None:
-    """ Draw the network with diameters/flow as edge width
+    """ Side by side plot of network with diameters/flow as edge width
     """
     fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(sid.figsize * 2, sid.figsize))
     fig.suptitle(title, fontsize=15)
 
     pos = nx.get_node_attributes(graph, 'pos')
-    if sid.include_cc_passivation:
+    if sid.include_nucleation:
         # Copper 
-        edge_colors = plt.cm.copper_r(mcolors.Normalize(0, 1)(edges.f)) 
+        edge_colors = plt.cm.copper_r(mcolors.Normalize(0, 1)(edges.ftrans)) 
         norm = mcolors.Normalize(vmin=0.0, vmax=1.0)
         # Copper with power scale
         #norm = mcolors.PowerNorm(gamma=2.0, vmin=0.0, vmax=1.0)
@@ -85,8 +88,7 @@ def draw_flow_both(sid: SimInputData, graph: Graph, edges: Edges, \
     plt.tight_layout() # TODO: Remove vertical white space ...
     fig.savefig(f"{sid.dirname}/{name}", bbox_inches="tight", dpi=300)
     plt.close(fig)
-    gc.collect()
-
+    #gc.collect() # import gc
 
 def draw_flow(sid: SimInputData, graph: Graph, edges: Edges, \
     name: str, plot_type: str) -> None:

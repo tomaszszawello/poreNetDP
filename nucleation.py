@@ -84,7 +84,7 @@ def get_average_rates(sid, edges, cC_profiles):
     avg_nucleation_rate = np.trapezoid(J_nucl, x=xi_grid, axis=1)
 
     #driving_force = np.maximum(cC_profiles - sid.c_sat, 0)
-    driving_force = np.maximum(cC_profiles, 0)
+    driving_force = cC_profiles / (1 + sid.G * sid.K * edges.diams[:,np.newaxis])
     avg_driving_force = np.trapezoid(driving_force, x=xi_grid, axis=1)
     avg_velocity = H_growth * avg_driving_force 
 
@@ -113,10 +113,6 @@ def update_frac_transformed_explicit(sid, edges, cC_profiles, dt):
     edges.P_ext += (edges.N_tot * avg_velocity) * dt
     d_A_ext = (2 * np.pi * edges.P_ext * avg_velocity) * dt
     edges.A_ext += d_A_ext
-
-    N = edges.N_tot * 2. * np.pi * edges.diams * edges.lens
-    print(f"    Nuclei number stats: {sid.A}, {np.min(N):.2f}, {np.max(N):.2f}, {np.mean(N):.2f}, {N}, {avg_velocity}") 
-    
     edges.ftrans = 1.0 - np.exp(-edges.A_ext)
 
 def update_frac_transformed_isotropic(sid, edges, cC_profiles, old_diams, dt):
