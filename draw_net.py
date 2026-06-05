@@ -18,7 +18,7 @@ import networkx as nx
 import numpy as np
 
 import matplotlib.colors as mcolors
-matplotlib.use('Agg')
+#matplotlib.use('Agg')
 
 from config import SimInputData
 from data import Data
@@ -26,9 +26,9 @@ from network import Edges, Graph
 from incidence import Incidence
 from volumes import Volumes
 
-font = {'family' : 'Times New Roman',
+font = {#'family' : 'Times New Roman',
         'weight' : 'normal',
-        'size'   : 50}
+        'size'   : 10}
 
 matplotlib.rc('font', **font)
 

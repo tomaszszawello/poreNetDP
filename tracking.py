@@ -21,9 +21,9 @@ from draw_net import draw_particles
 from network import Graph, Edges
 from incidence import Incidence
 
-font = {'family' : 'Times New Roman',
+font = {#'family' : 'Times New Roman',
         'weight' : 'normal',
-        'size'   : 50}
+        'size'   : 10}
 
 matplotlib.rc('font', **font)
 

@@ -99,7 +99,7 @@ def get_average_rates(sid, edges, cC_profiles):
 # ============================================================================================
 # ================== VARIOUS IMPLEMENTATIONS AND GENERALISATIONS OF AVRAMI ===================
 # ============================================================================================
-def update_frac_transformed_explicit(sid, edges, cC_profiles, dt):
+def update_frac_transformed_explicit(sid, edges, cC_profiles, avg_nucleation_rate, avg_velocity, dt):
     """ Direct application of the KJMA kinetic model to each edge of the network
 
     Returns
@@ -108,14 +108,13 @@ def update_frac_transformed_explicit(sid, edges, cC_profiles, dt):
         fraction of transformed area in each edge
 
     """
-    avg_nucleation_rate, avg_velocity = get_average_rates(sid, edges, cC_profiles)
     edges.N_tot += avg_nucleation_rate * dt
     edges.P_ext += (edges.N_tot * avg_velocity) * dt
     d_A_ext = (2 * np.pi * edges.P_ext * avg_velocity) * dt
     edges.A_ext += d_A_ext
     edges.ftrans = 1.0 - np.exp(-edges.A_ext)
 
-def update_frac_transformed_isotropic(sid, edges, cC_profiles, old_diams, dt):
+def update_frac_transformed_isotropic(sid, edges, cC_profiles, old_diams, avg_nucleation_rate, avg_velocity, dt):
     """ Extends KJMA model to account for nucleation and growth on a deformable substrate:
         Assumes a pore edge distorts only in one dimension and that grains stretch with the
         substrate itself
@@ -130,8 +129,6 @@ def update_frac_transformed_isotropic(sid, edges, cC_profiles, old_diams, dt):
         f : np.ndarray 
             fraction of transformed area in each edge
     """
-    avg_nucleation_rate, avg_velocity = get_average_rates(sid, edges, cC_profiles)
-    
     # Dilution factor
     A_pore_old = 2 * np.pi * old_diams * edges.lens  # Old area
     A_pore = 2 * np.pi * edges.diams * edges.lens    # Curr. area

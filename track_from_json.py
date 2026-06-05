@@ -10,9 +10,9 @@ import matplotlib.pyplot as plt
 import matplotlib
 from utils import solve_equation
 
-font = {'family' : 'Times New Roman',
+font = {#'family' : 'Times New Roman',
         'weight' : 'normal',
-        'size'   : 50}
+        'size'   : 10}
 
 matplotlib.rc('font', **font)
 

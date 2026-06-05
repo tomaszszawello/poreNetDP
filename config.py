@@ -53,9 +53,9 @@ class SimInputData:
     "average fraction of inert mineral in grains"
     V_tot = (1 / chi0) ** 2 * 3 / 4 / np.pi
     "grain total volume"
-    K: float = 0.5
+    K: float = 0.1
     "precipitation to dissolution reaction rate"
-    Gamma: float = 0.1
+    Gamma: float = 1.1
     "precipitation to dissolution molar volume / acid capacity number"
     A: float = 10
     "nucleation rate pre-factor"
@@ -189,7 +189,7 @@ class SimInputData:
     p_in = 0.
     "inlet pressure (updated later, if flow_bc is constant pressure)"
     #dirname: str = geo + str(n) + '/' + f'G{G:.2f}Daeff{Da_eff:.2f}'
-    dirname: str = 'integration/' + f'Pe{Pe:.2f}Da{Da:.2f}'
+    dirname: str = 'integration/' + f'A{A:.2f}Da{Da:.2f}K{K:.2f}Gamma{Gamma:.2f}'
     "directory of simulation"
     initial_merging: int = 5
     "number of initial merging iterations"

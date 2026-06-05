@@ -21,6 +21,7 @@ import save as Sv
 import tracking as Tr
 import nucleation as Nu
 import data as Da # DELME
+import probe as Pro
 
 from build import build
 from utils import initialize_iterators, update_iterators, stop_condition
@@ -50,8 +51,17 @@ if sid.include_nucleation and (sid.include_diffusion or sid.include_volumes):
     raise ValueError("Unsupported: TODO: enable sid.include_volumes")
 
 # probe initialisation
-path_probe = Da.Probe(sid, edges, graph, snode=8, opts="path", total_nodes=5)
-path_probe.show_probes(sid, edges, graph)
+#path_probe = Da.Probe(sid, edges, graph, snode=8, opts="path", total_nodes=10)
+#path_probe.show_probes(sid, edges, graph)
+
+grid_probe = Pro.Probe(sid, edges, graph, snode=8, opts="grid", total_nodes=9)
+grid_probe.show_probes(sid, edges, graph, labels=False)
+#grid_probe.record(
+#    t = t,
+#    node_data = {'cb': np.ones_like(edges.diams), 'cc': np.zeros_like(edges.diams)},
+#    edge_data = {'f': edges.ftrans}
+#)
+
 
 # main loop
 # runs until we reach iteration limit or time limit or network is dissolved
@@ -100,6 +110,7 @@ while t < tmax and i < iters and not state:
     else:
         cc, cd = np.zeros(sid.nsq), np.zeros(sid.nsq)
 
+
     # calculate ffp, draw figures
     if t == 0 and not sid.debug:
         data.check_init_slice_channelization(graph, inc, edges)
@@ -110,7 +121,7 @@ while t < tmax and i < iters and not state:
         #Tr.track(sid, graph, inc, edges, data, pressure)
     else:
         if stop_condition(sid, t, i, iterator_dissolved):
-            print(f'Drawing at (i, t, dissolved) = ({i}, {t:3f}, {iterator_dissolved})')
+            print(f'Drawing at (i, t, dissolved) = ({i}, {t:.2f}, {iterator_dissolved:.2f})')
             iterator_dissolved += 1
             if sid.track_type == "dissolved" and iterator_dissolved in sid.track_list:
                 data.check_slice_channelization(graph, inc, edges, t)
@@ -119,7 +130,10 @@ while t < tmax and i < iters and not state:
                 #     f'network_{t:.1f}.vtk')
                 #Tr.track(sid, graph, inc, edges, data, pressure)
             else:
-                Dr.draw_flow_both(sid, graph, edges, "file", "")
+                live_tit = f"\n$t =$ {t:.1f}, $Vol. Diss. =$ {data.dissolved_v:.1f}" + \
+                        f" Mean $f = ${np.mean(edges.ftrans):.3f}, Mean $d = ${np.mean(edges.diams):.3f}"
+                Dr.draw_flow_both(sid, graph, edges, f"t{t:.2f}.png", live_tit)
+                grid_probe.plot_time_series_data(sid, edges, graph)
 
     # grow/shrink diameters and update them in edges, update volumes with
     # dissolved/precipitated values, check if network dissolved, find new
@@ -131,8 +145,16 @@ while t < tmax and i < iters and not state:
     if sid.include_nucleation:
         print ('Updating transformed fraction')
         ccr = Nu.reconstruct_cC_profiles(sid, edges, inc, cb, cc, n_pts=100)
-        Nu.update_frac_transformed_explicit(sid, edges, ccr, sid.dt)
+        avg_nr, avg_vel = Nu.get_average_rates(sid, edges, ccr)
+        Nu.update_frac_transformed_explicit(sid, edges, ccr, avg_nr, avg_vel, sid.dt)
         #edges.ftrans = np.clip(edges.ftrans, 1e-18, 0.99999)
+        # probe data 
+        grid_probe.record(
+            t = t,
+            node_data = {'cb': cb, 'cc': cc, 'pressure': pressure},
+            edge_data = {'f': edges.ftrans, 'nucleation_rate_avg': avg_nr, 
+                         'growth_vel_avg': avg_vel, 'diams': edges.diams, 'flow': edges.flow}
+        )
 
     data.collect_data(sid, inc, edges, vols, pressure, cb, cc)
     data.check_timescale_sep(sid, inc, edges, old_ftrans)
