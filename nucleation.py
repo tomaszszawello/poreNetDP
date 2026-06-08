@@ -83,16 +83,9 @@ def get_average_rates(sid, edges, cC_profiles):
     xi_grid = np.linspace(0, 1, cC_profiles.shape[1])
     avg_nucleation_rate = np.trapezoid(J_nucl, x=xi_grid, axis=1)
 
-    #driving_force = np.maximum(cC_profiles - sid.c_sat, 0)
     driving_force = cC_profiles / (1 + sid.G * sid.K * edges.diams[:,np.newaxis])
     avg_driving_force = np.trapezoid(driving_force, x=xi_grid, axis=1)
     avg_velocity = H_growth * avg_driving_force 
-
-    # Update edge here
-    # TODO: move somewhere appropriate
-    #edges.avg_nucl.append(avg_nucleation_rate)
-    #edges.avg_ccon.append(avg_driving_force)
-    #edges.avg_ssat.append(np.trapezoid(S, x=xi_grid, axis=1))
 
     return avg_nucleation_rate, avg_velocity 
 

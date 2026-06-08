@@ -51,16 +51,11 @@ if sid.include_nucleation and (sid.include_diffusion or sid.include_volumes):
     raise ValueError("Unsupported: TODO: enable sid.include_volumes")
 
 # probe initialisation
-#path_probe = Da.Probe(sid, edges, graph, snode=8, opts="path", total_nodes=10)
-#path_probe.show_probes(sid, edges, graph)
+probe = Pro.Probe(sid, edges, graph, snode=8, opts="path", total_nodes=5)
+probe.show_probes(sid, edges, graph)
 
-grid_probe = Pro.Probe(sid, edges, graph, snode=8, opts="grid", total_nodes=9)
-grid_probe.show_probes(sid, edges, graph, labels=False)
-#grid_probe.record(
-#    t = t,
-#    node_data = {'cb': np.ones_like(edges.diams), 'cc': np.zeros_like(edges.diams)},
-#    edge_data = {'f': edges.ftrans}
-#)
+#probe = Pro.Probe(sid, edges, graph, snode=8, opts="grid", total_nodes=9)
+#probe.show_probes(sid, edges, graph, labels=False)
 
 
 # main loop
@@ -133,13 +128,8 @@ while t < tmax and i < iters and not state:
                 live_tit = f"\n$t =$ {t:.1f}, $Vol. Diss. =$ {data.dissolved_v:.1f}" + \
                         f" Mean $f = ${np.mean(edges.ftrans):.3f}, Mean $d = ${np.mean(edges.diams):.3f}"
                 Dr.draw_flow_both(sid, graph, edges, f"t{t:.2f}.png", live_tit)
-                grid_probe.plot_time_series_data(sid, edges, graph)
+                probe.plot_time_series_data(sid, edges, graph)
 
-    # grow/shrink diameters and update them in edges, update volumes with
-    # dissolved/precipitated values, check if network dissolved, find new
-    # timestep
-    print ('Updating diameters')
-    state, dt_next = Gr.update_diameters(sid, inc, edges, vols, data, cb, cc, cd)
 
     old_ftrans = edges.ftrans # scope..
     if sid.include_nucleation:
@@ -149,13 +139,21 @@ while t < tmax and i < iters and not state:
         Nu.update_frac_transformed_explicit(sid, edges, ccr, avg_nr, avg_vel, sid.dt)
         #edges.ftrans = np.clip(edges.ftrans, 1e-18, 0.99999)
         # probe data 
-        grid_probe.record(
+        probe.record(
             t = t,
             node_data = {'cb': cb, 'cc': cc, 'pressure': pressure},
             edge_data = {'f': edges.ftrans, 'nucleation_rate_avg': avg_nr, 
                          'growth_vel_avg': avg_vel, 'diams': edges.diams, 'flow': edges.flow}
         )
 
+    # grow/shrink diameters and update them in edges, update volumes with
+    # dissolved/precipitated values, check if network dissolved, find new
+    # timestep
+    print ('Updating diameters')
+    state, dt_next = Gr.update_diameters(sid, inc, edges, vols, data, cb, cc, cd)
+
+
+    print ('Collecting data')
     data.collect_data(sid, inc, edges, vols, pressure, cb, cc)
     data.check_timescale_sep(sid, inc, edges, old_ftrans)
     data.summarise_data(sid, edges, pressure, cb, cc, cd, state)

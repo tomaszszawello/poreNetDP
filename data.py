@@ -211,8 +211,6 @@ class Data():
         self.porosity.append(1 - np.sum(vols.vol_a) / np.sum(vols.vol_max))
         self.dissolved_v = (np.sum(edges.diams ** 2 * edges.lens) - self.vol_init) / self.vol_init
         self.dissolved_v_list.append(self.dissolved_v)
-        
-
 
     def plot_data(self) -> None:
         """ Plot data from text file.
