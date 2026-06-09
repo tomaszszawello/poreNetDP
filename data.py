@@ -21,6 +21,7 @@ import networkx as nx
 import numpy as np
 import scipy.sparse as spr
 
+import math
 import random
 import matplotlib.cm as cm
 import matplotlib.colors as mcolors
@@ -58,6 +59,7 @@ class Data():
     delta_c : float
         current difference of inflow and outflow of substance C in the system
     """
+    # General 
     t = []
     pressure = []
     porosity = []
@@ -67,19 +69,25 @@ class Data():
     delta_c = 0.
     dissolved_v = 0.
     dissolved_v_list = []
+
+    # Channelisation
     slices: list = []
     slices_d: list = []
-    slices_s: list = []
-    "channelization for slices through the whole system in a given time"
-    slice_times: list = []
-    "list of times of checking slice channelization"
-    breakthrough_times: list = []
-    concentrations: list = []
-    reactive_breakthrough_times: list = []
-    track_times: list = []
-    vol_dissolved: float = 0.
-    vol_precipitated: float = 0.
+    slices_s: list = [] # channelization for slices through the whole system in a given time
+    slice_times: list = [] # list of times of checking slice channelization
+
+    # Time-dependent array data
+    x_eval = None
+    cb_network_avg = [] # avg. conc. parallel to flow
+    cc_network_avg = [] # 
     flush_to_passivation_ratio = [] # 
+
+    #breakthrough_times: list = []          # UNUSED / DEPRECATED? 
+    #concentrations: list = []              # UNUSED / DEPRECATED? 
+    #reactive_breakthrough_times: list = [] # UNUSED / DEPRECATED? 
+    #track_times: list = []                 # UNUSED / DEPRECATED? 
+    #vol_dissolved: float = 0.              # UNUSED / DEPRECATED? 
+    #vol_precipitated: float = 0.           # UNUSED / DEPRECATED? 
 
     def __init__(self, sid: SimInputData, edges: Edges):
         self.dirname = sid.dirname
@@ -87,7 +95,6 @@ class Data():
 
     def save_data(self) -> None:
         """ Save data to text file.
-
         This function saves the collected data to text file params.txt in
         columns. If the simulation is continued from saved parameters, new data
         is appended to that previously collected.
@@ -116,8 +123,9 @@ class Data():
 
     def load_data(self) -> None:
         data = np.loadtxt(self.dirname + '/params.txt').T
-        self.t, self.dissolved_v_list, self.pressure, self.porosity, self.participation_ratio, self.cb_out, \
-                    self.cc_out = list(data[0]), list(data[1]), list(data[2]), list(data[3]), list(data[4]), list(data[5]), list(data[6])
+        self.t, self.dissolved_v_list, self.pressure = list(data[0]), list(data[1]), list(data[2])
+        self.porosity, self.participation_ratio = list(data[3]), list(data[4]), 
+        self.cb_out, self.cc_out = list(data[5]), list(data[6])
         self.dissolved_v = self.dissolved_v_list[-1]
 
     def check_data(self, sid: SimInputData, edges: Edges, pressure, cb, cc, cd, state) -> None:
@@ -159,21 +167,24 @@ class Data():
         if sid.include_precipitation:
             print(f"                | cc:  [{np.min(cc):.4f}, {np.max(cc):.4f}]")
             print(f"                | cd:  [{np.min(cd):.4f}, {np.max(cd):.4f}]\n")
-        if sid.include_nucleation:
-            N = edges.N_tot * 2. * np.pi * edges.diams * edges.lens
-            N_preview = np.array2string(N, precision=2, separator=', ', edgeitems=2, threshold=5)
-            print(f"  Nuclei stats  | A     : {sid.A:.4g}")
-            print(f"                | Bounds: [{np.min(N):.2f}, {np.max(N):.2f}]")
-            print(f"                | Mean #: {np.mean(N):.2f}")
-            print(f"                | N     : {N_preview}\n")
-            F_preview = np.array2string(edges.ftrans, precision=2, separator=', ', edgeitems=2, threshold=5)
-            print(f"  Passivation   | Bounds: [{np.min(edges.ftrans):.2f}, {np.max(edges.ftrans):.2f}]")
-            print(f"                | Mean  : {np.mean(edges.ftrans):.2f}")
-            print(f"                | f(t)  : {F_preview}\n")
+            if sid.include_nucleation:
+                N = edges.N_tot * 2. * np.pi * edges.diams * edges.lens
+                N_preview = np.array2string(N, precision=2, separator=', ', \
+                        edgeitems=2, threshold=5)
+                print(f"  Nuclei stats  | A     : {sid.A:.4g}")
+                print(f"                | Bounds: [{np.min(N):.2f}, {np.max(N):.2f}]")
+                print(f"                | Mean #: {np.mean(N):.2f}")
+                print(f"                | N     : {N_preview}\n")
+                F_preview = np.array2string(edges.ftrans, precision=2, separator=', ', \
+                        edgeitems=2, threshold=5)
+                print(f"  Passivation   | Bounds: [{np.min(edges.ftrans):.2f}, \
+                      {np.max(edges.ftrans):.2f}]")
+                print(f"                | Mean  : {np.mean(edges.ftrans):.2f}")
+                print(f"                | f(t)  : {F_preview}\n")
     
 
-    def collect_data(self, sid: SimInputData, inc: Incidence, edges: Edges, vols, \
-        p: np.ndarray, cb: np.ndarray, cc: np.ndarray) -> None:
+    def collect_data(self, sid: SimInputData, inc: Incidence, graph: Graph, edges: Edges, \
+                     vols, p: np.ndarray, cb: np.ndarray, cc: np.ndarray) -> None:
         """ Collect data from different vectors.
 
         This function extracts information such as permeability, quantity of
@@ -211,6 +222,18 @@ class Data():
         self.porosity.append(1 - np.sum(vols.vol_a) / np.sum(vols.vol_max))
         self.dissolved_v = (np.sum(edges.diams ** 2 * edges.lens) - self.vol_init) / self.vol_init
         self.dissolved_v_list.append(self.dissolved_v)
+
+        # TODO: the following might be better handled in a separate update function
+        #       and with the time check in the main loop, i.e. via utils::stop_condition(...)
+        val = self.t[-1] / sid.track_every
+        if math.isclose(val, round(val), rel_tol=1e-9, abs_tol=1e-9):
+            # average node concentration across network
+            x, cbavg = self.get_space_avg_node_prop(sid, graph, cb)
+            if self.x_eval is None:
+                self.x_eval = x
+            self.cb_network_avg.append(cbavg)
+            _, ccavg = self.get_space_avg_node_prop(sid, graph, cc)
+            self.cc_network_avg.append(ccavg)
 
     def plot_data(self) -> None:
         """ Plot data from text file.
@@ -275,8 +298,7 @@ class Data():
             @ (pos_x <= slice_x) * np.abs(inc.incidence @ (pos_x > slice_x)) \
             - (spr.diags(edges.flow) @ inc.incidence > 0) @ (pos_x > slice_x) \
             * np.abs(inc.incidence @ (pos_x <= slice_x))
-        # sort edges from maximum flow to minimum (taking into account
-        # their orientation)
+        # sort edges from maximum flow to minimum (taking into account their orientation)
         slice_flow = np.array(sorted(slice_edges * np.abs(edges.flow), reverse = True))
         fraction_flow = 0
         total_flow = np.sum(slice_flow)
@@ -307,8 +329,7 @@ class Data():
                 break
         return (flow_50, np.sum(slice_flow != 0), diams_50, np.sum(slice_diams != 0), surface_50, np.sum(surface_50 != 0))
 
-    def check_init_slice_channelization(self, graph: Graph, inc: Incidence, \
-        edges: Edges) -> None:
+    def check_init_slice_channelization(self, graph: Graph, inc: Incidence, edges: Edges) -> None:
         pos_x = np.array(list(nx.get_node_attributes(graph, 'pos').values()))[:,0]
         slices = np.linspace(np.min(pos_x), np.max(pos_x), 102)[1:-1]
         channels_tab = []
@@ -444,3 +465,56 @@ class Data():
         print(f"Fluid Flush Time:     {tau_porevol:.4f} units")
         #print(f"Ratio series: {self.t[-1]:5f}, {tau_ratio[edge_probe_idxs]}")
     
+    def get_space_avg_node_prop(self, sid: SimInputData, graph: Graph, node_prop, npoints=100):
+        """ Gets average of a node property in slices perpendicular to flow direction
+        Parameters
+        -------
+        npoints : int
+            number of points to interpolate along (fixed number is used
+            in case merging changes the resolution)
+        Returns
+        -------
+        x_eval : np.ndarray
+            bin centres
+        avg : np.ndarray
+            average value of node property at @x_eval
+        """
+        #TODO: does merging doesn't change m,n?
+        if node_prop.shape[0] != sid.m * sid.n:
+            raise ValueError("ERROR: @Data::get_space_avg_node_prop() \
+                    Attempting to average a non-node property.")
+        pos_x = np.array(list(nx.get_node_attributes(graph, 'pos').values()))[:,0]
+        bins = np.linspace(0, sid.m, npoints)
+        x_eval, avg = [], []
+        for i in range(len(bins)-1):
+            mask = (pos_x >= bins[i]) & (pos_x < bins[i+1])
+            x_eval.append((bins[i] + bins[i+1]) / 2)
+            if np.any(mask):
+                avg.append(np.mean(node_prop[mask]))
+            else:
+                avg.append(np.nan)
+        return np.array(x_eval), np.array(avg)
+
+    def plot_avg_node_props(self, sid):
+        """ Plot average of node property at different times
+        TODO: generalise plotting, similar to Probe::plot_time_series_data 
+              e.g. need to define and iterate through a set of node properties
+        """
+
+        times = np.array(self.t)
+        cb_avg = self.cb_network_avg
+        cc_avg = self.cc_network_avg
+        fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(12, 8))
+        for i in range(len(cb_avg)):
+            lab = f"t = {sid.track_every*i:.2f}"
+            ax1.plot(self.x_eval, cb_avg[i], alpha=0.8, lw=1.5, label=lab)#, color=color)
+            ax2.plot(self.x_eval, cc_avg[i], alpha=0.8, lw=1.5, label=lab)#, color=color)
+        ax1.grid(True, linestyle='--', alpha=0.5)
+        ax2.grid(True, linestyle='--', alpha=0.5)
+        ax1.set_ylabel(r"Network average $c_B$")
+        ax2.set_ylabel(r"Network average $c_C$")
+        #ax1.set_xlabel(r"Horiz. span $x$")
+        ax2.set_xlabel(r"Horiz. span $x$")
+        ax1.legend(loc='center right', #bbox_to_anchor=(-0.05, 0.5), 
+            frameon=True, fontsize=10, alignment='right')
+        plt.show()

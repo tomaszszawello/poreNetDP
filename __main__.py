@@ -104,7 +104,7 @@ while t < tmax and i < iters and not state:
             cc, cd = Pi.solve_precipitation(sid, inc, graph, edges, cb), np.zeros(sid.nsq)
     else:
         cc, cd = np.zeros(sid.nsq), np.zeros(sid.nsq)
-
+    
 
     # calculate ffp, draw figures
     if t == 0 and not sid.debug:
@@ -128,7 +128,8 @@ while t < tmax and i < iters and not state:
                 live_tit = f"\n$t =$ {t:.1f}, $Vol. Diss. =$ {data.dissolved_v:.1f}" + \
                         f" Mean $f = ${np.mean(edges.ftrans):.3f}, Mean $d = ${np.mean(edges.diams):.3f}"
                 Dr.draw_flow_both(sid, graph, edges, f"t{t:.2f}.png", live_tit)
-                probe.plot_time_series_data(sid, edges, graph)
+                #probe.plot_time_series_data(sid, edges, graph)
+                data.plot_avg_node_props(sid)
 
 
     old_ftrans = edges.ftrans # scope..
@@ -154,9 +155,10 @@ while t < tmax and i < iters and not state:
 
 
     print ('Collecting data')
-    data.collect_data(sid, inc, edges, vols, pressure, cb, cc)
+    data.collect_data(sid, inc, graph, edges, vols, pressure, cb, cc)
     data.check_timescale_sep(sid, inc, edges, old_ftrans)
     data.summarise_data(sid, edges, pressure, cb, cc, cd, state)
+    #data.plot_avg_node_props(sid, edges, pressure, cb, cc, cd, state)
     state = data.check_data(sid, edges, pressure, cb, cc, cd, state)
     
     # merge edges

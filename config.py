@@ -28,7 +28,7 @@ class SimInputData:
     "maximum dissolved pore volume"
     plot_every: int = 100000
     "frequency of plotting the results"
-    track_every: int = 1 # tmax / 2
+    track_every: int = 1.0 # tmax / 2
     "frequency of checking channelization"
     track_list = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
     #track_list = [1, 2, 5, 10]

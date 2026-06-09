@@ -47,6 +47,7 @@ def draw(sid, graph, edges, triangles, vols, cb, t):
         else:
             draw_flow(sid, graph, edges, f'd_' + name, 'd')
 
+
 def draw_flow_both(sid: SimInputData, graph: Graph, edges: Edges, \
         name: str, title: str) -> None:
     """ Side by side plot of network with diameters/flow as edge width
