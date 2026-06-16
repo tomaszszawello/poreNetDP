@@ -22,7 +22,8 @@ class SimInputData:
     "frequency (in iterations) of collecting data"
     track_every: int = 0.1
     "frequency (in time) of performing tracking and slice check"
-    load_name: str = 'samples/carbonate_x01'
+    #load_name: str = 'samples/carbonate_x01'
+    load_name: str = 'oman_dfn_v1'
     "name of loaded network"
     dissolved_v_max = 1
     track_list = [1, 2, 5, 10]
@@ -32,7 +33,7 @@ class SimInputData:
     flow_focusing_profile = True
     aperture_focusing_profile = True
     # DISSOLUTION & PRECIPITATION
-    Da_eff: float = 0.0002
+    Da_eff: float = 0.02
     "effective Damkohler number"
     G: float = 5
     "diffusion to reaction ratio"

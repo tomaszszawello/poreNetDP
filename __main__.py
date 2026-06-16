@@ -51,20 +51,20 @@ while t < tmax and i < iters and not breakthrough and sid.dissolved_v < sid.diss
     if t == 0:
         data.collect_initial_data(sid, graph, inc, edges, concentration)
         #data.collect_data(sid, graph, inc, edges)
-        #graph_real.dump_json_graph(sid, edges)
-        save_vtk(sid, graph, edges, pressure, concentration)
+        graph_real.dump_json_graph(sid, edges)
+        #save_vtk(sid, graph, edges, pressure, concentration)
     # elif sid.old_t // sid.track_every != (sid.old_t + sid.dt) \
     #     // sid.track_every:
     elif sid.dissolved_v // sid.track_every > iterator_dissolved:
         iterator_dissolved += 1
         if iterator_dissolved in sid.track_list:
             data.collect_data(sid, graph, inc, edges, concentration)
-            #graph_real.dump_json_graph(sid, edges)
-            save_vtk(sid, graph, edges, pressure, concentration)
+            graph_real.dump_json_graph(sid, edges)
+            #save_vtk(sid, graph, edges, pressure, concentration)
     # save network in JSON
-    if i % sid.save_every == 0:
-        data.check(edges)
-        # graph_real.dump_json_graph(sid, edges)
+    # if i % sid.save_every == 0:
+    #     data.check(edges)
+    #     graph_real.dump_json_graph(sid, edges)
     # grow apertures and update them in edges, check if network dissolved,
     # find new timestep
     breakthrough, dt = Gr.update_apertures(sid, inc, edges, concentration)
@@ -79,5 +79,5 @@ if i != 1:
     data.collect_data(sid, graph, inc, edges, concentration)
     data.plot_data(graph)
     graph_real.dump_json_graph(sid, edges)
-    save_vtk(sid, graph, edges, pressure, concentration)
+    #save_vtk(sid, graph, edges, pressure, concentration)
     data.save()
