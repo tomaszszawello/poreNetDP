@@ -182,7 +182,7 @@ def solve_d(sid: SimInputData, inc: Incidence, edges: Edges, cb: np.ndarray) \
     Returns
     -------
     change : numpy ndarray (ne)
-        change of diameter of each edge
+        change of volume of each edge [L^3 / T]
     """
     # create list of concentrations which should be used for growth of each
     # edge (upstream one)
@@ -338,26 +338,28 @@ def solve_dp(sid: SimInputData, inc: Incidence, edges: Edges, cb: np.ndarray, \
     Returns
     -------
     change : numpy ndarray (ne)
-        change of diameter of each edge
+        change of volume of each edge [L^3/T]
     """
     # create list of concentrations which should be used for
     # growth/shrink of each edge (upstream one)
     growth_matrix = np.abs((spr.diags(edges.flow) @ inc.incidence > 0))
     cb_in = growth_matrix @ cb
     cc_in = growth_matrix @ cc
-    growth = cb_in * np.abs(edges.flow)  / (sid.Da * edges.lens * edges.diams) \
+    growth = cb_in * np.abs(edges.flow)  / (sid.Da) \
         * (1 - np.exp(-sid.Da / (1 + sid.G * edges.diams) * edges.diams \
         * edges.lens / np.abs(edges.flow)))
     growth = np.array(np.ma.fix_invalid(growth, fill_value = 0))
-    shrink_cb = cb_in * np.abs(edges.flow)  / (sid.Da * edges.lens \
-        * edges.diams * sid.Gamma) / (sid.K - 1) * (sid.K * (1 - \
+
+    K_pref = ((1 + sid.G * edges.diams) / (1 + sid.G * sid.K * edges.diams)) 
+    shrink_cb = cb_in * np.abs(edges.flow)  / (sid.Da * sid.Gamma) \
+            / (K_pref*sid.K - 1) * (K_pref*sid.K * (1 - \
         np.exp(-sid.Da / (1 + sid.G * edges.diams) * edges.diams * edges.lens \
         / np.abs(edges.flow))) - (1 - np.exp(-sid.Da * sid.K / (1 + sid.G \
         * sid.K * edges.diams) * edges.diams * edges.lens \
         / np.abs(edges.flow))))
     shrink_cb = np.array(np.ma.fix_invalid(shrink_cb, fill_value = 0))
-    shrink_cc = cc_in * np.abs(edges.flow)  / (sid.Da * edges.lens \
-        * edges.diams * sid.Gamma) * (1 - np.exp(-sid.Da * sid.K / (1 + sid.G \
+    shrink_cc = cc_in * np.abs(edges.flow)  / (sid.Da * sid.Gamma) \
+        * (1 - np.exp(-sid.Da * sid.K / (1 + sid.G \
         * sid.K * edges.diams) * edges.diams * edges.lens / np.abs(edges.flow)))
     shrink_cc = np.array(np.ma.fix_invalid(shrink_cc, fill_value = 0))
     change = (growth - shrink_cb - shrink_cc)
