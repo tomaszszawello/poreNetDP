@@ -76,7 +76,7 @@ class Data():
     slices_s: list = [] # channelization for slices through the whole system in a given time
     slice_times: list = [] # list of times of checking slice channelization
 
-    # Time-dependent array data
+    # Time-dependent array data / slice data
     x_eval = None
     cb_network_avg = [] # avg. conc. parallel to flow
     cc_network_avg = [] # 
@@ -92,6 +92,60 @@ class Data():
     def __init__(self, sid: SimInputData, edges: Edges):
         self.dirname = sid.dirname
         self.vol_init = np.sum(edges.diams ** 2 * edges.lens)
+
+    def collect_data(self, sid: SimInputData, inc: Incidence, graph: Graph, edges: Edges, \
+                     vols, p: np.ndarray, cb: np.ndarray, cc: np.ndarray) -> None:
+        """ Collect data from different vectors.
+
+        This function extracts information such as permeability, quantity of
+        substances flowing out of the system etc. and saves them in the data
+        class.
+
+        Parameters
+        -------
+        sid : SimInputData class object
+            all config parameters of the simulation
+            old_t - total time of simulation
+            dt - current timestep
+        inc : Incidence class object
+            matrices of incidence
+            incidence - connections of all edges with all nodes
+        edges : Edges class object
+            all edges in network and their parameters
+            flow - flow in edges
+            inlet - edges connected to inlet nodes
+            outlet - edges connected to outlet nodes
+        p : numpy ndarray
+            vector of current pressure
+        cb : numpy ndarray
+            vector of current substance B concentration
+        cc : numpy ndarray
+            vector of current substance C concentration
+        """
+        self.t.append(sid.old_t)
+        self.pressure.append(np.max(p))
+        self.porosity.append(1 - np.sum(vols.vol_a) / np.sum(vols.vol_max))
+        self.dissolved_v = (np.sum(edges.diams ** 2 * edges.lens) - self.vol_init) / self.vol_init
+        self.dissolved_v_list.append(self.dissolved_v)
+
+    def collect_slice_data(self, sid: SimInputData, inc: Incidence, graph: Graph, edges: Edges, \
+                     vols, p: np.ndarray, cb: np.ndarray, cc: np.ndarray) -> None:
+        """ Collects 'slice' data - a slice is a bin taken perpendicular to the flow.
+            In each slice the average is taken over either a node or edge property
+
+        """
+
+        ## TODO: the following might be better handled in a separate update function
+        ##       and with the time check in the main loop, i.e. via utils::stop_condition(...)
+        #val = self.t[-1] / sid.track_every
+        #if math.isclose(val, round(val), rel_tol=1e-9, abs_tol=1e-9):
+        # average node concentration across network
+        x, cbavg = self.get_slice_avg_node_prop(sid, graph, cb)
+        if self.x_eval is None:
+            self.x_eval = x
+        self.cb_network_avg.append(cbavg)
+        _, ccavg = self.get_slice_avg_node_prop(sid, graph, cc)
+        self.cc_network_avg.append(ccavg)
 
     def save_data(self) -> None:
         """ Save data to text file.
@@ -182,80 +236,6 @@ class Data():
                 print(f"                | Mean  : {np.mean(edges.ftrans):.2f}")
                 print(f"                | f(t)  : {F_preview}\n")
     
-
-    def collect_data(self, sid: SimInputData, inc: Incidence, graph: Graph, edges: Edges, \
-                     vols, p: np.ndarray, cb: np.ndarray, cc: np.ndarray) -> None:
-        """ Collect data from different vectors.
-
-        This function extracts information such as permeability, quantity of
-        substances flowing out of the system etc. and saves them in the data
-        class.
-
-        Parameters
-        -------
-        sid : SimInputData class object
-            all config parameters of the simulation
-            old_t - total time of simulation
-            dt - current timestep
-
-        inc : Incidence class object
-            matrices of incidence
-            incidence - connections of all edges with all nodes
-
-        edges : Edges class object
-            all edges in network and their parameters
-            flow - flow in edges
-            inlet - edges connected to inlet nodes
-            outlet - edges connected to outlet nodes
-
-        p : numpy ndarray
-            vector of current pressure
-
-        cb : numpy ndarray
-            vector of current substance B concentration
-
-        cc : numpy ndarray
-            vector of current substance C concentration
-        """
-        self.t.append(sid.old_t)
-        self.pressure.append(np.max(p))
-        self.porosity.append(1 - np.sum(vols.vol_a) / np.sum(vols.vol_max))
-        self.dissolved_v = (np.sum(edges.diams ** 2 * edges.lens) - self.vol_init) / self.vol_init
-        self.dissolved_v_list.append(self.dissolved_v)
-
-        # TODO: the following might be better handled in a separate update function
-        #       and with the time check in the main loop, i.e. via utils::stop_condition(...)
-        val = self.t[-1] / sid.track_every
-        if math.isclose(val, round(val), rel_tol=1e-9, abs_tol=1e-9):
-            # average node concentration across network
-            x, cbavg = self.get_space_avg_node_prop(sid, graph, cb)
-            if self.x_eval is None:
-                self.x_eval = x
-            self.cb_network_avg.append(cbavg)
-            _, ccavg = self.get_space_avg_node_prop(sid, graph, cc)
-            self.cc_network_avg.append(ccavg)
-
-    def plot_data(self) -> None:
-        """ Plot data from text file.
-
-        This function loads the data from text file params.txt and plots them
-        to file params.png.
-        """
-        f = open(self.dirname + '/params.txt', 'r', encoding = "utf-8")
-        data = np.loadtxt(f)
-        n_data = data.shape[1]
-        t = data[:, 0]
-        plt.figure(figsize = (15, 5))
-        plt.suptitle('Parameters')
-        spec = gridspec.GridSpec(ncols = n_data - 1, nrows = 1)
-        for i_data in range(n_data - 1):
-            plt.subplot(spec[i_data]).set_title(f'Data {i_data}')
-            #plt.plot(t, data[:, i_data + 1] / data[0, i_data + 1])
-            plt.plot(t, data[:, i_data + 1])
-            plt.yscale('log')
-            plt.xlabel('simulation time')
-        plt.savefig(self.dirname + '/params.png')
-        plt.close()
 
     def check_channelization(self, graph: Graph, inc: Incidence, edges: Edges, \
         slice_x: float) -> tuple[int, float]:
@@ -361,6 +341,103 @@ class Data():
         self.slices_s.append(surface_tab)
         self.slice_times.append("{0}".format(str(round(time, 1) if time % 1 else int(time))))
 
+    def check_passivation_time(self, sid: SimInputData, inc: Incidence, edges: Edges, old_ftrans):
+        """ Checks the time to passivate relative to advection time
+        Parameters
+        -------
+            old_ftrans : np.ndarray
+                f(t-1)
+            edge_probe_idxs : np.ndarray
+            TODO: move local ratio elsewhere 
+        """
+        V_pore_initial = np.sum(((edges.diams / 2.0)**2) * edges.lens)
+        dt = sid.dt
+        if len(self.t) > 2:
+            dt = self.t[-1] - self.t[-2]
+
+        tau_adv = V_pore_initial / sid.Q_in
+        tau_adv_i = (edges.lens * (edges.diams/ 2.)**2)  / np.abs(edges.flow + 1e-25)
+        df_dt = (edges.ftrans - old_ftrans) / dt
+        # Time it would take to fully passivate at the current rate df/dt
+        tau_pass_i = (1 - edges.ftrans) / np.abs(df_dt)
+        tau_ratio = tau_adv_i / tau_pass_i # ratio per edge
+        # Number of edges which transmit less than 1 pore volume during the passivation time
+        global_ratio = len(np.where(tau_ratio > 1.)[0])/len(edges.diams)
+        self.flush_to_passivation_ratio.append(global_ratio) # function of time
+
+        #plt.plot(range(len(self.flush_to_passivation_ratio)), self.flush_to_passivation_ratio)
+        #plt.show()
+        print(f"Initial Pore Volume:  {V_pore_initial:.4f}")
+        print(f"Fluid Flush Time:     {tau_adv:.4f} units")
+        #print(f"Ratio series: {self.t[-1]:5f}, {tau_ratio[edge_probe_idxs]}")
+    
+    def get_slice_avg_node_prop(self, sid: SimInputData, graph: Graph, node_prop, npoints=200):
+        """ Gets average of a node property in slices perpendicular to flow direction
+        Parameters
+        -------
+        npoints : int
+            number of points to interpolate along (fixed number is used
+            in case merging changes the resolution)
+        Returns
+        -------
+        x_eval : np.ndarray
+            bin centres
+        avg : np.ndarray
+            average value of node property at `x_eval`
+        """
+        #TODO: does merging doesn't change m,n?
+        if node_prop.shape[0] != sid.m * sid.n:
+            raise ValueError("ERROR: @Data::get_slice_avg_node_prop() \
+                    Attempting to average a non-node property.")
+        pos_x = np.array(list(nx.get_node_attributes(graph, 'pos').values()))[:,0]
+        bins = np.linspace(0, sid.m, npoints)
+        x_eval, avg = [], []
+        for i in range(len(bins)-1):
+            mask = (pos_x >= bins[i]) & (pos_x < bins[i+1])
+            x_eval.append((bins[i] + bins[i+1]) / 2)
+            if np.any(mask):
+                avg.append(np.mean(node_prop[mask]))
+            else:
+                avg.append(np.nan)
+        return np.array(x_eval), np.array(avg)
+
+    def get_slice_avg_edge_prop(self, sid, graph, edges, inc, edge_prop, npoints=100):
+        """ Gets average of an edge property in slices perpendicular to flow direction
+        Parameters
+        -------
+        npoints : int
+            number of points to interpolate along (fixed number is used
+            in case merging changes the resolution)
+        Returns
+        -------
+        x_eval : np.ndarray
+            bin centres
+        avg : np.ndarray
+            average value of edge property at `x_eval`
+        """
+        if len(edge_prop) != inc.incidence.shape[0]: 
+            raise ValueError("ERROR: @Data::get_slice_avg_edge_prop() \
+                    Attempting to average a non-edge property.")
+
+        #pos_x = np.array([pos[0] for pos in nx.get_node_attributes(graph, 'pos').values()])
+        pos_x = np.array(list(nx.get_node_attributes(graph, 'pos').values()))[:,0]
+        slices = np.linspace(0, sid.m, npoints)
+        x_eval, avg = []
+        for slice_x in slices:
+            # Create a 1D vector: 1 if node is Right of slice, 0 if Left
+            #nodes_right = (pos_x > slice_x).astype(int)
+            # Multiply incidence matrix. Result is +/- 1 if nodes are on opposite sides.
+            # abs() forces it to a boolean intersection mask.
+            #crossing_edges_mask = np.abs(inc.incidence @ nodes_right) == 1
+            crossing_edges_mask = np.abs(inc.incidence @ (pos_x > slice_x)) == 1
+            x_eval.append(slice_x)
+            if np.any(crossing_edges_mask):
+                avg.append(np.mean(edge_prop[crossing_edges_mask]))
+            else:
+                avg.append(np.nan) # Preserve array shape if no edges cross this exact line
+        return np.array(x_eval), np.array(avg)
+
+
     def plot_profile(self, graph: Graph) -> None:
         """ Plots slice data from text file.
 
@@ -437,84 +514,73 @@ class Data():
         plt.savefig(self.dirname + '/porosity.png', bbox_inches="tight")
         plt.close()
 
-    def check_timescale_sep(self, sid: SimInputData, inc: Incidence, edges: Edges, old_ftrans):
-        """ Checks for time scale separation between passivation flush time
-        Parameters
-        -------
-            old_ftrans : np.ndarray
-                f(t-1)
-            edge_probe_idxs : np.ndarray
-            TODO: move local ratio elsewhere 
+    def plot_data(self) -> None:
+        """ Plot data from text file.
+
+        This function loads the data from text file params.txt and plots them
+        to file params.png.
         """
-        V_pore_initial = np.sum(((edges.diams / 2.0)**2) * edges.lens)
-        dt = sid.dt
-        if len(self.t) > 2:
-            dt = self.t[-1] - self.t[-2]
+        f = open(self.dirname + '/params.txt', 'r', encoding = "utf-8")
+        data = np.loadtxt(f)
+        n_data = data.shape[1]
+        t = data[:, 0]
+        plt.figure(figsize = (15, 5))
+        plt.suptitle('Parameters')
+        spec = gridspec.GridSpec(ncols = n_data - 1, nrows = 1)
+        for i_data in range(n_data - 1):
+            plt.subplot(spec[i_data]).set_title(f'Data {i_data}')
+            #plt.plot(t, data[:, i_data + 1] / data[0, i_data + 1])
+            plt.plot(t, data[:, i_data + 1])
+            plt.yscale('log')
+            plt.xlabel('simulation time')
+        plt.savefig(self.dirname + '/params.png')
+        plt.close()
 
-        tau_porevol = V_pore_initial / sid.Q_in
-        tau_porevol_i = (edges.lens * (edges.diams/ 2.)**2)  / np.abs(edges.flow + 1e-25)
-        df_dt = (edges.ftrans - old_ftrans) / dt
-        # Time it would take to fully passivate at the current rate df/dt
-        tau_pass_i = (1 - edges.ftrans) / np.abs(df_dt)
-        tau_ratio = tau_porevol_i / tau_pass_i # ratio per edge
-        # Number of edges which transmit less than 1 pore volume during the passivation time
-        global_ratio = len(np.where(tau_ratio > 1.)[0])/len(edges.diams)
-        self.flush_to_passivation_ratio.append(global_ratio)
-
-        print(f"Initial Pore Volume:  {V_pore_initial:.4f}")
-        print(f"Fluid Flush Time:     {tau_porevol:.4f} units")
-        #print(f"Ratio series: {self.t[-1]:5f}, {tau_ratio[edge_probe_idxs]}")
-    
-    def get_space_avg_node_prop(self, sid: SimInputData, graph: Graph, node_prop, npoints=100):
-        """ Gets average of a node property in slices perpendicular to flow direction
-        Parameters
-        -------
-        npoints : int
-            number of points to interpolate along (fixed number is used
-            in case merging changes the resolution)
-        Returns
-        -------
-        x_eval : np.ndarray
-            bin centres
-        avg : np.ndarray
-            average value of node property at @x_eval
-        """
-        #TODO: does merging doesn't change m,n?
-        if node_prop.shape[0] != sid.m * sid.n:
-            raise ValueError("ERROR: @Data::get_space_avg_node_prop() \
-                    Attempting to average a non-node property.")
-        pos_x = np.array(list(nx.get_node_attributes(graph, 'pos').values()))[:,0]
-        bins = np.linspace(0, sid.m, npoints)
-        x_eval, avg = [], []
-        for i in range(len(bins)-1):
-            mask = (pos_x >= bins[i]) & (pos_x < bins[i+1])
-            x_eval.append((bins[i] + bins[i+1]) / 2)
-            if np.any(mask):
-                avg.append(np.mean(node_prop[mask]))
-            else:
-                avg.append(np.nan)
-        return np.array(x_eval), np.array(avg)
-
-    def plot_avg_node_props(self, sid):
+    def plot_avg_node_props(self, sid, current_time=False, ax=None):
         """ Plot average of node property at different times
         TODO: generalise plotting, similar to Probe::plot_time_series_data 
               e.g. need to define and iterate through a set of node properties
+        Parameters
+        -------
+        current_time : bool
+            If true, plots all averaged node properties on a single panel at
+            the current time
+
+        TODO: add nucleation rate, number of nuclei as average edge properties, plot under network
+        evolution
         """
 
         times = np.array(self.t)
         cb_avg = self.cb_network_avg
         cc_avg = self.cc_network_avg
-        fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(12, 8))
-        for i in range(len(cb_avg)):
-            lab = f"t = {sid.track_every*i:.2f}"
-            ax1.plot(self.x_eval, cb_avg[i], alpha=0.8, lw=1.5, label=lab)#, color=color)
-            ax2.plot(self.x_eval, cc_avg[i], alpha=0.8, lw=1.5, label=lab)#, color=color)
-        ax1.grid(True, linestyle='--', alpha=0.5)
-        ax2.grid(True, linestyle='--', alpha=0.5)
-        ax1.set_ylabel(r"Network average $c_B$")
-        ax2.set_ylabel(r"Network average $c_C$")
-        #ax1.set_xlabel(r"Horiz. span $x$")
-        ax2.set_xlabel(r"Horiz. span $x$")
-        ax1.legend(loc='center right', #bbox_to_anchor=(-0.05, 0.5), 
-            frameon=True, fontsize=10, alignment='right')
-        plt.show()
+        if not current_time:
+            fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(12, 8))
+            for i in range(len(cb_avg)):
+                lab = f"t = {sid.track_every*i:.2f}"
+                ax1.plot(self.x_eval, cb_avg[i], alpha=0.8, lw=1.5, label=lab)#, color=color)
+                ax2.plot(self.x_eval, cc_avg[i], alpha=0.8, lw=1.5, label=lab)#, color=color)
+            ax1.grid(True, linestyle='--', alpha=0.5)
+            ax2.grid(True, linestyle='--', alpha=0.5)
+            ax1.set_ylabel(r"Network average $c_B$")
+            ax2.set_ylabel(r"Network average $c_C$")
+            #ax1.set_xlabel(r"Horiz. span $x$")
+            ax2.set_xlabel(r"Horiz. span $x$")
+            ax1.legend(loc='center right', bbox_to_anchor=(-0.05, 0.5), 
+                frameon=True, fontsize=10, alignment='right')
+            plt.show()
+        else:
+            show_plot = False
+            if ax is None:
+                fig, ax = plt.subplots(figsize=(12, 8))
+                show_plot = True
+            fig, ax1 = plt.subplots(figsize=(12, 8))
+            ax.plot(self.x_eval, cb_avg[-1], alpha=0.8, lw=1.5, label=r"$\overline{c}_B$")
+            ax.plot(self.x_eval, cc_avg[-1], alpha=0.8, lw=1.5, label=r"$\overline{c}_C$")
+            ax.grid(True, linestyle='--', alpha=0.5)
+            ax.grid(True, linestyle='--', alpha=0.5)
+            ax.set_ylabel(r"Spatial average")
+            ax.set_xlabel(r"Horiz. span $x$")
+            ax.legend(loc='center right', frameon=False, fontsize=10, alignment='right')
+            if show_plot:
+                plt.show()
+            return ax

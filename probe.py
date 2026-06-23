@@ -74,9 +74,9 @@ class Probe:
         t : float
         globals_data : dict
             Dictionary of scalars
-        node_data : dict, optional
+        node_data : dict
             Dictionary of node arrays (cb, etc)
-        edge_data : dict, optional
+        edge_data : dict
             Dictionary of edge arrays (flow, etc)
         """
         self.history['t'].append(t)

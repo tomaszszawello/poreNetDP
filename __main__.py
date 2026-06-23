@@ -117,6 +117,7 @@ while t < tmax and i < iters and not state:
     else:
         if stop_condition(sid, t, i, iterator_dissolved):
             print(f'Drawing at (i, t, dissolved) = ({i}, {t:.2f}, {iterator_dissolved:.2f})')
+            data.collect_slice_data(sid, inc, graph, edges, vols, pressure, cb, cc)
             iterator_dissolved += 1
             if sid.track_type == "dissolved" and iterator_dissolved in sid.track_list:
                 data.check_slice_channelization(graph, inc, edges, t)
@@ -125,11 +126,12 @@ while t < tmax and i < iters and not state:
                 #     f'network_{t:.1f}.vtk')
                 #Tr.track(sid, graph, inc, edges, data, pressure)
             else:
-                live_tit = f"\n$t =$ {t:.1f}, $Vol. Diss. =$ {data.dissolved_v:.1f}" + \
+                live_tit = f"\n$t =$ {t:.1f}, $Vol. Diss. =$ {data.dissolved_v:.1f}," + \
                         f" Mean $f = ${np.mean(edges.ftrans):.3f}, Mean $d = ${np.mean(edges.diams):.3f}"
-                Dr.draw_flow_both(sid, graph, edges, f"t{t:.2f}.png", live_tit)
+                #Dr.draw_flow_diams_nucleation(sid, graph, edges, f"t{t:.2f}.png", live_tit)
+                Dr.draw_flow_diams_nucleation(sid, graph, edges, f"t{t:.2f}.png", live_tit, data)
                 #probe.plot_time_series_data(sid, edges, graph)
-                data.plot_avg_node_props(sid)
+                #data.plot_avg_node_props(sid, current_time=True)
 
 
     old_ftrans = edges.ftrans # scope..
@@ -156,7 +158,7 @@ while t < tmax and i < iters and not state:
 
     print ('Collecting data')
     data.collect_data(sid, inc, graph, edges, vols, pressure, cb, cc)
-    data.check_timescale_sep(sid, inc, edges, old_ftrans)
+    data.check_passivation_time(sid, inc, edges, old_ftrans)
     data.summarise_data(sid, edges, pressure, cb, cc, cd, state)
     #data.plot_avg_node_props(sid, edges, pressure, cb, cc, cd, state)
     state = data.check_data(sid, edges, pressure, cb, cc, cd, state)

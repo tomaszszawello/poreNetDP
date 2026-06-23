@@ -36,7 +36,7 @@ class SimInputData:
     track_type = "time" # "dissolved, "time" or "iterate"
 
     # DISSOLUTION & PRECIPITATION
-    Da_eff: float = 1.25
+    Da_eff: float = 10
     "effective Damkohler number"
     G: float = 0.
     "transport parameter (reaction to transverse diffusion)"
@@ -53,13 +53,13 @@ class SimInputData:
     "average fraction of inert mineral in grains"
     V_tot = (1 / chi0) ** 2 * 3 / 4 / np.pi
     "grain total volume"
-    K: float = 0.1
+    K: float = 10
     "precipitation to dissolution reaction rate"
-    Gamma: float = 1.1
+    Gamma: float = 1
     "precipitation to dissolution molar volume / acid capacity number"
-    A: float = 10
+    A: float = 1000
     "nucleation rate pre-factor"
-    c_sat: float = 1/1000.
+    c_sat: float = 1/10000.
     "saturation limit"
     merge_length: float = 1 / chi0
     "diameter scale to length scale ratio for merging"
@@ -103,7 +103,7 @@ class SimInputData:
     "inlet D concentration"
 
     # TIME
-    dt: float = 0.01
+    dt: float = 0.0001
     "initial timestep (if no adaptive timestep, timestep for whole simulation)"
     growth_rate: float = 0.05
     ("maximum percentage growth of an edges (used for finding adaptive \
