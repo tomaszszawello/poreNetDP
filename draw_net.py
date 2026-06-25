@@ -47,14 +47,14 @@ def draw(sid, graph, edges, triangles, vols, cb, t):
         else:
             draw_flow(sid, graph, edges, f'd_' + name, 'd')
 
-def draw_flow_diams_nucleation(sid: SimInputData, graph: Graph, edges: Edges, \
+def draw_net_and_avg_props(sid: SimInputData, graph: Graph, edges: Edges, \
         name: str, title: str, data_obj) -> None:
-    """ Side by side plot of network with diameters/flow as edge width
-        Edge colors correspond to the passivated fraction
+    """ Draws network above plot of averaged node or edge data 
+        
     Parameters
     -------
-    data_obj : data class instance
-        Instance of data class object 
+    data_obj : Data class object
+        Used for plotting averaged edge or node property 
     """
     #fig, ((ax1, ax2), (ax3, ax4)) = plt.subplots(2, 2, 
     fig, (ax1, ax2) = plt.subplots(2, 1, 
@@ -87,10 +87,10 @@ def draw_flow_diams_nucleation(sid: SimInputData, graph: Graph, edges: Edges, \
     # plot the concentration profile along the network
     data_obj.plot_avg_node_props(sid, current_time=True, ax=ax2)
     #data_obj.plot_avg_node_props(sid, current_time=True, ax=ax4)
-    ax2.set_xlim(ax1.get_xlim())
-    #ax4.set_axis_off()
 
-    # Aligning the axes 
+    ax2.set_xlim(ax1.get_xlim())
+
+    # Align the axes
     plt.tight_layout() 
     fig.canvas.draw()
     pos_net = ax1.get_position()
