@@ -22,7 +22,7 @@ import tracking as Tr
 
 from build import build
 from utils import initialize_iterators, update_iterators
-from utils_vtk import save_VTK
+#from utils_vtk import save_VTK
 
 import numpy as np
 
@@ -106,6 +106,8 @@ while t < tmax and i < iters and not state:
                 data.check_slice_channelization(graph, inc, edges, \
                     t)
                 Dr.draw(sid, graph, edges, triangles, vols, cb, t)
+                data.collect_slice_data(sid, inc, graph, edges, vols, pressure, cb, cc)
+                Dr.draw_net_and_avg_props(sid, graph, edges, "delme.png", "tit", data)
                 # save_VTK(sid, graph, edges, pressure, cb, \
                 #     f'network_{t:.1f}.vtk')
                 #Tr.track(sid, graph, inc, edges, data, pressure)
@@ -115,8 +117,9 @@ while t < tmax and i < iters and not state:
     # timestep
     print ('Updating diameters')
     state, dt_next = Gr.update_diameters(sid, inc, edges, vols, data, cb, cc, cd)
-    data.collect_data(sid, inc, edges, vols, pressure, cb, cc)
+    data.collect_data(sid, inc, edges, vols, pressure)
     state = data.check_data(sid, edges, pressure, cb, cc, cd, state)
+    data.summarise_data(sid, edges, pressure, cb, cc, cd, state)
     # merge edges
     if sid.include_merging:
         print ('Merging')

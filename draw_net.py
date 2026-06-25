@@ -17,15 +17,18 @@ import matplotlib.pyplot as plt
 import networkx as nx
 import numpy as np
 
+import matplotlib.colors as mcolors
+#matplotlib.use('Agg')
+
 from config import SimInputData
 from data import Data
 from network import Edges, Graph
 from incidence import Incidence
 from volumes import Volumes
 
-font = {'family' : 'Times New Roman',
+font = {#'family' : 'Times New Roman',
         'weight' : 'normal',
-        'size'   : 50}
+        'size'   : 10}
 
 matplotlib.rc('font', **font)
 
@@ -43,6 +46,59 @@ def draw(sid, graph, edges, triangles, vols, cb, t):
             draw_colored_edges(sid, graph, edges, f'd_' + name)
         else:
             draw_flow(sid, graph, edges, f'd_' + name, 'd')
+
+def draw_net_and_avg_props(sid: SimInputData, graph: Graph, edges: Edges, \
+        name: str, title: str, data_obj) -> None:
+    """ Draws network above plot of averaged node or edge data 
+        
+    Parameters
+    -------
+    data_obj : Data class object
+        Used for plotting averaged edge or node property 
+    """
+    #fig, ((ax1, ax2), (ax3, ax4)) = plt.subplots(2, 2, 
+    fig, (ax1, ax2) = plt.subplots(2, 1, 
+        figsize=(sid.figsize * 2, sid.figsize * 1),
+        gridspec_kw={'height_ratios': [3, 1], 'hspace': 0.00005})
+    fig.suptitle(title, fontsize=15)
+
+    # Draw th enetwork as usual
+    pos = nx.get_node_attributes(graph, 'pos')
+    #edge_colors = plt.cm.copper_r(mcolors.Normalize(0, 1)(edges.ftrans)) 
+    edge_colors = 'black'
+    norm = mcolors.Normalize(vmin=0.0, vmax=1.0)
+
+    # Pre-calculate shared node coordinates
+    xi, yi = zip(*[pos[n] for n in graph.in_nodes])
+    xo, yo = zip(*[pos[n] for n in graph.out_nodes])
+    for ax, plot_option in zip([ax1], ['d']): #zip([ax1, ax2], ['d', 'q']):
+        ax.set_aspect('equal')
+        ax.set_axis_off() # Disabling axes is faster than styling them
+        ax.scatter(xi, yi, s=1000/sid.n, fc='white', ec='black', zorder=3)
+        ax.scatter(xo, yo, s=1000/sid.n, fc='black', ec='white', zorder=3)
+        if plot_option == 'q':
+            qs = (1 - edges.boundary_list) * np.abs(edges.flow)
+            w = sid.qdrawconst * np.array(qs)
+        else:
+            qs = (1 - edges.boundary_list) * (edges.diams * (edges.diams > 0))
+            w = sid.ddrawconst * np.array(qs)
+        nx.draw_networkx_edges(graph, pos, edgelist=edges.edge_list, 
+                               edge_color=edge_colors, width=w, ax=ax)
+
+    # plot the concentration profile along the network
+    #TODO: when generalised avg_props is added, need to specify which props to plot
+    data_obj.plot_avg_node_props(sid, current_time=True, ax=ax2)
+    #data_obj.plot_avg_node_props(sid, current_time=True, ax=ax4)
+    ax2.set_xlim(ax1.get_xlim())
+    # Align the axes
+    plt.tight_layout() 
+    fig.canvas.draw()
+    pos_net = ax1.get_position()
+    pos_line = ax2.get_position()
+    ax2.set_position([pos_net.x0, pos_line.y0, pos_net.width, pos_line.height])
+    fig.savefig(f"{sid.dirname}/{name}", bbox_inches="tight", dpi=300)
+    plt.close(fig)
+    #gc.collect() # import gc
 
 def draw_flow(sid: SimInputData, graph: Graph, edges: Edges, \
     name: str, plot_type: str) -> None:
@@ -698,8 +754,7 @@ cmap_custom = LinearSegmentedColormap.from_list(
      "grey"]   # 1.0 → full-saturation magenta
 )
 
-def draw_colored_edges(sid: SimInputData, graph: Graph, edges: Edges, \
-    name: str) -> None:
+def draw_colored_edges(sid: SimInputData, graph: Graph, edges: Edges, name: str) -> None:
     """ Draw the network with diameters/flow as edge width.
 
     """
