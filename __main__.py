@@ -157,7 +157,7 @@ while t < tmax and i < iters and not state:
 
 
     print ('Collecting data')
-    data.collect_data(sid, inc, graph, edges, vols, pressure, cb, cc)
+    data.collect_data(sid, inc, graph, edges, vols, pressure)
     data.check_passivation_time(sid, inc, edges, old_ftrans)
     data.summarise_data(sid, edges, pressure, cb, cc, cd, state)
     #data.plot_avg_node_props(sid, edges, pressure, cb, cc, cd, state)

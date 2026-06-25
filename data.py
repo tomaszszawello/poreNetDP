@@ -77,11 +77,13 @@ class Data():
         self.slices_s: list = [] # channelization for slices through the whole system in a given time
         self.slice_times: list = [] # list of times of checking slice channelization
 
-        # Time-dependent array data / slice data
+        # Time series data
+        self.passivation_time_ratio = [] # 
+        # Slice data (to be refactored)
         self.x_eval = None
         self.cb_network_avg = [] # avg. conc. parallel to flow
         self.cc_network_avg = [] # 
-        self.passivation_time_ratio = [] # 
+        self.diams_network_avg = [] # 
 
         #breakthrough_times: list = []          # UNUSED / DEPRECATED? 
         #concentrations: list = []              # UNUSED / DEPRECATED? 
@@ -94,7 +96,7 @@ class Data():
         self.vol_init = np.sum(edges.diams ** 2 * edges.lens)
 
     def collect_data(self, sid: SimInputData, inc: Incidence, graph: Graph, edges: Edges, \
-                     vols, p: np.ndarray, cb: np.ndarray, cc: np.ndarray) -> None:
+                     vols, p: np.ndarray) -> None:
         """ Collect data from different vectors.
 
         This function extracts information such as permeability, quantity of
@@ -117,10 +119,6 @@ class Data():
             outlet - edges connected to outlet nodes
         p : numpy ndarray
             vector of current pressure
-        cb : numpy ndarray
-            vector of current substance B concentration
-        cc : numpy ndarray
-            vector of current substance C concentration
         """
         self.t.append(sid.old_t)
         self.pressure.append(np.max(p))
@@ -133,12 +131,18 @@ class Data():
         """ Collects 'slice' data - a slice is a bin taken perpendicular to the flow.
             In each slice the average is taken over either a node or edge property
 
-        """
+            TODO: Along with Data::plot_avg_node_props(...), pass a dictionary of
+            node or edge data, iterate over dict while calling get_slice_avg_edge_prop etc.
+            Then, instead of cc_network_avg,etc. have an node_avg_prop dict in Data class
+            that maps to the passed dict. Remove x_eval too
+        Parameters
+        -------
+        cb : numpy ndarray
+            vector of current substance B concentration
+        cc : numpy ndarray
+            vector of current substance C concentration
 
-        ## TODO: the following might be better handled in a separate update function
-        ##       and with the time check in the main loop, i.e. via utils::stop_condition(...)
-        #val = self.t[-1] / sid.track_every
-        #if math.isclose(val, round(val), rel_tol=1e-9, abs_tol=1e-9):
+        """
         # average node concentration across network
         x, cbavg = self.get_slice_avg_node_prop(sid, graph, cb)
         if self.x_eval is None:
@@ -146,6 +150,9 @@ class Data():
         self.cb_network_avg.append(cbavg)
         _, ccavg = self.get_slice_avg_node_prop(sid, graph, cc)
         self.cc_network_avg.append(ccavg)
+        # average diam concentration across network
+        _, diamavg = self.get_slice_avg_edge_prop(sid, graph, edges, inc, edges.diams)
+        self.diams_network_avg.append(diamavg)
 
     def save_data(self) -> None:
         """ Save data to text file.
@@ -210,7 +217,7 @@ class Data():
         return state
 
     def summarise_data(self, sid: SimInputData, edges: Edges, pressure, cb, cc, cd, state):
-        """ Pretty format for runtime variables
+        """ Pretty formatting for runtime variables
         """
         print(f"  Params   | [Da_eff :  K   :  G   : Gamma]")
         print(f"           | [ {sid.Da_eff:.2f}  : {sid.K:.2f} : {sid.G:.2f} : {sid.Gamma:.2f}]")
@@ -394,7 +401,7 @@ class Data():
                 avg.append(np.nan)
         return np.array(x_eval), np.array(avg)
 
-    def get_slice_avg_edge_prop(self, sid, graph, edges, inc, edge_prop, npoints=100):
+    def get_slice_avg_edge_prop(self, sid, graph, edges, inc, edge_prop, npoints=200):
         """ Gets average of an edge property in slices perpendicular to flow direction
         Parameters
         -------
@@ -414,8 +421,11 @@ class Data():
 
         #pos_x = np.array([pos[0] for pos in nx.get_node_attributes(graph, 'pos').values()])
         pos_x = np.array(list(nx.get_node_attributes(graph, 'pos').values()))[:,0]
-        slices = np.linspace(0, sid.m, npoints)
-        x_eval, avg = []
+
+        bins = np.linspace(0, sid.m, npoints)
+        slices = (bins[:-1] + bins[1:]) / 2
+        #slices = np.linspace(0, sid.m, npoints)
+        x_eval, avg = [], []
         for slice_x in slices:
             #nodes_right = (pos_x > slice_x).astype(int)
             # Result is +/- 1 if nodes are on opposite sides.
@@ -428,6 +438,9 @@ class Data():
                 avg.append(np.nan) 
         return np.array(x_eval), np.array(avg)
 
+    #=============================================================================
+    #                       PLOTTING FUNCTIONS GO BELOW 
+    #=============================================================================
 
     def plot_profile(self, graph: Graph) -> None:
         """ Plots slice data from text file.
@@ -529,11 +542,11 @@ class Data():
 
     def plot_avg_node_props(self, sid, current_time=False, ax=None):
         """ Plot average of node property at different times
+            Currently just plots averaged cb and cc concentrations along network
+
         TODO: generalise plotting, similar to Probe::plot_time_series_data 
               e.g. need to define and iterate through a set of node properties
-        TODO: add nucleation rate, number of nuclei as average edge properties, 
-              plot under network
-        evolution
+        TODO: add nucleation rate, number of nuclei as average edge properties
 
         Parameters
         -------
@@ -544,7 +557,8 @@ class Data():
         times = np.array(self.t)
         cb_avg = self.cb_network_avg
         cc_avg = self.cc_network_avg
-        if not current_time:
+        di_avg = self.diams_network_avg
+        if not current_time: # plot and show data live in loop
             fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(12, 8))
             for i in range(len(cb_avg)):
                 lab = f"t = {sid.track_every*i:.2f}"
@@ -559,7 +573,7 @@ class Data():
             ax1.legend(loc='center right', bbox_to_anchor=(-0.05, 0.5), 
                 frameon=True, fontsize=10, alignment='right')
             plt.show()
-        else:
+        else:               # return canvas for plotting elsehwere 
             show_plot = False
             if ax is None:
                 fig, ax = plt.subplots(figsize=(12, 8))
@@ -567,6 +581,9 @@ class Data():
             fig, ax1 = plt.subplots(figsize=(12, 8))
             ax.plot(self.x_eval, cb_avg[-1], alpha=0.8, lw=1.5, label=r"$\overline{c}_B$")
             ax.plot(self.x_eval, cc_avg[-1], alpha=0.8, lw=1.5, label=r"$\overline{c}_C$")
+            print(cb_avg[-1])
+            print(di_avg[-1])
+            ax.plot(self.x_eval, di_avg[-1], alpha=0.8, lw=1.5, label=r"$avg. diameter$")
             ax.grid(True, linestyle='--', alpha=0.5)
             ax.grid(True, linestyle='--', alpha=0.5)
             ax.set_ylabel(r"Spatial average")

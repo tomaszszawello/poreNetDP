@@ -62,6 +62,7 @@ def draw_net_and_avg_props(sid: SimInputData, graph: Graph, edges: Edges, \
         gridspec_kw={'height_ratios': [3, 1], 'hspace': 0.00005})
     fig.suptitle(title, fontsize=15)
 
+    # Draw th enetwork as usual
     pos = nx.get_node_attributes(graph, 'pos')
     edge_colors = plt.cm.copper_r(mcolors.Normalize(0, 1)(edges.ftrans)) 
     norm = mcolors.Normalize(vmin=0.0, vmax=1.0)
@@ -69,7 +70,6 @@ def draw_net_and_avg_props(sid: SimInputData, graph: Graph, edges: Edges, \
     # Pre-calculate shared node coordinates
     xi, yi = zip(*[pos[n] for n in graph.in_nodes])
     xo, yo = zip(*[pos[n] for n in graph.out_nodes])
-
     for ax, plot_option in zip([ax1], ['d']): #zip([ax1, ax2], ['d', 'q']):
         ax.set_aspect('equal')
         ax.set_axis_off() # Disabling axes is faster than styling them
@@ -85,11 +85,10 @@ def draw_net_and_avg_props(sid: SimInputData, graph: Graph, edges: Edges, \
                                edge_color=edge_colors, width=w, ax=ax)
 
     # plot the concentration profile along the network
+    #TODO: when generalised avg_props is added, need to specify which props to plot
     data_obj.plot_avg_node_props(sid, current_time=True, ax=ax2)
     #data_obj.plot_avg_node_props(sid, current_time=True, ax=ax4)
-
     ax2.set_xlim(ax1.get_xlim())
-
     # Align the axes
     plt.tight_layout() 
     fig.canvas.draw()
