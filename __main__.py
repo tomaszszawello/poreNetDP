@@ -129,9 +129,9 @@ while t < tmax and i < iters and not state:
                 live_tit = f"\n$t =$ {t:.1f}, $Vol. Diss. =$ {data.dissolved_v:.1f}," + \
                         f" Mean $f = ${np.mean(edges.ftrans):.3f}, Mean $d = ${np.mean(edges.diams):.3f}"
                 #Dr.draw_flow_diams_nucleation(sid, graph, edges, f"t{t:.2f}.png", live_tit)
-                Dr.draw_flow_diams_nucleation(sid, graph, edges, f"t{t:.2f}.png", live_tit, data)
+                Dr.draw_net_and_avg_props(sid, graph, edges, f"t{t:.2f}.png", live_tit, data)
                 #probe.plot_time_series_data(sid, edges, graph)
-                #data.plot_avg_node_props(sid, current_time=True)
+                data.plot_avg_node_props(sid, current_time=True)
 
 
     old_ftrans = edges.ftrans # scope..

@@ -103,7 +103,7 @@ class SimInputData:
     "inlet D concentration"
 
     # TIME
-    dt: float = 0.0001
+    dt: float = 0.01
     "initial timestep (if no adaptive timestep, timestep for whole simulation)"
     growth_rate: float = 0.05
     ("maximum percentage growth of an edges (used for finding adaptive \
