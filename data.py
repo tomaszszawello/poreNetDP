@@ -223,18 +223,18 @@ class Data():
             print(f"                | cd:  [{np.min(cd):.4f}, {np.max(cd):.4f}]\n")
             if sid.include_nucleation:
                 N = edges.N_tot * 2. * np.pi * edges.diams * edges.lens
-                N_preview = np.array2string(N, precision=2, separator=', ', \
+                N_ = np.array2string(N, precision=2, separator=', ', \
                         edgeitems=2, threshold=5)
                 print(f"  Nuclei stats  | A     : {sid.A:.4g}")
                 print(f"                | Bounds: [{np.min(N):.2f}, {np.max(N):.2f}]")
                 print(f"                | Mean #: {np.mean(N):.2f}")
-                print(f"                | N     : {N_preview}\n")
-                F_preview = np.array2string(edges.ftrans, precision=2, separator=', ', \
+                print(f"                | N     : {N_}\n")
+                F_ = np.array2string(edges.ftrans, precision=2, separator=', ', \
                         edgeitems=2, threshold=5)
                 print(f"  Passivation   | Bounds: [{np.min(edges.ftrans):.2f}, \
                       {np.max(edges.ftrans):.2f}]")
                 print(f"                | Mean  : {np.mean(edges.ftrans):.2f}")
-                print(f"                | f(t)  : {F_preview}\n")
+                print(f"                | f(t)  : {F_}\n")
     
 
     def check_channelization(self, graph: Graph, inc: Incidence, edges: Edges, \
@@ -350,12 +350,11 @@ class Data():
             edge_probe_idxs : np.ndarray
             TODO: move local ratio elsewhere 
         """
-        V_pore_initial = np.sum(((edges.diams / 2.0)**2) * edges.lens)
         dt = sid.dt
         if len(self.t) > 2:
-            dt = self.t[-1] - self.t[-2]
-
-        tau_adv = V_pore_initial / sid.Q_in
+            dt = self.t[-1] - self.t[-2] #?
+        #V_pore_initial = np.sum(((edges.diams / 2.0)**2) * edges.lens)
+        #tau_adv = V_pore_initial / sid.Q_in
         tau_adv_i = (edges.lens * (edges.diams/ 2.)**2)  / np.abs(edges.flow + 1e-25)
         df_dt = (edges.ftrans - old_ftrans) / dt
         # Time it would take to fully passivate at the current rate df/dt
@@ -364,12 +363,6 @@ class Data():
         # Number of edges which transmit less than 1 pore volume during the passivation time
         global_ratio = len(np.where(tau_ratio > 1.)[0])/len(edges.diams)
         self.flush_to_passivation_ratio.append(global_ratio) # function of time
-
-        #plt.plot(range(len(self.flush_to_passivation_ratio)), self.flush_to_passivation_ratio)
-        #plt.show()
-        print(f"Initial Pore Volume:  {V_pore_initial:.4f}")
-        print(f"Fluid Flush Time:     {tau_adv:.4f} units")
-        #print(f"Ratio series: {self.t[-1]:5f}, {tau_ratio[edge_probe_idxs]}")
     
     def get_slice_avg_node_prop(self, sid: SimInputData, graph: Graph, node_prop, npoints=200):
         """ Gets average of a node property in slices perpendicular to flow direction

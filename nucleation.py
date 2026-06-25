@@ -89,7 +89,8 @@ def get_average_rates(sid, edges, cC_profiles):
 # ============================================================================================
 # ================== VARIOUS IMPLEMENTATIONS AND GENERALISATIONS OF AVRAMI ===================
 # ============================================================================================
-def update_frac_transformed_explicit(sid, edges, cC_profiles, avg_nucleation_rate, avg_velocity, dt):
+def update_frac_transformed_explicit(sid, edges, cC_profiles, \
+        avg_nucleation_rate, avg_velocity, dt):
     """ Direct application of the KJMA kinetic model to each edge of the network
 
     Returns
@@ -104,7 +105,8 @@ def update_frac_transformed_explicit(sid, edges, cC_profiles, avg_nucleation_rat
     edges.A_ext += d_A_ext
     edges.ftrans = 1.0 - np.exp(-edges.A_ext)
 
-def update_frac_transformed_isotropic(sid, edges, cC_profiles, old_diams, avg_nucleation_rate, avg_velocity, dt):
+def update_frac_transformed_isotropic(sid, edges, cC_profiles, old_diams, \
+        avg_nucleation_rate, avg_velocity, dt):
     """ Extends KJMA model to account for nucleation and growth on a deformable substrate:
         Assumes a pore edge distorts only in one dimension and that grains stretch with the
         substrate itself
@@ -133,3 +135,70 @@ def update_frac_transformed_isotropic(sid, edges, cC_profiles, old_diams, avg_nu
     print(f"    Nuclei number stats: {sid.A}, {np.min(N):.2f}, {np.max(N):.2f}, {np.mean(N):.2f}, {N}, {avg_velocity}") 
 
     return 1 - np.exp(-edges.A_ext)
+
+def update_frac_transformed_fixed_grain(sid, edges, cC_profiles, old_diams, avg_nucleation_rate, avg_velocity, dt):
+    """ Extends KJMA model to account for nucleation and growth on a deformable substrate:
+        Assumes that the change in area of a pore adds or subtracts from the boundary
+        of the KJMA domain. When dA/dt < 0, df/dt = [(1-f)/A]*dS_ext/dt, which is the
+        classical KJMA result. When dA/dt > 0, df/dt = [(1-f)/A]*dS_ext/dt - [f/A_p] dA_p/dt
+        where the subtrahend is a dilution term due to the creation of new area
+        Small range of validitiy overall since homogeneity condition is ruined as pore shrinks
+
+        Parameters
+        ----------
+        old_diams : np.ndarray
+            edge diameters at the previous time step
+
+        Returns
+        --------
+        f : np.ndarray 
+            fraction of transformed area in each edge
+    """
+
+    # Epsilon calculation
+    A_p_prev = 2 * np.pi * old_diams * edges.lens 
+    A_p_curr = 2 * np.pi * edges.diams * edges.lens
+    A_ratio = A_p_curr / A_p_prev 
+    epsilon = np.log(A_ratio) / dt
+    eps_pos = np.maximum(0, epsilon) 
+    dilution_factor = 1.0 + eps_pos * dt
+
+    # Implicit state spdate
+    edges.N_tot = (edges.N_tot + avg_nucleation_rate * dt) / dilution_factor
+    edges.P_ext = (edges.P_ext + avg_velocity * edges.N_tot * dt) / dilution_factor
+    edges.A_ext = (edges.A_ext + 2 * np.pi * avg_velocity * edges.P_ext * dt) / dilution_factor
+    
+    K = 2 * np.pi * avg_velocity * edges.P_ext
+    #N = edges.N_tot * A_p_curr
+    #print(f"    Nuclei number stats: {sid.A:3f}, {np.min(N):.2f}, {np.max(N):.2f}, {np.mean(N):.2f}, {N}") 
+    edges.f = (edges.f + K * dt) / (1.0 + (K + eps_pos) * dt)
+
+def update_frac_transformed_global_ellipse(sid, edges, cC_profiles, dr, \
+        old_diams, avg_nucleation_rate, avg_velocity, dt):
+    """ Same as the isotropic case  / stretchy grains except we allow grains to 
+        distort into ellipses, under the assumption that edges only change in radius
+        and not length
+        Overall is probably more honest to the geometric picture but makes little difference
+        when compared with the plain isotropic case (circular disks)
+    """
+    # Dilution
+    A_pore_old = 2 * np.pi * old_diams * edges.lens  # Old area
+    A_pore = 2 * np.pi * edges.diams * edges.lens    # Curr. area
+    scale_factor = A_pore_old / A_pore
+    print(f"SCALE FACTOR = {np.min(scale_factor)}, {np.max(scale_factor)}, {np.mean(scale_factor)}") 
+    if not hasattr(edges, 'N_rho'):
+        edges.N_rho = np.zeros_like(diams) 
+        edges.rho_v = np.zeros_like(diams)
+        edges.R_h = np.zeros_like(diams)
+    edges.N_rho = (edges.N_rho + avg_nucleation_rate * dt) * scale_factor
+    growth_v = (avg_velocity / A_pore_old) * edges.N_rho * dt
+    edges.rho_v = (edges.rho_v + growth_v) * scale_factor
+    growth_h = avg_velocity * (edges.N_rho * A_pore_old) * dt
+    edges.R_h = edges.R_h + growth_h
+    term_v = np.pi * avg_velocity * A_pore_old * edges.rho_v
+    term_h = np.pi * (avg_velocity / A_pore_old) * edges.R_h
+    edges.A_ext = edges.A_ext + (term_v + term_h) * dt
+    #N = edges.N_rho * 2. * np.pi * edges.diams * edges.lens
+    #print(f"    Nuclei number stats: {sid.A}, {np.min(N):.2f}, {np.max(N):.2f}, {np.mean(N):.2f}, {N}, {avg_velocity}") 
+
+    edges.f = 1 - np.exp(-edges.A_ext)
