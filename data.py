@@ -59,37 +59,37 @@ class Data():
     delta_c : float
         current difference of inflow and outflow of substance C in the system
     """
-    # General 
-    t = []
-    pressure = []
-    porosity = []
-    cb_out = []
-    cc_out = []
-    delta_b = 0.
-    delta_c = 0.
-    dissolved_v = 0.
-    dissolved_v_list = []
-
-    # Channelisation
-    slices: list = []
-    slices_d: list = []
-    slices_s: list = [] # channelization for slices through the whole system in a given time
-    slice_times: list = [] # list of times of checking slice channelization
-
-    # Time-dependent array data / slice data
-    x_eval = None
-    cb_network_avg = [] # avg. conc. parallel to flow
-    cc_network_avg = [] # 
-    flush_to_passivation_ratio = [] # 
-
-    #breakthrough_times: list = []          # UNUSED / DEPRECATED? 
-    #concentrations: list = []              # UNUSED / DEPRECATED? 
-    #reactive_breakthrough_times: list = [] # UNUSED / DEPRECATED? 
-    #track_times: list = []                 # UNUSED / DEPRECATED? 
-    #vol_dissolved: float = 0.              # UNUSED / DEPRECATED? 
-    #vol_precipitated: float = 0.           # UNUSED / DEPRECATED? 
-
     def __init__(self, sid: SimInputData, edges: Edges):
+        # General 
+        self.t = []
+        self.pressure = []
+        self.porosity = []
+        self.cb_out = []
+        self.cc_out = []
+        self.delta_b = 0.
+        self.delta_c = 0.
+        self.dissolved_v = 0.
+        self.dissolved_v_list = []
+
+        # Channelisation
+        self.slices: list = []
+        self.slices_d: list = []
+        self.slices_s: list = [] # channelization for slices through the whole system in a given time
+        self.slice_times: list = [] # list of times of checking slice channelization
+
+        # Time-dependent array data / slice data
+        self.x_eval = None
+        self.cb_network_avg = [] # avg. conc. parallel to flow
+        self.cc_network_avg = [] # 
+        self.passivation_time_ratio = [] # 
+
+        #breakthrough_times: list = []          # UNUSED / DEPRECATED? 
+        #concentrations: list = []              # UNUSED / DEPRECATED? 
+        #reactive_breakthrough_times: list = [] # UNUSED / DEPRECATED? 
+        #track_times: list = []                 # UNUSED / DEPRECATED? 
+        #vol_dissolved: float = 0.              # UNUSED / DEPRECATED? 
+        #vol_precipitated: float = 0.           # UNUSED / DEPRECATED? 
+
         self.dirname = sid.dirname
         self.vol_init = np.sum(edges.diams ** 2 * edges.lens)
 
@@ -362,7 +362,7 @@ class Data():
         tau_ratio = tau_adv_i / tau_pass_i # ratio per edge
         # Number of edges which transmit less than 1 pore volume during the passivation time
         global_ratio = len(np.where(tau_ratio > 1.)[0])/len(edges.diams)
-        self.flush_to_passivation_ratio.append(global_ratio) # function of time
+        self.passivation_time_ratio.append(global_ratio) # function of time
     
     def get_slice_avg_node_prop(self, sid: SimInputData, graph: Graph, node_prop, npoints=200):
         """ Gets average of a node property in slices perpendicular to flow direction
@@ -417,17 +417,15 @@ class Data():
         slices = np.linspace(0, sid.m, npoints)
         x_eval, avg = []
         for slice_x in slices:
-            # Create a 1D vector: 1 if node is Right of slice, 0 if Left
             #nodes_right = (pos_x > slice_x).astype(int)
-            # Multiply incidence matrix. Result is +/- 1 if nodes are on opposite sides.
-            # abs() forces it to a boolean intersection mask.
+            # Result is +/- 1 if nodes are on opposite sides.
             #crossing_edges_mask = np.abs(inc.incidence @ nodes_right) == 1
             crossing_edges_mask = np.abs(inc.incidence @ (pos_x > slice_x)) == 1
             x_eval.append(slice_x)
             if np.any(crossing_edges_mask):
                 avg.append(np.mean(edge_prop[crossing_edges_mask]))
             else:
-                avg.append(np.nan) # Preserve array shape if no edges cross this exact line
+                avg.append(np.nan) 
         return np.array(x_eval), np.array(avg)
 
 
@@ -533,14 +531,14 @@ class Data():
         """ Plot average of node property at different times
         TODO: generalise plotting, similar to Probe::plot_time_series_data 
               e.g. need to define and iterate through a set of node properties
+        TODO: add nucleation rate, number of nuclei as average edge properties, 
+              plot under network
+        evolution
+
         Parameters
         -------
         current_time : bool
-            If true, plots all averaged node properties on a single panel at
-            the current time
-
-        TODO: add nucleation rate, number of nuclei as average edge properties, plot under network
-        evolution
+            True: plots all averaged node properties on a single panel at the current time
         """
 
         times = np.array(self.t)
