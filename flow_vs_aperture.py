@@ -1,4 +1,5 @@
 from networkx.readwrite import json_graph
+import argparse
 import json
 import networkx as nx
 import numpy as np
@@ -6,13 +7,14 @@ from network import Graph
 import scipy.sparse as spr
 import matplotlib.pyplot as plt
 import matplotlib
+import matplotlib.colors as mcolors
 from utils import solve_equation
 import numba
 from numba import njit, types, typed, prange
 
 font = {'family' : 'Times New Roman',
         'weight' : 'normal',
-        'size'   : 50}
+        'size'   : 30}
 
 matplotlib.rc('font', **font)
 
@@ -50,7 +52,7 @@ def load_graph(name):
     # update parameters in sid based on loaded graph
     #flow = nx.get_edge_attributes(graph, 'q').values()
     lens = nx.get_edge_attributes(graph, 'length').values()
-    l0 = 25#sum(lens) / len(lens)
+    l0 = sum(lens) / len(lens)
     n_edges = len(graph.edges())
     n_nodes = len(graph.nodes())
     graph.in_vec = np.zeros(n_nodes)
@@ -566,87 +568,171 @@ def find_flow2(graph, incidence, b0, fracture_lens, lens, inlet, name):
     flow = apertures ** 3 / lens * (incidence @ pressure)
     return apertures, pressure, flow
 
+def plot_flow_vs_aperture(apertures_norm, flow, b0, n_bins=50, output_path='flow_vs_aperture.png'):
+    """Plot 2D heatmap (count of fractures by aperture and |flow|) and total
+    flow per aperture bin.
 
-# import os
-# n_parts = 100000
-# np.random.seed(1234)
-# seeds = np.random.randint(0, n_parts, size = n_parts)
-# for i in range(1, 31):
-#     print(i)
-#     networks = []
-#     dirname = f'check_new_Da/G0.10000Daeff0.02000/carbonate_x{i:02}/'
-#     for name in os.listdir(dirname):
-#         if name[:3] == 'net':
-#             networks.append(name[8:12])
-#     tracking_list = []
-#     c_tracking_list = []
-#     r_tracking_list = []
-#     pl_tracking_list = []
-#     nbins = 100
-#     G = 0.1
-#     Da = 0.02
+    Parameters
+    ----------
+    apertures_norm : array
+        Apertures normalised by b0 (as returned by find_flow).
+    flow : array
+        Flow through each edge (signed).
+    b0 : float
+        Mean aperture used for normalisation.
+    n_bins : int
+        Number of log-spaced bins along each axis.
+    output_path : str
+        Where to save the figure.
+    """
+    apertures = apertures_norm * b0
+    abs_flow = np.abs(flow)
 
-#     for net in networks:
-#         name = dirname + 'network_' + net + '.json'    
-#         if net == '0.00':
-#             graph, incidence, fracture_lens, b0, l0, lens, inlet = load_graph(name)
-#             apertures, pressure, flow = find_flow(graph, incidence, b0, fracture_lens, lens, inlet, name)
-#         else:
-#             apertures, pressure, flow = find_flow(graph, incidence, b0, fracture_lens, lens, inlet, name)
-#         tracking, c_tracking, path_lens = track(graph, incidence, inlet, flow, fracture_lens, lens, apertures, pressure, G, Da, n_parts, seeds)
-#         tracking_list.append(tracking)
-#         c_tracking_list.append(c_tracking)
-#         pl_tracking_list.append(path_lens * l0)
-#     np.savetxt(dirname + 'tracks_num.txt', tracking_list)
-#     np.savetxt(dirname + 'c_tracks_num.txt', c_tracking_list)
-#     np.savetxt(dirname + 'pl_tracks_num.txt', pl_tracking_list)
+    # drop edges with zero flow (can't appear on log scale)
+    mask = abs_flow > 0
+    ap = apertures[mask]
+    fl = abs_flow[mask]
 
-# import os
-# n_parts = 100000
-# np.random.seed(1234)
-# seeds = np.random.randint(0, n_parts, size = n_parts)
-# #for i in range(1, 31):
-#     print(i)
-#     networks = []
-#     dirname = f'check_new_Da/G0.10000Daeff0.02000/carbonate_x{i:02}/'
-#     for name in os.listdir(dirname):
-#         if name[:3] == 'net':
-#             networks.append(name[8:12])
-#     tracking_list = []
-#     c_tracking_list = []
-#     r_tracking_list = []
-#     pl_tracking_list = []
-#     nbins = 100
-#     G = 0.1
-#     Da = 0.02
+    ap_bins = np.logspace(np.log10(ap.min()), np.log10(ap.max()), n_bins + 1)
+    fl_bins = np.logspace(np.log10(fl.min()), np.log10(fl.max()), n_bins + 1)
+    ap_centers = np.sqrt(ap_bins[:-1] * ap_bins[1:])  # geometric centre
 
-#     for net in networks:
-#         name = dirname + 'network_' + net + '.json'    
-#         if net == '0.00':
-#             graph, incidence, fracture_lens, b0, l0, lens, inlet = load_graph(name)
-#             apertures, pressure, flow = find_flow(graph, incidence, b0, fracture_lens, lens, inlet, name)
-#         else:
-#             apertures, pressure, flow = find_flow(graph, incidence, b0, fracture_lens, lens, inlet, name)
-#         tracking, c_tracking, path_lens = track(graph, incidence, inlet, flow, fracture_lens, lens, apertures, pressure, G, Da, n_parts, seeds)
-#         tracking_list.append(tracking)
-#         c_tracking_list.append(c_tracking)
-#         pl_tracking_list.append(path_lens * l0)
-#     np.savetxt(dirname + 'tracks_num.txt', tracking_list)
-#     np.savetxt(dirname + 'c_tracks_num.txt', c_tracking_list)
-#     np.savetxt(dirname + 'pl_tracks_num.txt', pl_tracking_list)
+    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(30, 15))
 
-import os
-n_parts = 100000
-np.random.seed(1234)
-seeds = np.random.randint(0, n_parts, size = n_parts)
-G = 5.
-Da = 0.002
-dirname = f'oman_dfn_v2/G5.0000Daeff0.0020/0/'
-network = "network_1.00"
-name = dirname + network + ".json"
-graph, incidence, fracture_lens, b0, l0, lens, inlet = load_graph(name)
-apertures, pressure, flow = find_flow(graph, incidence, b0, fracture_lens, lens, inlet, name)
-tracking, c_tracking, path_lens = track(graph, incidence, inlet, flow, fracture_lens, lens, apertures, pressure, G, Da, n_parts, seeds)
-np.savetxt(dirname + network + '_tracking.txt', tracking)
-np.savetxt(dirname + network + '_c_tracking.txt', c_tracking)
-np.savetxt(dirname + network + '_pl_tracking.txt', path_lens)
+    # --- left: 2D heatmap: count of fractures per (aperture, |flow|) cell ---
+    counts, _, _ = np.histogram2d(ap, fl, bins=[ap_bins, fl_bins])
+    counts[counts == 0] = np.nan
+    im = ax1.pcolormesh(
+        ap_bins, fl_bins, counts.T,
+        norm=mcolors.LogNorm(vmin=1),
+        cmap='viridis',
+    )
+    ax1.set_xscale('log')
+    ax1.set_yscale('log')
+    ax1.set_xlabel('aperture')
+    ax1.set_ylabel('|flow|')
+    ax1.set_title('fracture count')
+    fig.colorbar(im, ax=ax1, label='number of fractures')
+
+    # --- right: total |flow| per aperture bin ---
+    total_flow, _ = np.histogram(ap, bins=ap_bins, weights=fl)
+    count_per_bin, _ = np.histogram(ap, bins=ap_bins)
+    valid = count_per_bin > 0
+
+    ax2.loglog(ap_centers[valid], total_flow[valid], 'o-', markersize=10, linewidth=2)
+    ax2.set_xlabel('aperture')
+    ax2.set_ylabel('total |flow|')
+    ax2.set_title('total flow per aperture bin')
+
+    plt.tight_layout()
+    plt.savefig(output_path, bbox_inches='tight')
+    plt.close()
+    print(f'Saved: {output_path}')
+
+
+def plot_aperture_distribution(apertures_norm, b0, n_bins=50, output_path='aperture_distribution.png'):
+    """Plot the PDF of fracture apertures on a log-log scale.
+
+    Parameters
+    ----------
+    apertures_norm : array
+        Apertures normalised by b0 (as returned by find_flow).
+    b0 : float
+        Mean aperture used for normalisation.
+    n_bins : int
+        Number of log-spaced bins.
+    output_path : str
+        Where to save the figure.
+    """
+    apertures = apertures_norm * b0
+
+    bins = np.logspace(np.log10(apertures.min()), np.log10(apertures.max()), n_bins + 1)
+    centers = np.sqrt(bins[:-1] * bins[1:])  # geometric centres
+    widths = np.diff(bins)
+
+    counts, _ = np.histogram(apertures, bins=bins)
+    pdf = counts / (counts.sum() * widths)  # normalised so integral ≈ 1
+
+    fig, ax = plt.subplots(figsize=(15, 15))
+    ax.loglog(centers[counts > 0], pdf[counts > 0], 'o-', markersize=10, linewidth=2)
+    ax.set_xlabel('aperture')
+    ax.set_ylabel('probability density')
+    ax.set_title('aperture distribution')
+
+    plt.tight_layout()
+    plt.savefig(output_path, bbox_inches='tight')
+    plt.close()
+    print(f'Saved: {output_path}')
+
+
+def plot_dfn_aperture_distribution(json_path, n_bins=50, output_path=None):
+    """Load a raw DFN JSON file and plot the aperture distribution.
+
+    Works directly from the JSON without solving for flow, so it is fast
+    and works on the original network file (e.g. oman_dfn_v2.json) as well
+    as any evolved network snapshot.
+
+    Parameters
+    ----------
+    json_path : str
+        Path to the DFN JSON file.
+    n_bins : int
+        Number of log-spaced bins.
+    output_path : str or None
+        Where to save the figure.  Defaults to <json_path stem>_aperture_distribution.png.
+    """
+    if output_path is None:
+        output_path = json_path.replace('.json', '_aperture_distribution.png')
+
+    with open(json_path) as f:
+        data = json.load(f)
+
+    # the key is 'links' in evolved snapshots and 'edges' in the raw DFN
+    edges = data.get('links', data.get('edges', []))
+    apertures = np.array([e['b'] for e in edges if 'b' in e])
+
+    bins = np.linspace(apertures.min(), apertures.max(), n_bins + 1)
+    centers = (bins[:-1] + bins[1:]) / 2
+    widths = np.diff(bins)
+
+    counts, _ = np.histogram(apertures, bins=bins)
+    pdf = counts / (counts.sum() * widths)
+
+    fig, ax = plt.subplots(figsize=(15, 15))
+    ax.semilogy(centers[counts > 0], pdf[counts > 0], 'o-', markersize=10, linewidth=2)
+    ax.set_xlabel('aperture')
+    ax.set_ylabel('probability density')
+    ax.set_title(f'aperture distribution — {json_path}')
+
+    plt.tight_layout()
+    plt.savefig(output_path, bbox_inches='tight')
+    plt.close()
+    print(f'Saved: {output_path}')
+
+
+if __name__ == '__main__':
+    parser = argparse.ArgumentParser(
+        description='Plot flow vs aperture for a network state loaded from a JSON file.'
+    )
+    parser.add_argument('json_file', help='Path to network JSON file')
+    parser.add_argument('-o', '--output', default=None,
+                        help='Output PNG path (default: <json_file stem>_flow_vs_aperture.png)')
+    parser.add_argument('--bins', type=int, default=50,
+                        help='Number of log-spaced bins (default: 50)')
+    parser.add_argument('--dfn', default=None, metavar='JSON',
+                        help='Also plot aperture distribution of a raw DFN JSON (e.g. oman_dfn_v2.json)')
+    args = parser.parse_args()
+
+    name = args.json_file
+    output = args.output or name.replace('.json', '_flow_vs_aperture.png')
+
+    print(f'Loading network from {name} ...')
+    graph, incidence, fracture_lens, b0, l0, lens, inlet = load_graph(name)
+    print(f'Computing flow ...')
+    apertures, pressure, flow = find_flow(graph, incidence, b0, fracture_lens, lens, inlet, name)
+    print(f'Plotting ...')
+    plot_flow_vs_aperture(apertures, flow, b0, n_bins=args.bins, output_path=output)
+    ap_dist_output = output.replace('_flow_vs_aperture.png', '_aperture_distribution.png')
+    plot_aperture_distribution(apertures, b0, n_bins=args.bins, output_path=ap_dist_output)
+    if args.dfn:
+        plot_dfn_aperture_distribution(args.dfn, n_bins=args.bins)

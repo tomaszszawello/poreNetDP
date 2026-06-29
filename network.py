@@ -44,8 +44,30 @@ class Graph(nx.graph.Graph):
         """Create an instance of Graph from a JSON file."""
         with open(filename, 'r') as f:
             data = json.load(f)
-        #temp_graph = json_graph.node_link_graph(data, link = "edges")
-        temp_graph = json_graph.node_link_graph(data)
+        temp_graph = json_graph.node_link_graph(data, edges="links")
+        #temp_graph = json_graph.node_link_graph(data, edges="edges")
+
+        # Initialize an instance of the subclass
+        graph = cls()
+
+        # Copy nodes and edges from the temporary graph
+        graph.add_nodes_from(temp_graph.nodes(data=True))
+        graph.add_edges_from(temp_graph.edges(data=True))
+
+        # If your subclass has additional attributes, set them here
+        # For example:
+        # graph.in_nodes = temp_graph.graph.get('in_nodes', [])
+        # graph.out_nodes = temp_graph.graph.get('out_nodes', [])
+
+        return graph
+
+    @classmethod
+    def from_json_file_draw(cls, filename):
+        """Create an instance of Graph from a JSON file."""
+        with open(filename, 'r') as f:
+            data = json.load(f)
+        temp_graph = json_graph.node_link_graph(data, edges = "links")
+        #temp_graph = json_graph.node_link_graph(data)
 
         # Initialize an instance of the subclass
         graph = cls()
@@ -156,13 +178,13 @@ def load(sid:SimInputData) -> tuple[Graph, Graph]:
         #    nx.get_node_attributes(graph, 'y').values(), \
         #    nx.get_node_attributes(graph, 'z').values()))
         if isinstance(n1, str) or isinstance(n2, str):
-            if n1 == 's':
+            if n1 == 't':
                 graph.in_nodes.append(n2)
-            elif n1 == 't':
+            elif n1 == 's':
                 graph.out_nodes.append(n2)
-            if n2 == 's':
+            if n2 == 't':
                 graph.in_nodes.append(n1)
-            elif n2 == 't':
+            elif n2 == 's':
                 graph.out_nodes.append(n1)
             graph.remove_edge(n1, n2)
     # for edge in graph.edges():
