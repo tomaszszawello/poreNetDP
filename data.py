@@ -95,7 +95,8 @@ class Data():
         self.dirname = sid.dirname
         self.vol_init = np.sum(edges.diams ** 2 * edges.lens)
 
-    def collect_data(self, sid: SimInputData, inc: Incidence,edges: Edges, vols, p: np.ndarray) -> None:
+    def collect_data(self, sid: SimInputData, inc: Incidence, graph: Graph, edges: Edges, \
+                     vols, p: np.ndarray) -> None:
         """ Collect data from different vectors.
 
         This function extracts information such as permeability, quantity of
@@ -539,7 +540,7 @@ class Data():
         plt.savefig(self.dirname + '/params.png')
         plt.close()
 
-    def plot_avg_node_props(self, sid, current_time=False, ax=None):
+    def plot_avg_node_props(self, sid, ax=None):
         """ Plot average of node property at different times
             Currently just plots averaged cb and cc concentrations along network
 
@@ -557,7 +558,8 @@ class Data():
         cb_avg = self.cb_network_avg
         cc_avg = self.cc_network_avg
         di_avg = self.diams_network_avg
-        if not current_time: # plot and show data live in loop
+
+        if ax is None: # plot and show data live in loop
             fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(12, 8))
             for i in range(len(cb_avg)):
                 lab = f"t = {sid.track_every*i:.2f}"
@@ -572,22 +574,14 @@ class Data():
             ax1.legend(loc='center right', bbox_to_anchor=(-0.05, 0.5), 
                 frameon=True, fontsize=10, alignment='right')
             plt.show()
+            plt.close(fig)
         else:               # return canvas for plotting elsehwere 
-            show_plot = False
-            if ax is None:
-                fig, ax = plt.subplots(figsize=(12, 8))
-                show_plot = True
-            fig, ax1 = plt.subplots(figsize=(12, 8))
             ax.plot(self.x_eval, cb_avg[-1], alpha=0.8, lw=1.5, label=r"$\overline{c}_B$")
             ax.plot(self.x_eval, cc_avg[-1], alpha=0.8, lw=1.5, label=r"$\overline{c}_C$")
-            print(cb_avg[-1])
-            print(di_avg[-1])
             ax.plot(self.x_eval, di_avg[-1], alpha=0.8, lw=1.5, label=r"$avg. diameter$")
             ax.grid(True, linestyle='--', alpha=0.5)
             ax.grid(True, linestyle='--', alpha=0.5)
             ax.set_ylabel(r"Spatial average")
             ax.set_xlabel(r"Horiz. span $x$")
             ax.legend(loc='center right', frameon=False, fontsize=10, alignment='right')
-            if show_plot:
-                plt.show()
             return ax

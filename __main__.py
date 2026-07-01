@@ -107,6 +107,7 @@ while t < tmax and i < iters and not state:
                     t)
                 Dr.draw(sid, graph, edges, triangles, vols, cb, t)
                 data.collect_slice_data(sid, inc, graph, edges, vols, pressure, cb, cc)
+                data.plot_avg_node_props(sid)
                 Dr.draw_net_and_avg_props(sid, graph, edges, "delme.png", "tit", data)
                 # save_VTK(sid, graph, edges, pressure, cb, \
                 #     f'network_{t:.1f}.vtk')
