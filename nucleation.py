@@ -86,6 +86,67 @@ def get_average_rates(sid, edges, cC_profiles):
     avg_velocity = H_growth * np.trapezoid(velocity, x=xi_grid, axis=1)
     return avg_nucleation_rate, avg_velocity 
 
+def plot_time_cone(x_c, x_grid, t_grid, v_g_history, ax=None):
+    """ Plots the backward time cone at a point x_c along the pore 
+        TODO: Could put nucleation rate as a heat map inside the cone
+        TODO: Needs to be incorporated with probe class 
+    Usage:
+         
+        Nu.plot_dynamic_causal_cone(xc, x, t[:n+1], v_history[:n+1].T, ax=ax)
+    Parameters:
+    -----------
+    x_c         : float, 
+        Observation point of cone
+    x_grid      : np.array 
+    t_grid      : np.array 
+        time steps up to the current time
+    v_g_history : np.array 
+        history of growth velocities v_g(x,t) in a given edge
+        time = rows, space = cols
+    """
+    
+    if not hasattr(edges, 'v_g_history'):
+        edges.v_g_history = np.empty((nt, nx), dtype=np.float64) 
+    t_current = t_grid[-1]
+    dist_to_xc = np.abs(x_grid - x_c)
+    
+    # Points in the cone
+    x_min_vals = []
+    x_max_vals = []
+    valid_taus = []
+    
+    for j, tau in enumerate(t_grid):
+        if j == len(t_grid) - 1:
+            R_x = np.zeros_like(x_grid)
+        else: # Integrate v_g(x, s) from s = tau (j) to s = t_current
+            R_x = np.trapezoid(v_g_history[:, j:], x=t_grid[j:], axis=1)
+            
+        # Grain radius must be >= distance to observation point
+        inside_cone = R_x >= dist_to_xc
+        
+        # Cone data
+        if np.any(inside_cone):
+            x_inside = x_grid[inside_cone]
+            x_min_vals.append(x_inside[0])
+            x_max_vals.append(x_inside[-1])
+            valid_taus.append(tau)
+
+    # Plot the cone
+    if ax is None:
+        fig, ax = plt.subplots(figsize=(8, 6))
+    ax.fill_betweenx(valid_taus, x_min_vals, x_max_vals, 
+                     color='lightgray', alpha=0.5)
+    ax.plot(x_min_vals, valid_taus, color='black', linewidth=1.5)
+    ax.plot(x_max_vals, valid_taus, color='black', linewidth=1.5)
+    ax.scatter([x_c], [t_current], color='red', s=30, zorder=5)
+    ax.set_xlabel('$x$')
+    ax.set_ylabel('$t$')
+    ax.set_xlim(x_grid[0], x_grid[-1])
+    ax.set_ylim(t_grid[0], t_grid[-1] + (t_grid[-1]*0.05)) # Add slight top padding
+    ax.grid(True, linestyle='--', alpha=0.5)
+    return ax
+
+
 # ============================================================================================
 # ================== VARIOUS IMPLEMENTATIONS AND GENERALISATIONS OF AVRAMI ===================
 # ============================================================================================
@@ -202,3 +263,5 @@ def update_frac_transformed_global_ellipse(sid, edges, cC_profiles, dr, \
     #print(f"    Nuclei number stats: {sid.A}, {np.min(N):.2f}, {np.max(N):.2f}, {np.mean(N):.2f}, {N}, {avg_velocity}") 
 
     edges.f = 1 - np.exp(-edges.A_ext)
+
+
