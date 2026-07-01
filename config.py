@@ -57,9 +57,9 @@ class SimInputData:
     "precipitation to dissolution reaction rate"
     Gamma: float = 1
     "precipitation to dissolution molar volume / acid capacity number"
-    A: float = 1000
+    A: float = 10
     "nucleation rate pre-factor"
-    c_sat: float = 1/10000.
+    c_sat: float = 1/10000
     "saturation limit"
     merge_length: float = 1 / chi0
     "diameter scale to length scale ratio for merging"

@@ -51,8 +51,8 @@ if sid.include_nucleation and (sid.include_diffusion or sid.include_volumes):
     raise ValueError("Unsupported: TODO: enable sid.include_volumes")
 
 # probe initialisation
-probe = Pro.Probe(sid, edges, graph, snode=8, opts="path", total_nodes=5)
-probe.show_probes(sid, edges, graph)
+probe = Pro.Probe(sid, edges, graph, snode=8, opts="path", total_nodes=4)
+#probe.show_probes(sid, edges, graph, labels=False, ax=None)
 
 #probe = Pro.Probe(sid, edges, graph, snode=8, opts="grid", total_nodes=9)
 #probe.show_probes(sid, edges, graph, labels=False)
@@ -115,7 +115,7 @@ while t < tmax and i < iters and not state:
         #     f'network_{t:.1f}.vtk')
         #Tr.track(sid, graph, inc, edges, data, pressure)
     else:
-        if stop_condition(sid, t, i, iterator_dissolved):
+        if stop_condition(sid, t, i, iterator_dissolved) or t == 0:
             print(f'Drawing at (i, t, dissolved) = ({i}, {t:.2f}, {iterator_dissolved:.2f})')
             data.collect_slice_data(sid, inc, graph, edges, vols, pressure, cb, cc)
             iterator_dissolved += 1
@@ -125,13 +125,14 @@ while t < tmax and i < iters and not state:
                 # save_VTK(sid, graph, edges, pressure, cb, \
                 #     f'network_{t:.1f}.vtk')
                 #Tr.track(sid, graph, inc, edges, data, pressure)
+                #Dr.draw_net_and_avg_props(sid, graph, edges, f"t{t:.2f}.png", "", data)
             else:
                 live_tit = f"\n$t =$ {t:.1f}, $Vol. Diss. =$ {data.dissolved_v:.1f}," + \
                         f" Mean $f = ${np.mean(edges.ftrans):.3f}, Mean $d = ${np.mean(edges.diams):.3f}"
                 #Dr.draw_flow_diams_nucleation(sid, graph, edges, f"t{t:.2f}.png", live_tit)
                 Dr.draw_net_and_avg_props(sid, graph, edges, f"t{t:.2f}.png", live_tit, data)
-                #probe.plot_time_series_data(sid, edges, graph)
-                data.plot_avg_node_props(sid, current_time=True)
+                probe.plot_time_series_data(sid, edges, graph)
+                data.plot_avg_node_props(sid)
 
 
     old_ftrans = edges.ftrans # scope..
@@ -140,14 +141,21 @@ while t < tmax and i < iters and not state:
         ccr = Nu.reconstruct_cC_profiles(sid, edges, inc, cb, cc, n_pts=100)
         avg_nr, avg_vel = Nu.get_average_rates(sid, edges, ccr)
         Nu.update_frac_transformed_explicit(sid, edges, ccr, avg_nr, avg_vel, sid.dt)
+        N = edges.N_tot * 2. * np.pi * edges.diams * edges.lens
         #edges.ftrans = np.clip(edges.ftrans, 1e-18, 0.99999)
         # probe data 
         probe.record(
             t = t,
             node_data = {'cb': cb, 'cc': cc, 'pressure': pressure},
-            edge_data = {'f': edges.ftrans, 'nucleation_rate_avg': avg_nr, 
-                         'growth_vel_avg': avg_vel, 'diams': edges.diams, 'flow': edges.flow}
+            #edge_data = {'f': edges.ftrans, 'nucleation_rate_avg': avg_nr, 
+            edge_data = {'f': edges.ftrans, 'nucleation_nmbrs': N, 
+                         'diams': edges.diams, 'flow': edges.flow}
         )
+
+    #if t > 0.2 and t < 0.4:
+    #    probe.plot_time_series_data(sid, edges, graph)
+    #    data.collect_slice_data(sid, inc, graph, edges, vols, pressure, cb, cc)
+    #    Dr.draw_net_and_avg_props(sid, graph, edges, f"t{t:.2f}.png", "", data)
 
     # grow/shrink diameters and update them in edges, update volumes with
     # dissolved/precipitated values, check if network dissolved, find new

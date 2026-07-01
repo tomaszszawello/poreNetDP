@@ -102,7 +102,6 @@ class Probe:
     def plot_time_series_data(self, sid, edges, graph):
         """ Generic plot of all recorded edge / node data against time
         """
-
         # Setup square plot grid
         keys_node = list(self.node_history.keys())
         keys_edge = list(self.edge_history.keys())
@@ -112,7 +111,7 @@ class Probe:
         axs = ax.flatten() if total_plots > 1 else [ax]
 
         # Top left: network with probes overlay
-        self.show_probes(sid, edges, graph, ax=axs[0])
+        self.show_probes(sid, edges, graph, labels=True, ax=axs[0])
 
         cmap = plt.get_cmap('tab20')
         plot_idx = 1 
@@ -159,6 +158,7 @@ class Probe:
 
         plt.tight_layout()
         plt.show()
+        plt.close(fig)
 
     def get_left_to_right_path(self, sid, edges: Edges, graph: Graph):
         """ Gets a random path from inlet to outlet that moves +ve horiz. direction
@@ -277,6 +277,7 @@ class Probe:
         TODO: Probably does not adapt to merging ?
         """
         show_plot = False
+        fig = None 
         if ax is None:
             fig, ax = plt.subplots(figsize=(sid.figsize, sid.figsize))
             fig.suptitle("Probe Locations", fontsize=15)
@@ -323,5 +324,5 @@ class Probe:
         if show_plot:
             plt.tight_layout()
             plt.show()
-            plt.close()
+            plt.close(fig)
         return ax
