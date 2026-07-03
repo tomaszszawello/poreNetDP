@@ -78,7 +78,7 @@ def get_average_rates(sid, edges, cC_profiles):
     J_nucl = np.zeros_like(S)
     mask_super = S > (1.0 + 1e-9)
     if np.any(mask_super):
-        log_S = np.log(S[mask_super])
+        log_S = np.log10(S[mask_super])
         J_nucl[mask_super] = sid.A * np.exp(-1. / (log_S**2))
     xi_grid = np.linspace(0, 1, cC_profiles.shape[1])
     avg_nucleation_rate = np.trapezoid(J_nucl, x=xi_grid, axis=1)
@@ -89,7 +89,7 @@ def get_average_rates(sid, edges, cC_profiles):
 def plot_time_cone(x_c, x_grid, t_grid, v_g_history, ax=None):
     """ Plots the backward time cone at a point x_c along the pore 
         TODO: Could put nucleation rate as a heat map inside the cone
-        TODO: Needs to be incorporated with probe class 
+        TODO: Needs to be incorporated with probe class for practical use
     Usage:
          
         Nu.plot_dynamic_causal_cone(xc, x, t[:n+1], v_history[:n+1].T, ax=ax)

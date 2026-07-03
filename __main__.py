@@ -131,8 +131,8 @@ while t < tmax and i < iters and not state:
                         f" Mean $f = ${np.mean(edges.ftrans):.3f}, Mean $d = ${np.mean(edges.diams):.3f}"
                 #Dr.draw_flow_diams_nucleation(sid, graph, edges, f"t{t:.2f}.png", live_tit)
                 Dr.draw_net_and_avg_props(sid, graph, edges, f"t{t:.2f}.png", live_tit, data)
-                probe.plot_time_series_data(sid, edges, graph)
-                data.plot_avg_node_props(sid)
+                #probe.plot_time_series_data(sid, edges, graph)
+                #data.plot_avg_node_props(sid)
 
 
     old_ftrans = edges.ftrans # scope..

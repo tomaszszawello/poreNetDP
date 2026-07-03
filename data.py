@@ -84,6 +84,7 @@ class Data():
         self.cb_network_avg = [] # avg. conc. parallel to flow
         self.cc_network_avg = [] # 
         self.diams_network_avg = [] # 
+        self.expct_nuclei_network_avg = [] # 
 
         #breakthrough_times: list = []          # UNUSED / DEPRECATED? 
         #concentrations: list = []              # UNUSED / DEPRECATED? 
@@ -153,6 +154,8 @@ class Data():
         # average diam concentration across network
         _, diamavg = self.get_slice_avg_edge_prop(sid, graph, edges, inc, edges.diams)
         self.diams_network_avg.append(diamavg)
+        _, nuclavg = self.get_slice_avg_edge_prop(sid, graph, edges, inc, edges.diams)
+        self.expct_nuclei_network_avg.append(nuclavg)
 
     def save_data(self) -> None:
         """ Save data to text file.
@@ -371,7 +374,7 @@ class Data():
         global_ratio = len(np.where(tau_ratio > 1.)[0])/len(edges.diams)
         self.passivation_time_ratio.append(global_ratio) # function of time
     
-    def get_slice_avg_node_prop(self, sid: SimInputData, graph: Graph, node_prop, npoints=200):
+    def get_slice_avg_node_prop(self, sid: SimInputData, graph: Graph, node_prop, npoints=100):
         """ Gets average of a node property in slices perpendicular to flow direction
         Parameters
         -------
@@ -401,7 +404,7 @@ class Data():
                 avg.append(np.nan)
         return np.array(x_eval), np.array(avg)
 
-    def get_slice_avg_edge_prop(self, sid, graph, edges, inc, edge_prop, npoints=200):
+    def get_slice_avg_edge_prop(self, sid, graph, edges, inc, edge_prop, npoints=100):
         """ Gets average of an edge property in slices perpendicular to flow direction
         Parameters
         -------
@@ -558,27 +561,45 @@ class Data():
         cb_avg = self.cb_network_avg
         cc_avg = self.cc_network_avg
         di_avg = self.diams_network_avg
+        nucl_avg = self.expct_nuclei_network_avg
 
         if ax is None: # plot and show data live in loop
-            fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(12, 8))
-            for i in range(len(cb_avg)):
-                lab = f"t = {sid.track_every*i:.2f}"
-                ax1.plot(self.x_eval, cb_avg[i], alpha=0.8, lw=1.5, label=lab)#, color=color)
-                ax2.plot(self.x_eval, cc_avg[i], alpha=0.8, lw=1.5, label=lab)#, color=color)
-            ax1.grid(True, linestyle='--', alpha=0.5)
-            ax2.grid(True, linestyle='--', alpha=0.5)
-            ax1.set_ylabel(r"Network average $c_B$")
-            ax2.set_ylabel(r"Network average $c_C$")
-            #ax1.set_xlabel(r"Horiz. span $x$")
-            ax2.set_xlabel(r"Horiz. span $x$")
-            ax1.legend(loc='center right', bbox_to_anchor=(-0.05, 0.5), 
-                frameon=True, fontsize=10, alignment='right')
-            plt.show()
-            plt.close(fig)
-        else:               # return canvas for plotting elsehwere 
+            # Multi panel plot (a bit useless)
+            #fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(12, 8))
+            #for i in range(len(cb_avg)):
+            #    lab = f"t = {sid.track_every*i:.2f}"
+            #    ax1.plot(self.x_eval, cb_avg[i], alpha=0.8, lw=1.5, label=lab)#, color=color)
+            #    ax2.plot(self.x_eval, cc_avg[i], alpha=0.8, lw=1.5, label=lab)#, color=color)
+            #ax1.grid(True, linestyle='--', alpha=0.5)
+            #ax2.grid(True, linestyle='--', alpha=0.5)
+            #ax1.set_ylabel(r"Network average $c_B$")
+            #ax2.set_ylabel(r"Network average $c_C$")
+            ##ax1.set_xlabel(r"Horiz. span $x$")
+            #ax2.set_xlabel(r"Horiz. span $x$")
+            #ax1.legend(loc='center right', bbox_to_anchor=(-0.05, 0.5), 
+            #    frameon=True, fontsize=10, alignment='right')
+            #plt.show()
+            #plt.close(fig)
+            fig, ax = plt.subplots(figsize=(10, 8))
             ax.plot(self.x_eval, cb_avg[-1], alpha=0.8, lw=1.5, label=r"$\overline{c}_B$")
             ax.plot(self.x_eval, cc_avg[-1], alpha=0.8, lw=1.5, label=r"$\overline{c}_C$")
             ax.plot(self.x_eval, di_avg[-1], alpha=0.8, lw=1.5, label=r"$avg. diameter$")
+            ax.plot(self.x_eval, nucl_avg[-1]/np.max(nucl_avg), alpha=0.8, lw=1.5, \
+                    label=f'$\lambda_n/${np.max(nucl_avg):.2f}')
+            ax.grid(True, linestyle='--', alpha=0.5)
+            ax.grid(True, linestyle='--', alpha=0.5)
+            ax.set_ylabel(r"Spatial average")
+            ax.set_xlabel(r"Horiz. span $x$")
+            ax.legend(loc='center right', frameon=False, fontsize=10, alignment='right')
+            plt.show()
+            plt.close(fig)
+
+        else:               # return canvas for plotting elsehwere 
+            ax.plot(self.x_eval, cb_avg[-1], alpha=0.8, lw=1.5, label=r"$\overline{c}_B$")
+            ax.plot(self.x_eval, cc_avg[-1], alpha=0.8, lw=1.5, label=r"$\overline{c}_C$")
+            #ax.plot(self.x_eval, di_avg[-1], alpha=0.8, lw=1.5, label=r"$avg. diameter$")
+            ax.plot(self.x_eval, nucl_avg[-1]/np.max(nucl_avg), alpha=0.8, lw=1.5, \
+                    label=f'$\lambda_n/${np.max(nucl_avg):.2f}')
             ax.grid(True, linestyle='--', alpha=0.5)
             ax.grid(True, linestyle='--', alpha=0.5)
             ax.set_ylabel(r"Spatial average")
