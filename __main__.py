@@ -60,6 +60,7 @@ probe = Pro.Probe(sid, edges, graph, snode=8, opts="path", total_nodes=4)
 
 # main loop
 # runs until we reach iteration limit or time limit or network is dissolved
+old_diams = edges.diams
 while t < tmax and i < iters and not state:
     print(f'Iter {i + 1}/{iters} Time {t:.2f}/{tmax:.2f}')
 
@@ -140,7 +141,9 @@ while t < tmax and i < iters and not state:
         print ('Updating transformed fraction')
         ccr = Nu.reconstruct_cC_profiles(sid, edges, inc, cb, cc, n_pts=100)
         avg_nr, avg_vel = Nu.get_average_rates(sid, edges, ccr)
-        Nu.update_frac_transformed_explicit(sid, edges, ccr, avg_nr, avg_vel, sid.dt)
+        #Nu.update_frac_transformed_explicit(sid, edges, ccr, avg_nr, avg_vel, sid.dt)
+        #Nu.update_frac_transformed_monte_carlo(sid, edges, inc, ccr, old_diams, avg_nr, avg_vel, sid.dt)
+        Nu.update_frac_transformed_switch(sid, edges, inc, ccr, avg_nr, avg_vel, sid.dt)
         N = edges.N_tot * 2. * np.pi * edges.diams * edges.lens
         #edges.ftrans = np.clip(edges.ftrans, 1e-18, 0.99999)
         # probe data 
@@ -161,6 +164,8 @@ while t < tmax and i < iters and not state:
     # dissolved/precipitated values, check if network dissolved, find new
     # timestep
     print ('Updating diameters')
+    #state, dt_next = Gr.update_diameters(sid, inc, edges, vols, data, cb, cc, cd)
+    old_diams = edges.diams
     state, dt_next = Gr.update_diameters(sid, inc, edges, vols, data, cb, cc, cd)
 
 

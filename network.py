@@ -269,6 +269,10 @@ class Edges():
         self.A_ext = np.zeros_like(diams) # extended area
         self.ftrans = np.zeros_like(diams) + 1e-25 # transformed fraction
 
+        self.mc_rng = np.random.default_rng(seed=None)
+        self.num_nuclei = np.zeros_like(self.lens)
+
+
 def build_delaunay_net(sid: SimInputData, inc: Incidence) \
     -> tuple[Graph, Edges, Triangles]:
     """ Build Delaunay network with parameters from config.

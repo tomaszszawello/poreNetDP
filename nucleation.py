@@ -195,7 +195,7 @@ def update_frac_transformed_isotropic(sid, edges, cC_profiles, old_diams, \
     N = edges.N_tot * 2. * np.pi * edges.diams * edges.lens
     print(f"    Nuclei number stats: {sid.A}, {np.min(N):.2f}, {np.max(N):.2f}, {np.mean(N):.2f}, {N}, {avg_velocity}") 
 
-    return 1 - np.exp(-edges.A_ext)
+    edges.ftrans = 1 - np.exp(-edges.A_ext)
 
 def update_frac_transformed_fixed_grain(sid, edges, cC_profiles, old_diams, avg_nucleation_rate, avg_velocity, dt):
     """ Extends KJMA model to account for nucleation and growth on a deformable substrate:
@@ -232,7 +232,7 @@ def update_frac_transformed_fixed_grain(sid, edges, cC_profiles, old_diams, avg_
     K = 2 * np.pi * avg_velocity * edges.P_ext
     #N = edges.N_tot * A_p_curr
     #print(f"    Nuclei number stats: {sid.A:3f}, {np.min(N):.2f}, {np.max(N):.2f}, {np.mean(N):.2f}, {N}") 
-    edges.f = (edges.f + K * dt) / (1.0 + (K + eps_pos) * dt)
+    edges.ftrans = (edges.f + K * dt) / (1.0 + (K + eps_pos) * dt)
 
 def update_frac_transformed_global_ellipse(sid, edges, cC_profiles, dr, \
         old_diams, avg_nucleation_rate, avg_velocity, dt):
@@ -262,6 +262,20 @@ def update_frac_transformed_global_ellipse(sid, edges, cC_profiles, dr, \
     #N = edges.N_rho * 2. * np.pi * edges.diams * edges.lens
     #print(f"    Nuclei number stats: {sid.A}, {np.min(N):.2f}, {np.max(N):.2f}, {np.mean(N):.2f}, {N}, {avg_velocity}") 
 
-    edges.f = 1 - np.exp(-edges.A_ext)
+    edges.ftrans = 1 - np.exp(-edges.A_ext)
 
+def update_frac_transformed_switch(sid, edges, inc, cC_profiles, avg_nucleation_rate, avg_velocity, dt):
+    """ A simple Poisson on/off switch for an entire edge. When on, f = 1. 
+        If only a few nuclei are seen to spawn in a given edge over the lifetime of the network, then
+        impingement can be ignored. One question is, to what extent does network topology change if
+        f(t) is a simple on/off switch versus some arbitrary linear/exponential function? i.e. does flow
+        re-routing etc really get impacted by the rate at which the switch moves from 0 to 1?
+    """
+    edge_areas = np.pi * edges.diams * edges.lens
+    lambda_poisson = avg_nucleation_rate * edge_areas * dt 
+    M = edges.mc_rng.poisson(lambda_poisson)
+    print(f"    Nuclei number stats: {sid.A}, {np.min(M):.2f}, {np.max(M):.2f}, {np.sum(M):.2f}, {M}, {avg_velocity}") 
+    edges.num_nuclei += M
+    print(f"    Nuclei number stats: {np.min(edges.num_nuclei):.2f}, {np.max(edges.num_nuclei):.2f}, {np.sum(edges.num_nuclei):.2f}, {edges.num_nuclei}") 
+    edges.ftrans[edges.num_nuclei > 0] = 0.99999999999
 
