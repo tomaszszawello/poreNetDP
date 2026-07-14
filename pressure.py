@@ -45,7 +45,7 @@ def create_vector(sid: SimInputData, graph: Graph) -> spr.csc_matrix:
     scipy sparse vector
         result vector for pressure calculation
     """
-    return graph.in_vec
+    return sid.p0 * graph.in_vec
 
 def solve_flow(sid: SimInputData, inc: Incidence, graph: Graph, edges: Edges, \
     pressure_b: spr.csc_matrix) -> np.ndarray:
@@ -101,10 +101,11 @@ def solve_flow(sid: SimInputData, inc: Incidence, graph: Graph, edges: Edges, \
         pressure = solve_equation(p_matrix, pressure_b)
     # normalize pressure in inlet nodes to match condition for constant inlet
     # flow
+    
     q_in = np.abs(np.sum(edges.diams ** 4 / edges.lens * (inc.inlet \
         @ pressure)))
-    print(q_in)
     pressure *= sid.Q_in / q_in
+    
     # update flow
     edges.flow = edges.diams ** 4 / edges.lens * (inc.incidence @ pressure)
     #p_continuity = p_matrix @ pressure * (1 - graph.in_vec - graph.out_vec)

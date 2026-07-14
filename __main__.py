@@ -37,95 +37,50 @@ clogged = False
 import numpy as np
 
 
-# initial merging
-# if sid.include_merging:
-#     for initial_i in range(sid.initial_merging):
-#         Me.solve_merging_vols(sid, inc, graph, vols, edges, 'initial')
-#     edges.diams_initial = edges.diams.copy()
-#     data.vol_init = np.sum(edges.diams ** 2 * edges.lens)
-    #Me.fix_connections(sid, inc, graph, edges)
-
 flag_s = 1
 
 
 # main loop
 # runs until we reach iteration limit or time limit or network is dissolved
-while t < tmax and i < iters and data.dissolved_v < sid.dissolved_v_max and not breakthrough and not clogged:
-    print((f'Iter {i + 1}/{iters} Time {t:.2f}/{tmax:.2f} \
-        Dissolved {data.dissolved_v:.2f}/{sid.dissolved_v_max:.2f}'))
+while t < tmax and i < iters and not breakthrough and not clogged:
+    print((f'Iter {i + 1}/{iters} Time {t:.2f}/{tmax:.2f}'))
     print(np.max(edges.diams))
     # initialize vectors
     pressure_b = Pr.create_vector(sid, graph)
-    if sid.include_diffusion:
-        cb_b = Dif.create_vector(sid, graph)
-    else:
-        cb_b = Di.create_vector(sid, graph)
+    cb_b = Di.create_vector(sid, graph)
 
     # find pressure and update flow in edges
     print ('Solving pressure')
-    #print(np.sum(edges.diams ** 2 * edges.lens))
-        #Me.fix_connections(sid, inc, graph, edges)
     pressure = Pr.solve_flow(sid, inc, graph, edges, pressure_b)
-    #data.check_data(edges)
+
+    # if t == 0:
+    #     q_in = np.abs(np.sum(edges.diams ** 4 / edges.lens * (inc.inlet \
+    #         @ pressure)))
+    #     pressure *= sid.Q_in / q_in
+    #     # update flow
+    #     edges.flow = edges.diams ** 4 / edges.lens * (inc.incidence @ pressure)
+    #     sid.p0 = np.max(pressure)
+    #     pressure_b = Pr.create_vector(sid, graph)
+
     Q_in = np.sum(edges.inlet * np.abs(edges.flow))
     Q_out = np.sum(edges.outlet * np.abs(edges.flow))
     print('Q_in =', Q_in, 'Q_out =', Q_out, 'p_in = ', np.max(pressure))
-
     # find B concentration
     print ('Solving concentration')
-    #print(np.sum((edges.flow == 0) * (edges.diams > 0)))
     # find C concentration
-    if sid.include_diffusion:
-        if sid.include_volumes:
-            cb = Dif.solve_vol_nr(sid, inc, graph, edges, vols, cb_b, data)
-            #cb = Dif.solve_diffusion_vol(sid, inc, graph, edges, vols, cb_b, data)
-        else:
-            cb = Dif.solve_diffusion_pe_fix(sid, inc, graph, edges, cb_b)
+    if sid.include_volumes:
+        cb = Di.solve_dissolution_safe(sid, inc, graph, edges, vols, cb_b)
     else:
-        if sid.include_volumes:
-            cb = Di.solve_dissolution_safe(sid, inc, graph, edges, vols, cb_b)
-        else:
-            cb = Di.solve_dissolution(sid, inc, graph, edges, cb_b)
+        cb = Di.solve_dissolution(sid, inc, graph, edges, cb_b)
     print('cb: ', np.min(cb), np.max(cb))
     if np.max(cb) > 1.1:
         print(cb)
         print(pressure)
         raise ValueError
-    # node = 0
-    # if len(np.where(cb < -1e-2)[0]):
-    #     node = np.where(cb < -1e-2)[0][0]
-    # elif len(np.where(cb > 1.01)[0]):
-    #     node = np.where(cb > 1.01)[0][0]
-    # if node:
-    #     print(node)
-    #     print(1 * (spr.diags(edges.flow) @ inc.incidence > 0).T[node].nonzero()[1])
-    #     Dr.draw_nodes(sid, graph, edges, cb, f'c_{data.dissolved_v:.2f}.jpg', 'q')
-    #     print(pressure[node], np.max(pressure))
-    #     for edge in inc.incidence.T[node].nonzero()[1]:
-    #         print(edge)
-    #         print(edges.flow[edge], edges.diams[edge], edges.A[edge], edges.B[edge], inc.merge_vec[sid.nsq + edge])
-    #         for node in inc.incidence[edge].nonzero()[1]:
-    #             print(node, pressure[node], cb[node])
-    #     #Sv.save('/save.dill', sid, graph, inc, edges, triangles, vols)
-    #     raise ValueError("cb")
-    #cc, cd = Pi.create_vector_nr(sid, graph, inc, edges, cb)
     if sid.include_precipitation:
         if t == 0 or sid.load == 1:
-            #cd = sid.cd_in* np.ones(sid.nsq)#sid.cd_in * (sid.cb_in - cb)
-            #cc = 0.001 * np.ones(sid.nsq)#sid.cb_in - cb + sid.cc_in
-            # cc, cd = Pi.create_vector_nr(sid, graph, inc, edges, cb)
-            # cc2, cd2 = Pi.solve_precipitation_nr2_vxx(sid, inc, graph, edges, vols, cb, cc, cd)
-            # print(f'cc: {np.min(cc2)}, {np.max(cc2)}, cd: {np.min(cd2)}, {np.max(cd2)}')
             cc, cd = Pi.create_vector_nr(sid, graph, inc, edges, cb)
-            cc, cd = Pi.solve_precipitation_nr9_vxx(sid, inc, graph, edges, vols, cb, cc, cd)             
-            #cc, cd = Pi.solve_precipitation_kp(sid, inc, graph, edges, vols, cb, cc, cd)
-            #print(np.sum(np.abs(cc - cc2)), np.sum(np.abs(cd - cd2)))
-            #np.savetxt('cc.txt', cc)
-            #np.savetxt('cc2.txt', cc2)
-        else:
-            cc, cd = Pi.solve_precipitation_nr9_vxx(sid, inc, graph, edges, vols, cb, cc, cd)
-            #cc, cd = Pi.solve_precipitation_kp(sid, inc, graph, edges, vols, cb, cc, cd)
-            #print(np.sum(np.abs(cc - cc2)), np.sum(np.abs(cd - cd2)))
+        cc, cd = Pi.solve_precipitation_safe(sid, inc, graph, edges, vols, cb, cc, cd)
     else:
         cc, cd = np.zeros(sid.nsq), np.zeros(sid.nsq)
     if np.max(cc) == -1 and i != 0:
@@ -141,6 +96,7 @@ while t < tmax and i < iters and data.dissolved_v < sid.dissolved_v_max and not 
         frac_part = int(100 * (t - int_part))
         name = f"{int_part:04d}_{frac_part:02d}.jpg"
         data.check_data(edges)
+        data.check_mass_balance(sid, inc, edges, vols, cb, cc, cd)
         data.check_slice_porosity(graph, inc, edges, triangles, vols, int(t))
         data.check_init_slice_channelization(graph, inc, edges)
         data.check_slice_channelization(graph, inc, edges, t)
@@ -156,13 +112,6 @@ while t < tmax and i < iters and data.dissolved_v < sid.dissolved_v_max and not 
     else:
         #if data.dissolved_v // sid.track_every > iterator_dissolved:
         if t // sid.track_every > iterator_dissolved:
-            # print(edges.diams)
-            # print(np.abs((spr.diags(edges.flow) @ inc.incidence > 0)) @ cb)
-            # print(np.abs((spr.diags(edges.flow) @ inc.incidence > 0)) @ cc)
-            # print(np.abs((spr.diags(edges.flow) @ inc.incidence > 0)) @ cd)
-            # print(vols.vol_a)
-            # print(vols.vol_e)
-            
             print('Drawing')
             iterator_dissolved += 1
             int_part  = int(t)
@@ -180,6 +129,7 @@ while t < tmax and i < iters and data.dissolved_v < sid.dissolved_v_max and not 
             #     f'network_{data.dissolved_v:.2f}.vtk')
             if iterator_dissolved in sid.track_list:
                 data.check_data(edges)
+                data.check_mass_balance(sid, inc, edges, vols, cb, cc, cd)               
                 data.check_slice_porosity(graph, inc, edges, triangles, vols, int(t))
                 data.check_slice_channelization(graph, inc, edges, \
                     data.dissolved_v)
@@ -194,6 +144,7 @@ while t < tmax and i < iters and data.dissolved_v < sid.dissolved_v_max and not 
     breakthrough, dt_next = Gr.update_diameters(sid, inc, edges, graph, vols, cb, cc, cd, data)
     # if breakthrough:
     #     break
+    #data.check_mass_balance(sid, inc, edges, vols, cb, cc, cd, verbose=False, tol=0.5)
     data.collect_data(sid, inc, edges, vols, pressure, cb, cc, cd)
     if np.max(pressure) > data.pressure[0] / sid.min_perm:
         print('Network clogged.')
@@ -229,6 +180,9 @@ while t < tmax and i < iters and data.dissolved_v < sid.dissolved_v_max and not 
 #Dr.draw_nodes(sid, graph, edges, cb, f'c2_{data.dissolved_v:.2f}.jpg', 'q')
 # save data from the last iteration of simulation, save the whole simulation
 # to be able to continue it later
+
+Dr.draw_triangles(sid, triangles, edges, graph, vols, f'tri_final.png')
+
 if i != 1 and sid.load != 1 and not sid.debug:
     #data.check_data(edges)
     data.check_slice_channelization(graph, inc, edges, data.dissolved_v)
@@ -241,6 +195,7 @@ if i != 1 and sid.load != 1 and not sid.debug:
         sid.qdrawconst = 0
     data.save_data()
     data.plot_things(sid)
+    data.check_mass_balance(sid, inc, edges, vols, cb, cc, cd)       
     data.check_slice_porosity(graph, inc, edges, triangles, vols, int(t))
     data.plot_vol_profile(graph)
     data.plot_profile(graph)

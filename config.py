@@ -40,7 +40,7 @@ class SimInputData:
     # Da: float = 100#0.67 * 10 ** -1
     # "effective Damkohler number"
     # Pe = 100.
-    phi = 0.2
+    phi = 0.05
     #chi0 = (1 - (1 - phi) ** (1/3)) / np.sqrt(3)
     #chi0 = (1 / (1 - phi) ** (1/3) - 1) / np.sqrt(3)
     chi0 = np.sqrt(2 * phi / (np.pi * np.sqrt(3))) #4 * np.sqrt(phi) / np.pi
@@ -52,10 +52,10 @@ class SimInputData:
     
     G: float = 5.#Da * Pe / Sh * chi0 ** 2 / 4
     "diffusion to reaction ratio"
-    Da_eff: float = 0.67 #Da / (1 + G)
+    Da_eff: float = 0.25 #Da / (1 + G)
     Da = Da_eff * (1 + G)
-    tmax = 300 * Da
-    track_every: int = tmax / 10
+    tmax = 600 * Da #300 * Da
+    track_every: int = tmax / 20
     "Damkohler number"
     # G = 50
     # Da_eff = 5
@@ -65,7 +65,7 @@ class SimInputData:
     V_tot = (1 / chi0) ** 2 * 2 * np.sqrt(3) / (3 * np.pi)
 
     debug = False
-    K: float = 0.1
+    K: float = 2.
     "precipitation to dissolution reaction rate"
     Gamma: float = 2.01
     "precipitation to dissolution molar volume / acid capacity number"
@@ -118,10 +118,10 @@ class SimInputData:
     Kp = 1#1e-5#0.01
 
     # DIAMETERS
-    noise: str = 'lognormal' #'file_lognormal_k'
+    noise: str = 'file_lognormal_d' #'file_lognormal_k'
     ("type of noise in diameters distribution: 'gaussian', 'lognormal', \
     'klognormal', 'file_lognormal_d', 'file_lognormal_k'")
-    noise_filename: str = 'n200lam20r2.dat' #'n200lam20r1.dat'
+    noise_filename: str = 'n200lam20r1.dat'
     #noise_filename: str = 'n100lam10r1.dat' #'n200lam20r1.dat'
     "name of file with initial diameters if noise == file_"
     d0: float = 1.
@@ -150,14 +150,14 @@ class SimInputData:
     "threshold for drawing of diameters"
 
     # INITIALIZATION
-    load: int = 2
+    load: int = 0
     ("type of loading: 0 - build new network based on config and start new \
      simulation, 1 - load previous network from load_name and continue \
      simulation, 2 - load template network from load_name and start new \
      simulation")
     #load_name: str = 'diffusion/Pe0.00Da100.00/17'
-    load_name: str = 'new_singurindy/G5.00Daeff1.00/1'#/template/9'
-    #load_name: str = 'singurindy/G5.00Daeff0.50/14'#/template/9'
+    load_name: str = 'new_singurindy/G5.00Daeff0.67/9'#/template/9'
+    #load_name: str = 'new_singurindy/G5.00Daeff1.00/4'#/template/9'
     
     "name of loaded network"
 
@@ -165,7 +165,7 @@ class SimInputData:
     geo: str = "rect" # WARNING - own is deprecated
     ("type of geometry: 'rect' - rectangular, 'own' - custom inlet and outlet \
      nodes, set in in/out_nodes_own")
-    periodic: str = 'top' #'top'
+    periodic: str = 'none' #'top'
     ("periodic boundary condition: 'none' - no PBC, 'top' - up and down, \
      'side' - left and right, 'all' - PBC everywhere")
     in_nodes_own: np.ndarray = np.array([[20, 50]]) / 100 * n
@@ -187,6 +187,8 @@ class SimInputData:
     "total time of simulation"
     Q_in = 1.
     "total inlet flow (updated later)"
+    p0 = 1.
+    "inlet pressure for constant pressure simulations (updated later)"
     #dirname: str = geo + str(n) + '/' + f'G{G:.2f}Daeff{Da_eff:.2f}'
     #dirname: str = 'singurindy/' + f'Pe{Pe_L:.2f}Da{Da_L:.2f}'
     dirname: str = 'new_singurindy/' + f'G{G:.2f}Daeff{Da_eff:.2f}'

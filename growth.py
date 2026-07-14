@@ -69,21 +69,14 @@ def update_diameters(sid: SimInputData, inc: Incidence, edges: Edges, graph: Gra
     dissolve, precipitate = 0, 0
     if sid.include_precipitation:
         if sid.include_volumes:
-            change, dissolve, precipitate = solve_dp_vol(sid, inc, edges, cb, cc, cd)            
+            change, dissolve, precipitate = solve_dp_vol(sid, inc, edges, vols, cb, cc, cd)
         else:
             change = solve_dp(sid, inc, edges, cb, cc)
     else:
-        if sid.include_diffusion:
-            if sid.include_volumes:
-                change = solve_d_diff_vol(sid, inc, edges, vols, cb)
-            else:
-                change = solve_d_diff_pe_fix(sid, inc, edges, cb)
-            #change = solve_d(sid, inc, edges, cb)
+        if sid.include_volumes:
+            change, dissolve, precipitate = solve_d_vol(sid, inc, edges, vols, cb)
         else:
-            if sid.include_volumes:
-                change, dissolve, precipitate = solve_d_vol(sid, inc, edges, vols, cb)
-            else:
-                change = solve_d(sid, inc, edges, cb)
+            change = solve_d(sid, inc, edges, cb)
     breakthrough = False
     if sid.include_adt:
         #change_rate = change / edges.diams
@@ -101,25 +94,39 @@ def update_diameters(sid: SimInputData, inc: Incidence, edges: Edges, graph: Gra
     else:
         dt_next = sid.dt
     
-        vols.vol_a_prev = vols.vol_a.copy()
+    vols.vol_a_prev = vols.vol_a.copy()
     change = change * sid.dt
     dissolve = dissolve * sid.dt
     precipitate = precipitate * sid.dt
     #edge_vols = vols.triangles @ vols.vol_a
     #vol_a_dissolved = (spr.diags(vols.vol_a) @ vols.triangles.T) @ (change / edge_vols)
-    data.vol_dissolved += np.sum(dissolve)
-    data.vol_precipitated += np.sum(precipitate)
-    
     vol_a_dissolved = vols.triangles.T @ (dissolve / edges.triangles)
     vol_e_precipitated = vols.triangles.T @ (precipitate / edges.triangles)
     print(f'Dissolved: {np.sum(vol_a_dissolved)}, Precipitated: {np.sum(vol_e_precipitated)}')
-    #print(change)
     vol_a_dissolved = np.array(np.ma.fix_invalid(vol_a_dissolved, fill_value = 0))
     vol_e_precipitated = np.array(np.ma.fix_invalid(vol_e_precipitated, fill_value = 0))
-    #vol_a_dissolved = np.min([vol_a_dissolved, vols.vol_a], axis = 0)
+
+    # snapshot before clips so the trackers record what actually changed
+    vol_a_before = vols.vol_a.copy()
+    vol_e_before = vols.vol_e.copy()
     vols.vol_a = np.clip(vols.vol_a - np.abs(vol_a_dissolved), 0, None)
-    #vols.vol_e = np.clip(vols.vol_e + np.abs(vol_e_precipitated), 0, vols.vol_max - vols.vol_a)
     vols.vol_e = np.clip(vols.vol_e + np.abs(vol_e_precipitated), 0, vols.vol_max - vols.vol_a)
+    # increment from actual post-clip changes, not from the raw (potentially over-large) rates
+    data.vol_dissolved    += np.sum(vol_a_before - vols.vol_a)
+    data.vol_precipitated += np.sum(vols.vol_e   - vol_e_before)
+    # accumulate flux-based expectations for cumulative cross-checks in check_mass_balance
+    if sid.include_volumes:
+        abs_q_g = np.abs(edges.flow)
+        dn_g    = 1 * (spr.diags(edges.flow) @ inc.incidence < 0)
+        cb_dn_g = np.asarray(dn_g @ cb).ravel()
+        B_consumed = (np.sum(edges.inlet * abs_q_g) * sid.cb_in
+                      - np.sum(edges.outlet * abs_q_g * cb_dn_g))
+        data.A_vol_expected_cumulative += B_consumed / sid.Da * sid.dt
+    if sid.include_precipitation:
+        # Use the growth formula's pre-clip output: same basis as vol_e_precipitated,
+        # eliminates the D-flux vs growth-formula mismatch (Component 2 of mass balance).
+        # Residual V_E - E_expect now reflects only hard-clip events (Component 1).
+        data.E_vol_expected_cumulative += np.sum(np.abs(vol_e_precipitated))
     #change = vols.triangles @ (vol_a_dissolved / np.array(np.sum(vols.triangles.T, axis = 1))[:, 0])
     # print(vol_a_dissolved)
     #print(change)
@@ -458,85 +465,68 @@ def solve_d_vol(sid, inc, edges, vols, cb):
     change = np.array(np.ma.fix_invalid(change, fill_value = 0.))
     return change, dissolve, np.zeros_like(dissolve)
 
-def solve_dp_vol(sid: SimInputData, inc: Incidence, edges: Edges, cb: np.ndarray, \
-    cc: np.ndarray, cd: np.ndarray) -> np.ndarray:
+def solve_dp_vol(sid: SimInputData, inc: Incidence, edges: Edges, vols: Volumes,
+                 cb: np.ndarray, cc: np.ndarray, cd: np.ndarray) -> np.ndarray:
     """ Updates diameters in case of dissolution + precipitation.
 
     Parameters
     -------
     sid : simInputData class object
         all config parameters of the simulation
-        Da : float
-        G : float
-        K : float
-        Gamma : float
-        at
 
     inc : Incidence class object
         matrices of incidence
-        incidence : scipy sparse csr matrix (ne x nsq)
 
     edges : Edges class object
         all edges in network and their parameters
-        diams : numpy ndarray (ne)
-        lens : numpy ndarray (ne)
-        flow : numpy ndarray (ne)
-        alpha_b : numpy ndarray (ne)
 
-    cb : numpy ndarray (nsq)
-        vector of substance B concentration
+    vols : Volumes class object
+        triangle volumes (vol_a, vol_e, vol_max) — used for dissolution volume tracking
 
-    cc : numpy ndarray (nsq)
-        vector of substance C concentration
+    cb, cc, cd : numpy ndarray (nsq)
+        node concentrations of B, C, D
 
     Returns
     -------
     change : numpy ndarray (ne)
-        change of diameter of each edge
+        signed change of d²L per edge (positive = dissolution, negative = precipitation)
+
+    dissolve : numpy ndarray (ne)
+        alpha_b-scaled dissolution volume rate per edge
+
+    precipitate : numpy ndarray (ne)
+        alpha_c-scaled precipitation volume rate per edge
     """
-    # create list of concentrations which should be used for
-    # growth/shrink of each edge (upstream one)
+    # edges.alpha_c is set by solve_precipitation_safe before this call —
+    # use it directly so the growth step is consistent with the concentration solver.
     growth_matrix = np.abs((spr.diags(edges.flow) @ inc.incidence > 0))
     cb_in = growth_matrix @ cb
     cc_in = growth_matrix @ cc
     cd_in = growth_matrix @ cd
-    ksi = cd_in * sid.K / (1 + sid.K * sid.G * edges.diams) - sid.Kp / (1 + sid.G * edges.diams)
-    exp_p = np.exp(-sid.Da * sid.K / (1 + sid.G * sid.K * edges.diams) \
-        * cd_in / sid.Kp * edges.diams * edges.lens / np.abs(edges.flow))
-    exp_p = np.array(np.ma.fix_invalid(exp_p, fill_value = 0))
-    exp_d = np.exp(-sid.Da / (1 + sid.G * edges.diams) * edges.diams * edges.lens / np.abs(edges.flow))
-    exp_d = np.array(np.ma.fix_invalid(exp_d, fill_value = 0))
+
+    X_rate = cd_in * sid.K / (1 + sid.K * sid.G * edges.diams)
+    Y_rate = sid.Kp / (1 + sid.G * edges.diams)
+    ksi = edges.alpha_c * X_rate - edges.alpha_b * Y_rate
+
     exp_p2 = np.exp(-edges.alpha_c * sid.Da * sid.K / (1 + sid.G * sid.K * edges.diams) \
         * cd_in / sid.Kp * edges.diams * edges.lens / np.abs(edges.flow))
     exp_p2 = np.array(np.ma.fix_invalid(exp_p2, fill_value = 0))
     exp_d2 = np.exp(-edges.alpha_b * sid.Da / (1 + sid.G * edges.diams) * edges.diams * edges.lens / np.abs(edges.flow))
-    exp_d2 = np.array(np.ma.fix_invalid(exp_d2, fill_value = 0))        
-    # growth = cb_in * np.abs(edges.flow)  / (sid.Da * edges.lens * edges.diams) \
-    #     * (1 - np.exp(-sid.Da / (1 + sid.G * edges.diams) * edges.diams \
-    #     * edges.lens / np.abs(edges.flow)))
-    # growth = np.array(np.ma.fix_invalid(growth, fill_value = 0))
-    # shrink_cc = cc_in * sid.Kp / cd_in * np.abs(edges.flow)  / (sid.Da * edges.lens \
-    #     * edges.diams * sid.Gamma) * (1 - np.exp(-sid.Da * sid.K / (1 + sid.G \
-    #     * sid.K * edges.diams) * cd_in / sid.Kp * edges.diams * edges.lens / np.abs(edges.flow)))
-    growth = cb_in * np.abs(edges.flow)  / sid.Da * (1 - exp_d)
-    shrink_cc = cc_in * np.abs(edges.flow) * sid.Gamma / sid.Da * (1 - exp_p)
-    # shrink_cc = cc_in * sid.Kp / cd_in * np.abs(edges.flow)  / (sid.Da * edges.lens \
-     #    * edges.diams * sid.Gamma) * (1 - exp_p)
-    shrink_cb = edges.alpha_b * cb_in * cd_in * sid.K * np.abs(edges.flow) * sid.Gamma / sid.Da \
-        * ((1 - exp_d) / (1 + sid.G * edges.diams * sid.K) - (1 - exp_p) * sid.Kp / (sid.K * cd_in * (1 + sid.G * edges.diams))) / ksi
-    shrink_cc = np.array(np.ma.fix_invalid(shrink_cc, fill_value = 0)) 
-    shrink_cb = np.array(np.ma.fix_invalid(shrink_cb, fill_value = 0)) 
-    growth2 = cb_in * np.abs(edges.flow)  / sid.Da * (1 - exp_d2)
+    exp_d2 = np.array(np.ma.fix_invalid(exp_d2, fill_value = 0))
+
+    # alpha_b/alpha_c-scaled: used for diameter change and volume tracking
+    growth2   = cb_in * np.abs(edges.flow) / sid.Da * (1 - exp_d2)
     shrink_cc2 = cc_in * np.abs(edges.flow) * sid.Gamma / sid.Da * (1 - exp_p2)
-    # shrink_cc = cc_in * sid.Kp / cd_in * np.abs(edges.flow)  / (sid.Da * edges.lens \
-     #    * edges.diams * sid.Gamma) * (1 - exp_p)
-    shrink_cb2 = edges.alpha_b * cb_in * cd_in * sid.K * np.abs(edges.flow) * sid.Gamma / sid.Da \
-        * ((1 - exp_d2) / (1 + sid.G * edges.diams * sid.K) - (1 - exp_p2) * sid.Kp / (sid.K * cd_in * (1 + sid.G * edges.diams))) / ksi
-    shrink_cc2 = np.array(np.ma.fix_invalid(shrink_cc2, fill_value = 0)) 
-    shrink_cb2 = np.array(np.ma.fix_invalid(shrink_cb2, fill_value = 0)) 
-    change = growth2 - np.abs(shrink_cc2) - np.abs(shrink_cb2)
-    #print(np.sum(inc.incidence @ (cc - cd + cb)))
-    return change, growth, np.abs(shrink_cc) + np.abs(shrink_cb)
+    # Cross-term: D consumed via B→C channel; alpha_c enters both numerator and ksi so
+    # the formula matches the NR's particular-solution constant (alpha_c·k·cd - B_pref).
+    shrink_cb2 = cb_in * np.abs(edges.flow) * sid.Gamma / sid.Da \
+        * (edges.alpha_c * X_rate * (1 - exp_d2) - edges.alpha_b * Y_rate * (1 - exp_p2)) / ksi
+    shrink_cc2 = np.array(np.ma.fix_invalid(shrink_cc2, fill_value=0))
+    shrink_cb2 = np.array(np.ma.fix_invalid(shrink_cb2, fill_value=0))
+
+    change = growth2 - shrink_cc2 - shrink_cb2
+    # Return alpha-scaled volumes consistent with change (no abs needed — both terms ≥ 0).
+    return change, growth2, shrink_cc2 + shrink_cb2
 
 def solve_dp_kp(sid: SimInputData, inc: Incidence, edges: Edges, cb: np.ndarray, \
     cc: np.ndarray, cd: np.ndarray) -> np.ndarray:

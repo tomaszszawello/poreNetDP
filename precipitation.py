@@ -96,20 +96,20 @@ def solve_precipitation_nr9_vxx(sid, inc, graph, edges, vols, cb, cc, cd,
     mask_zero  = ~mask_flow          # q == 0
 
     # Upstream‑selector matrix  U  (|E|×|N|, CSR, entries 0/1)
-    U = 1 * (spr.diags(edges.flow) @ Inc > 0)
+    flow_diag = spr.diags(edges.flow)
+    U = 1 * (flow_diag @ Inc > 0)
 
     # Downstream‑selector matrix  D
-    D = 1 * (spr.diags(edges.flow) @ Inc < 0)
+    D = 1 * (flow_diag @ Inc < 0)
+    D_T = D.T.tocsr()   # CSR transpose: reused in residual & Jacobian
 
     #Q_in = np.abs(inc.incidence.T) @ np.abs(edges.flow) / 2 * (1 - graph.in_vec + graph.out_vec) + graph.in_vec
-    Q_in = D.T @ abs_Q
+    Q_in = D_T @ abs_Q
     Q_in = Q_in * (1 - graph.in_vec) + graph.in_vec
 
 
     #in_vec = np.concatenate((graph.in_vec, graph.in_vec))
     in_vec = np.copy(graph.in_vec)
-    c_inc = 1 * (inc.incidence.T @ (spr.diags(edges.flow) \
-            @ inc.incidence > 0) != 0)
 
 
     d  = edges.diams
@@ -146,6 +146,17 @@ def solve_precipitation_nr9_vxx(sid, inc, graph, edges, vols, cb, cc, cd,
 
     in_vec_conc = np.concatenate([in_vec, in_vec])
 
+    # Precompute fixed diagonal matrices as CSR (avoids dia→CSR conversion each
+    # Newton iteration when used in arithmetic with other CSR matrices)
+    Q_in_diag    = spr.diags(Q_in).tocsr()
+    in_vec_d_not = spr.diags(1.0 - in_vec_conc).tocsr()
+    in_vec_d     = spr.diags(in_vec_conc).tocsr()
+    U_csr        = U.tocsr()  # ensure CSR for efficient .multiply()
+    _n_restarts  = 0          # limit restarts to avoid infinite loops
+    _best_phi    = np.inf
+    _best_cc     = cc.copy()
+    _best_cd     = cd.copy()
+
     def safe_exp(x):
         if np.max(x) > 700:
             print('large exp!')
@@ -153,10 +164,10 @@ def solve_precipitation_nr9_vxx(sid, inc, graph, edges, vols, cb, cc, cd,
 
     for it in range(1, max_iter + 1):
 
-        cb_in  = U @ cb
+        cb_in  = U_csr @ cb
         cb_out = D @ cb
-        cc_in  = U @ cc
-        cd_in  = U @ cd
+        cc_in  = U_csr @ cc
+        cd_in  = U_csr @ cd
 
 
         B   = B_pref / q_safe
@@ -166,11 +177,11 @@ def solve_precipitation_nr9_vxx(sid, inc, graph, edges, vols, cb, cc, cd,
         lam = C / q_safe
         g   = safe_exp(-np.abs(edges.alpha_c * lam * L))
 
-        den = k * cd_in - B_pref
+        den = edges.alpha_c * k * cd_in - B_pref
 
         A_e  = edges.alpha_b * sid.Da * d * cb_in / (1.0 + sid.G * d)
 
-        tau  = abs(den) / (abs(k*cd_in) + abs(B_pref) + 1.0)
+        tau  = abs(den) / (abs(edges.alpha_c * k*cd_in) + abs(B_pref) + 1.0)
         w    = tau / (tau + tau0)           # 0 ≤ w ≤ 1 ,  tau0 ≈ 1e-6
         # generic part
         alpha = A_e / den
@@ -195,9 +206,9 @@ def solve_precipitation_nr9_vxx(sid, inc, graph, edges, vols, cb, cc, cd,
         # blended value
         cc_out = w * cc_gen + (1-w) * cc_res
         cc_out[mask_zero]      = cc_in[mask_zero]
-        
+
         dccout_dccu = w * g_gen + (1-w) * g_res
-        alpha_prime = -A_e * k / den**2
+        alpha_prime = -A_e * edges.alpha_c * k / den**2
         g_prime     = -edges.alpha_c * (k / q_safe) * L * g
         g_prime = np.ma.fix_invalid(g_prime, fill_value = 0)
         dccout_dcd  = w * (alpha_prime * eB - alpha_prime * g + (cc_in - alpha) * g_prime)
@@ -233,37 +244,41 @@ def solve_precipitation_nr9_vxx(sid, inc, graph, edges, vols, cb, cc, cd,
 
 
         # ---- 4. residual vector --------------------------------------
-        F_cc = cc * Q_in - (D.T @ (abs_Q * cc_out))
-        F_cd = cd * Q_in - (D.T @ (abs_Q * cd_out))
+        F_cc = cc * Q_in - D_T @ (abs_Q * cc_out)
+        F_cd = cd * Q_in - D_T @ (abs_Q * cd_out)
         F_cc *= (1 - in_vec)
         F_cd *= (1 - in_vec)
         F = np.concatenate((F_cc, F_cd))
 
-        # ---- 5. Jacobian blocks --------------------------------------
-        Dg         = spr.diags(abs_Q * dccout_dccu)
-        Ddcc_dcd   = spr.diags(abs_Q * dccout_dcd)
-        Ddcd_dcc   = spr.diags(abs_Q * dcdout_dccu)
-        Ddcd_dcd   = spr.diags(abs_Q * dcdout_dcd)
+        # Early exit: skip J build + gssv when input is already machine-converged
+        # (e.g. reconciliation NR called with cc/cd that were just converged).
+        # Use a tight threshold (1e-20) to avoid accepting a loose warm-start.
+        phi_pre = 0.5 * np.dot(F, F)
+        if phi_pre < 1e-20:
+            print(f"Newton converged in {it-1} iterations (phi={phi_pre:.3e})")
+            break
 
+        # ---- 5. Jacobian blocks (D_T @ U_csr.multiply avoids 4 diag creations)
+        J_cc_cc_0 = D_T @ U_csr.multiply((abs_Q * dccout_dccu).reshape(-1, 1))
+        J_cc_cd_0 = D_T @ U_csr.multiply((abs_Q * dccout_dcd).reshape(-1, 1))
+        J_cd_cc_0 = D_T @ U_csr.multiply((abs_Q * dcdout_dccu).reshape(-1, 1))
+        J_cd_cd_0 = D_T @ U_csr.multiply((abs_Q * dcdout_dcd).reshape(-1, 1))
 
-        J_cc_cc_0 = D.T @ Dg       @ U
-        J_cc_cd_0 = D.T @ Ddcc_dcd @ U
-        J_cd_cc_0 = D.T @ Ddcd_dcc @ U
-        J_cd_cd_0 = D.T @ Ddcd_dcd @ U
- 
-        J_cc_cc = spr.diags(Q_in) - J_cc_cc_0
+        J_cc_cc = Q_in_diag - J_cc_cc_0
         J_cc_cd =           - J_cc_cd_0
         J_cd_cc =           - J_cd_cc_0
-        J_cd_cd = spr.diags(Q_in) - J_cd_cd_0
+        J_cd_cd = Q_in_diag - J_cd_cd_0
 
 
         J = spr.vstack((spr.hstack((J_cc_cc, J_cc_cd)),
                         spr.hstack((J_cd_cc, J_cd_cd))))
 
-        J = spr.diags(1 - in_vec_conc) @ J + spr.diags(in_vec_conc)
+        J = in_vec_d_not @ J + in_vec_d
         J_diag = J.diagonal()
-        J += spr.diags(1 * (J_diag == 0))
-        F *= 1 * (J_diag != 0)
+        zero_diag = J_diag == 0
+        if np.any(zero_diag):
+            J += spr.diags(zero_diag.astype(float)).tocsr()
+        F *= ~zero_diag
         #J = spr.diags(1 - 1 * (F == 0)) @ J + spr.diags(1 * (F == 0))
 
         # ---- 6. Newton step ------------------------------------------
@@ -316,10 +331,10 @@ def solve_precipitation_nr9_vxx(sid, inc, graph, edges, vols, cb, cc, cd,
             # cc_trial = np.clip(cc_trial, 0.0, sid.cb_in)
             # cd_trial = np.clip(cd_trial, 0.0, sid.cd_in)
             # residual at trial point (quick re‑eval) ------------------
-            cc_in_t = U @ cc_trial
-            cd_in_t = U @ cd_trial
-            den_t   = k * cd_in_t - B_pref
-            tau     = abs(den_t) / (abs(k*cd_in_t) + abs(B_pref) + 1.0)
+            cc_in_t = U_csr @ cc_trial
+            cd_in_t = U_csr @ cd_trial
+            den_t   = edges.alpha_c * k * cd_in_t - B_pref
+            tau     = abs(den_t) / (abs(edges.alpha_c * k*cd_in_t) + abs(B_pref) + 1.0)
             w       = tau / (tau + tau0)
             lam_t   = (k * cd_in_t) / q_safe
 
@@ -351,8 +366,8 @@ def solve_precipitation_nr9_vxx(sid, inc, graph, edges, vols, cb, cc, cd,
                 cc_out_t[over_t] = cc_in_t[over_t] - delta_cc_new_t
             # <<< END STOICH CAP >>>
 
-            F_cc_t = cc_trial * Q_in - (D.T @ (abs_Q * cc_out_t))
-            F_cd_t = cd_trial * Q_in - (D.T @ (abs_Q * cd_out_t))
+            F_cc_t = cc_trial * Q_in - D_T @ (abs_Q * cc_out_t)
+            F_cd_t = cd_trial * Q_in - D_T @ (abs_Q * cd_out_t)
             F_cc_t *= (1 - in_vec)
             F_cd_t *= (1 - in_vec)
             F_t = np.concatenate((F_cc_t, F_cd_t))
@@ -380,6 +395,25 @@ def solve_precipitation_nr9_vxx(sid, inc, graph, edges, vols, cb, cc, cd,
 
         # if lams < lam_min:
         #     raise RuntimeError("Line search failed even in steepest descent")
+
+        # If the line search completely failed (λ→0), don't waste 48 more
+        # no-op iterations — restart immediately with a fresh initial guess.
+        if lams < lam_min and _n_restarts == 0:
+            _n_restarts += 1
+            print(f"Newton: line search stagnated at it={it}, restarting with fresh initial guess")
+            cc, cd = create_vector_nr(sid, graph, inc, edges, cb)
+            continue  # go straight to next iteration with fresh cc/cd
+        elif lams < lam_min:
+            phi_max = 100 * sid.it_alpha_th
+            if _best_phi < phi_max:
+                print(f"Newton: stagnated again at it={it}, returning best (phi={_best_phi:.3e})")
+                cc = np.clip(_best_cc, 0.0, sid.cb_in)
+                cd = np.clip(_best_cd, 0.0, sid.cd_in)
+                return cc, cd
+            raise RuntimeError(
+                f"Newton: second stagnation, best phi={_best_phi:.3e} >= phi_max={phi_max:.3e}"
+            )
+
         print(f"λ={lams:.5f}   phi_t={phi_t:.3e}   sumF={F_t.sum():.3e}")
         rel_cc = F_cc_t / np.maximum(Q_in, 1e-12)
         rel_cd = F_cd_t / np.maximum(Q_in, 1e-12)
@@ -408,6 +442,10 @@ def solve_precipitation_nr9_vxx(sid, inc, graph, edges, vols, cb, cc, cd,
         cc += lams * delta[:N]
         cd += lams * delta[N:]
         # cc = np.clip(cc, 0.0, sid.cb_in)
+        if phi_t < _best_phi:
+            _best_phi = phi_t
+            _best_cc  = cc.copy()
+            _best_cd  = cd.copy()
         # cd = np.clip(cd, 0.0, sid.cd_in)
         if phi_t < sid.it_alpha_th:
             print(f"Newton converged in {it} iterations (Δcc={diff_cc:.1e}, Δcd={diff_cd:.1e})")
@@ -426,7 +464,15 @@ def solve_precipitation_nr9_vxx(sid, inc, graph, edges, vols, cb, cc, cd,
         #cc = np.clip(cc, 0, None)
         #cd = np.clip(cd, 0, None)
     else:
-        raise RuntimeError("Newton did not converge within the iteration limit")
+        phi_max = 100 * sid.it_alpha_th   # 100× convergence threshold (e.g. 1.0 when thr=0.01)
+        if _best_phi < phi_max:
+            print(f"Newton max_iter reached; returning best solution (phi={_best_phi:.3e})")
+            cc = np.clip(_best_cc, 0.0, sid.cb_in)
+            cd = np.clip(_best_cd, 0.0, sid.cd_in)
+            return cc, cd
+        raise RuntimeError(
+            f"Newton failed: best phi={_best_phi:.3e} exceeds phi_max={phi_max:.3e}"
+        )
 
     # clip outputs
 
@@ -954,11 +1000,11 @@ def solve_precipitation_kp(sid, inc, graph, edges, vols, cb, cc, cd,
         lam = C / q_safe
         g   = safe_exp(-np.abs(edges.alpha_c * lam * L))
 
-        den = k * cd_in - B_pref
+        den = edges.alpha_c * k * cd_in - B_pref
 
         A_e  = edges.alpha_b * sid.Da * d * cb_in / (1.0 + sid.G * d)
 
-        tau  = abs(den) / (abs(k*cd_in) + abs(B_pref) + 1.0)
+        tau  = abs(den) / (abs(edges.alpha_c * k*cd_in) + abs(B_pref) + 1.0)
         w    = tau / (tau + tau0)           # 0 ≤ w ≤ 1 ,  tau0 ≈ 1e-6
         # generic part
         alpha = A_e / den
@@ -1106,8 +1152,8 @@ def solve_precipitation_kp(sid, inc, graph, edges, vols, cb, cc, cd,
             # residual at trial point (quick re‑eval) ------------------
             cc_in_t = U @ cc_trial
             cd_in_t = U @ cd_trial
-            den_t   = k * cd_in_t - B_pref
-            tau     = abs(den_t) / (abs(k*cd_in_t) + abs(B_pref) + 1.0)
+            den_t   = edges.alpha_c * k * cd_in_t - B_pref
+            tau     = abs(den_t) / (abs(edges.alpha_c * k*cd_in_t) + abs(B_pref) + 1.0)
             w       = tau / (tau + tau0)
             lam_t   = (k * cd_in_t) / q_safe
 
@@ -1222,4 +1268,177 @@ def solve_precipitation_kp(sid, inc, graph, edges, vols, cb, cc, cd,
     cd = np.clip(cd, 0.0, sid.cd_in)
     
         
+    return cc, cd
+
+def solve_precipitation_safe(
+    sid, inc, graph, edges, vols, cb, cc, cd,
+    max_alpha_iter: int = 1,
+    tol_alpha: float = 1e-3,
+):
+    """Iterative precipitation solver with alpha_c updated from available space.
+
+    Mirrors solve_dissolution_safe in dissolution.py:
+    - Initialise alpha_c from triangle availability (1 if space remains, 0 if full).
+    - Each outer iteration: set edges.alpha_c, run NR, compute requested
+      precipitation, clip alpha_c so no triangle is overfilled.
+    - Iterate until alpha_c converges (or max_alpha_iter reached).
+    - Stores final alpha_c in edges.alpha_c so solve_dp_vol uses the same value.
+
+    Robustness: if the NR fails on the first outer iteration with the binary
+    alpha_c (which can change abruptly between timesteps), one warm-start retry
+    is attempted using min(edges.alpha_c_prev, alpha_c_binary) so the NR sees a
+    smaller perturbation from the previous timestep.  If that also fails, the
+    previous edges.alpha_c and cc/cd are kept unchanged for this step.
+    If a later outer iteration fails, the last successfully converged result is used.
+    """
+    T         = vols.triangles
+    edges_tri = np.maximum(edges.triangles, 1.0)
+    tri_rows, tri_cols = T.nonzero()
+
+    abs_q  = np.abs(edges.flow)
+    q_safe = np.where(abs_q > 1e-12, abs_q, 1.0)
+
+    # Available pore space (fixed for this timestep — computed before growth)
+    available = vols.vol_max - vols.vol_a - vols.vol_e
+
+    # Binary mask: 1 where triangle still has space, 0 where triangle is full.
+    # This is the physically-correct starting point and allows alpha_c to recover
+    # when pore space opens up after dissolution.
+    alpha_c_binary = (T @ (1.0 * (available > 0))) / edges_tri
+    alpha_c_binary = np.clip(
+        np.array(np.ma.fix_invalid(alpha_c_binary, fill_value=0.0)), 0.0, 1.0)
+
+    # Warm-start alternative: clip previous alpha_c to 0 for newly-blocked
+    # triangles but otherwise keep the previous value.  Used as fallback when
+    # the NR cannot converge from the binary initialization.
+    alpha_c_warm = np.minimum(edges.alpha_c, alpha_c_binary)
+
+    # Track the best (last converged) result so any later failure can revert.
+    cc_best       = cc.copy()
+    cd_best       = cd.copy()
+    alpha_c_best  = edges.alpha_c.copy()
+
+    alpha_c = alpha_c_binary.copy()
+
+    for it_alpha in range(max_alpha_iter):
+        alpha_prev = alpha_c.copy()
+        edges.alpha_c = alpha_c
+
+        # Initial guess for the NR.
+        # it_alpha == 0: pass in the previous-step cc/cd (they come from outside).
+        # it_alpha  > 0: alpha_c changed; re-init from create_vector_nr for a fresh start.
+        if it_alpha == 0:
+            cc_init, cd_init = cc, cd
+        else:
+            cc_init, cd_init = create_vector_nr(sid, graph, inc, edges, cb)
+
+        try:
+            cc_new, cd_new = solve_precipitation_nr9_vxx(
+                sid, inc, graph, edges, vols, cb, cc_init, cd_init)
+
+        except RuntimeError:
+            if it_alpha == 0:
+                # Binary alpha_c caused an NR failure (abrupt change between
+                # timesteps).  Try the warm-start alpha_c as a one-off fallback.
+                print(f"precipitation alpha_c iter 0: NR failed with binary alpha_c "
+                      f"(n_blocked={int(np.sum(alpha_c == 0))}); "
+                      f"retrying with warm-start alpha_c")
+                alpha_c = alpha_c_warm.copy()
+                edges.alpha_c = alpha_c
+                cc_init2, cd_init2 = create_vector_nr(sid, graph, inc, edges, cb)
+                try:
+                    cc_new, cd_new = solve_precipitation_nr9_vxx(
+                        sid, inc, graph, edges, vols, cb, cc_init2, cd_init2)
+                except RuntimeError:
+                    print(f"precipitation alpha_c iter 0: NR failed with warm-start "
+                          f"alpha_c too; keeping previous result "
+                          f"(n_blocked_prev={int(np.sum(alpha_c_best == 0))})")
+                    edges.alpha_c = alpha_c_best
+                    return cc_best, cd_best
+            else:
+                print(f"precipitation alpha_c iter {it_alpha}: NR failed; "
+                      f"reverting to best previous result "
+                      f"(n_blocked_best={int(np.sum(alpha_c_best == 0))})")
+                edges.alpha_c = alpha_c_best
+                return cc_best, cd_best
+
+        # NR converged — update best-known result.
+        cc, cd       = cc_new, cd_new
+        cc_best      = cc.copy()
+        cd_best      = cd.copy()
+        alpha_c_best = alpha_c.copy()
+
+        # Requested precipitation per edge (same formula as solve_dp_vol)
+        growth_matrix = np.abs((spr.diags(edges.flow) @ inc.incidence > 0))
+        cb_in = growth_matrix @ cb
+        cc_in = growth_matrix @ cc
+        cd_in = growth_matrix @ cd
+
+        X_rate = cd_in * sid.K / (1.0 + sid.K * sid.G * edges.diams)
+        Y_rate = sid.Kp / (1.0 + sid.G * edges.diams)
+        ksi    = X_rate - edges.alpha_b * Y_rate
+
+        exp_p2 = np.array(np.ma.fix_invalid(
+            np.exp(-alpha_c * sid.Da * sid.K / (1.0 + sid.G * sid.K * edges.diams)
+                   * cd_in / sid.Kp * edges.diams * edges.lens / q_safe),
+            fill_value=0.0))
+        exp_d2 = np.array(np.ma.fix_invalid(
+            np.exp(-edges.alpha_b * sid.Da / (1.0 + sid.G * edges.diams)
+                   * edges.diams * edges.lens / q_safe),
+            fill_value=0.0))
+
+        shrink_cc2 = cc_in * abs_q * sid.Gamma / sid.Da * (1.0 - exp_p2)
+        shrink_cb2 = np.array(np.ma.fix_invalid(
+            cb_in * abs_q * sid.Gamma / sid.Da
+            * (X_rate * (1.0 - exp_d2) - edges.alpha_b * Y_rate * (1.0 - exp_p2)) / ksi,
+            fill_value=0.0))
+
+        precipitate_req = (shrink_cc2 + shrink_cb2) * sid.dt
+
+        # Requested volume per triangle
+        P0_t = T.T @ (precipitate_req / edges_tri)
+
+        # Triangle safety factors: how much of the requested precipitation fits
+        v_eps = 1e-16
+        f_t = np.ones(sid.ntr)
+        mask_over = P0_t > v_eps
+        f_t[mask_over] = np.minimum(
+            1.0, available[mask_over] / (P0_t[mask_over] + v_eps))
+
+        # Edge safety = minimum over all neighbouring triangles
+        s_e = np.ones(sid.ne)
+        np.minimum.at(s_e, tri_rows, f_t[tri_cols])
+        s_e = np.clip(s_e, 0.0, 1.0)
+
+        alpha_c = np.clip(alpha_c * s_e, 0.0, 1.0)
+        alpha_c_best = alpha_c.copy()  # post-safety-factor: the correct revert target
+
+        diff_alpha = np.linalg.norm(alpha_c - alpha_prev, ord=np.inf)
+        print(f"precipitation alpha_c iter {it_alpha}: "
+              f"diff={diff_alpha:.3e}  n_blocked={int(np.sum(alpha_c == 0))}")
+        if diff_alpha < tol_alpha:
+            break
+
+    # ── Reconciliation NR ────────────────────────────────────────────────────
+    # The outer loop's last NR used alpha_c before the safety-factor update.
+    # When alpha_c changed significantly (diff_alpha >= tol_alpha), run one
+    # more NR with the definitive alpha_c to close the one-step-lag bias.
+    # When diff_alpha < tol_alpha (alpha_c unchanged or only ε-changed),
+    # the existing cc/cd are already consistent — skip the extra NR call.
+    edges.alpha_c = alpha_c
+    if diff_alpha < tol_alpha:
+        return cc, cd
+
+    try:
+        cc_f, cd_f = solve_precipitation_nr9_vxx(
+            sid, inc, graph, edges, vols, cb, cc, cd)
+        cc, cd = cc_f, cd_f
+    except RuntimeError:
+        try:
+            cc_init_f, cd_init_f = create_vector_nr(sid, graph, inc, edges, cb)
+            cc_f, cd_f = solve_precipitation_nr9_vxx(
+                sid, inc, graph, edges, vols, cb, cc_init_f, cd_init_f)
+            cc, cd = cc_f, cd_f
+        except RuntimeError:
+            print("precipitation reconciliation NR: failed, using outer-loop cc/cd")
     return cc, cd
