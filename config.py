@@ -20,12 +20,12 @@ class SimInputData:
     "frequency (in iterations) of plotting the results"
     collect_every: int = 10
     "frequency (in iterations) of collecting data"
-    track_every: int = 0.1
+    track_every: int = 0.01
     "frequency (in time) of performing tracking and slice check"
     #load_name: str = 'samples/carbonate_x01'
-    load_name: str = 'oman_dfn_v2'
+    load_name: str = 'oman_dfn_v3'
     "name of loaded network"
-    dissolved_v_max = 1
+    dissolved_v_max = 0.1
     track_list = [1, 2, 5, 10]
     dissolved_v = 0
 

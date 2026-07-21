@@ -106,7 +106,7 @@ def load_graph(name):
     return graph, incidence, fracture_lens, b0, l0, lens, inlet
 
 def find_flow(graph, incidence, b0, fracture_lens, lens, inlet, name):
-    graph2 = Graph.from_json_file(name)
+    graph2 = Graph.from_json_file_draw(name)
     apertures = []
     for edge in graph2.edges():
         n1, n2 = edge
@@ -541,7 +541,7 @@ def plot_tracking_standard(tracking, concentration_tracking, dirname, networks, 
 
 
 def find_flow2(graph, incidence, b0, fracture_lens, lens, inlet, name):
-    graph2 = Graph.from_json_file(name)
+    graph2 = Graph.from_json_file_draw(name)
     apertures = []
     for edge in graph2.edges():
         n1, n2 = edge
@@ -640,9 +640,9 @@ n_parts = 100000
 np.random.seed(1234)
 seeds = np.random.randint(0, n_parts, size = n_parts)
 G = 5.
-Da = 0.002
-dirname = f'oman_dfn_v2/G5.0000Daeff0.0020/0/'
-network = "network_1.00"
+Da = 0.0002
+dirname = f'oman_dfn_v3/G5.0000Daeff0.0002/1/'
+network = "network_0.10"
 name = dirname + network + ".json"
 graph, incidence, fracture_lens, b0, l0, lens, inlet = load_graph(name)
 apertures, pressure, flow = find_flow(graph, incidence, b0, fracture_lens, lens, inlet, name)

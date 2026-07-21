@@ -44,8 +44,8 @@ class Graph(nx.graph.Graph):
         """Create an instance of Graph from a JSON file."""
         with open(filename, 'r') as f:
             data = json.load(f)
-        temp_graph = json_graph.node_link_graph(data, edges="links")
-        #temp_graph = json_graph.node_link_graph(data, edges="edges")
+        #temp_graph = json_graph.node_link_graph(data, edges="links")
+        temp_graph = json_graph.node_link_graph(data, edges="edges")
 
         # Initialize an instance of the subclass
         graph = cls()
@@ -178,13 +178,13 @@ def load(sid:SimInputData) -> tuple[Graph, Graph]:
         #    nx.get_node_attributes(graph, 'y').values(), \
         #    nx.get_node_attributes(graph, 'z').values()))
         if isinstance(n1, str) or isinstance(n2, str):
-            if n1 == 't':
+            if n1 == 's':
                 graph.in_nodes.append(n2)
-            elif n1 == 's':
+            elif n1 == 't':
                 graph.out_nodes.append(n2)
-            if n2 == 't':
+            if n2 == 's':
                 graph.in_nodes.append(n1)
-            elif n2 == 's':
+            elif n2 == 't':
                 graph.out_nodes.append(n1)
             graph.remove_edge(n1, n2)
     # for edge in graph.edges():
