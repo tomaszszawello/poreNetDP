@@ -643,7 +643,7 @@ def draw_3d_small(json_path, flux_frac):
     print(f"Saved: {out_path}")
 
 networks = []
-dirname = "oman_dfn_v3/G5.0000Daeff0.0020/1/"
+dirname = "oman_dfn_v3/G5.0000Daeff0.0200/2/"
 for name in os.listdir(dirname):
     if name[:3] == 'net':
         networks.append(name[8:12])

@@ -108,7 +108,7 @@ def load_graph(name):
     return graph, incidence, fracture_lens, b0, l0, lens, inlet
 
 def find_flow(graph, incidence, b0, fracture_lens, lens, inlet, name):
-    graph2 = Graph.from_json_file(name)
+    graph2 = Graph.from_json_file_draw(name)
     apertures = []
     for edge in graph2.edges():
         n1, n2 = edge
@@ -543,7 +543,7 @@ def plot_tracking_standard(tracking, concentration_tracking, dirname, networks, 
 
 
 def find_flow2(graph, incidence, b0, fracture_lens, lens, inlet, name):
-    graph2 = Graph.from_json_file(name)
+    graph2 = Graph.from_json_file_draw(name)
     apertures = []
     for edge in graph2.edges():
         n1, n2 = edge
