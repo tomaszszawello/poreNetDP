@@ -8,6 +8,8 @@ Da_eff, G, K, Gamma - dissolution/precipitation parameters, include_cc - turn
 on precipitation, load - build a new network or load a previous one.
 """
 
+import os
+
 import numpy as np
 
 
@@ -15,9 +17,9 @@ class SimInputData:
     ''' Configuration class for the whole simulation.
     '''
     # GENERAL
-    n: int = 50
+    n: int = 100
     "network size along y (transverse to the flow)"
-    m: int = 200
+    m: int = 100
     "network size along x (parallel to the flow)"
     iters: int = 1000000
     "maximum number of iterations"
@@ -52,7 +54,7 @@ class SimInputData:
     
     G: float = 5.#Da * Pe / Sh * chi0 ** 2 / 4
     "diffusion to reaction ratio"
-    Da_eff: float = 0.25 #Da / (1 + G)
+    Da_eff: float = float(os.environ.get('SIM_DA_EFF', 1.00)) #Da / (1 + G)
     Da = Da_eff * (1 + G)
     tmax = 600 * Da #300 * Da
     track_every: int = tmax / 20
@@ -100,7 +102,7 @@ class SimInputData:
     "inlet B concentration"
     cc_in: float = 0.
     "inlet C concentration"
-    cd_in: float = 1.
+    cd_in: float = float(os.environ.get('SIM_CD_IN', 1.))
     "inlet D concentration"
 
     # TIME
@@ -150,13 +152,13 @@ class SimInputData:
     "threshold for drawing of diameters"
 
     # INITIALIZATION
-    load: int = 0
+    load: int = 2
     ("type of loading: 0 - build new network based on config and start new \
      simulation, 1 - load previous network from load_name and continue \
      simulation, 2 - load template network from load_name and start new \
      simulation")
     #load_name: str = 'diffusion/Pe0.00Da100.00/17'
-    load_name: str = 'new_singurindy/G5.00Daeff0.67/9'#/template/9'
+    load_name: str = 'new_singurindy/G5.00Daeff1.00cdin1.000/0'#/template/9'
     #load_name: str = 'new_singurindy/G5.00Daeff1.00/4'#/template/9'
     
     "name of loaded network"
@@ -165,7 +167,7 @@ class SimInputData:
     geo: str = "rect" # WARNING - own is deprecated
     ("type of geometry: 'rect' - rectangular, 'own' - custom inlet and outlet \
      nodes, set in in/out_nodes_own")
-    periodic: str = 'none' #'top'
+    periodic: str = 'top' #'top'
     ("periodic boundary condition: 'none' - no PBC, 'top' - up and down, \
      'side' - left and right, 'all' - PBC everywhere")
     in_nodes_own: np.ndarray = np.array([[20, 50]]) / 100 * n
@@ -191,7 +193,7 @@ class SimInputData:
     "inlet pressure for constant pressure simulations (updated later)"
     #dirname: str = geo + str(n) + '/' + f'G{G:.2f}Daeff{Da_eff:.2f}'
     #dirname: str = 'singurindy/' + f'Pe{Pe_L:.2f}Da{Da_L:.2f}'
-    dirname: str = 'new_singurindy/' + f'G{G:.2f}Daeff{Da_eff:.2f}'
+    dirname: str = 'new_singurindy/' + f'G{G:.2f}Daeff{Da_eff:.2f}cdin{cd_in:.3f}'
     "directory of simulation"
     initial_merging: int = 5
     "number of initial merging iterations"

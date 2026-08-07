@@ -81,6 +81,11 @@ def solve_precipitation_nr9_vxx(sid, inc, graph, edges, vols, cb, cc, cd,
                         max_iter: int = 100,
                         red: float = 0.5,
                         lam_min: float = 1e-10):
+    # Newton iterations mutate cc/cd in place (e.g. `cc += lams * delta[:N]`).
+    # Copy on entry so a failed solve never corrupts the caller's arrays —
+    # callers rely on their cc/cd being untouched when this raises.
+    cc = cc.copy()
+    cd = cd.copy()
     # ------------------------------------------------------------------
     # ------------------------------------------------------------------
     if np.sum(edges.alpha_b == 0) > 0:

@@ -96,6 +96,28 @@ class Data():
         self.dirname = sid.dirname
         self.vol_init = np.sum(edges.diams ** 2 * edges.lens)
 
+        # Thresholds for the front-like spatial diagnostics.  They may be
+        # overridden from the input file, but the defaults correspond to
+        # ``half dissolved`` and ``20% of the imposed through-flow``.
+        self.front_dissolved_fraction = float(
+            getattr(sid, 'front_dissolved_fraction', 0.5)
+        )
+        self.focus_flow_fraction = float(
+            getattr(sid, 'focus_flow_fraction', 0.2)
+        )
+
+        # Keep the new diagnostics in a separate time series/file so that the
+        # established ten-column layout of params.txt remains unchanged.
+        self.spatial_t = []
+        self.axial_penetration_x = []
+        self.axial_penetration_x_norm = []
+        self.dominant_flow_penetration_x = []
+        self.dominant_flow_penetration_x_norm = []
+        self.max_edge_flow_fraction = []
+        self.n_half_dissolved_grains = []
+        self.n_dominant_flow_edges = []
+        self.q_in_list = []
+
     def save_data(self) -> None:
         """ Save data to text file.
 
@@ -135,6 +157,37 @@ class Data():
                 is_saved = True
             except PermissionError:
                 pass
+        # Save front positions and their diagnostics separately.  This avoids
+        # breaking post-processing scripts that assume the old params.txt
+        # column order.
+        if self.spatial_t:
+            is_saved = False
+            while not is_saved:
+                try:
+                    spatial_data = np.column_stack([
+                        self.spatial_t,
+                        self.axial_penetration_x,
+                        self.axial_penetration_x_norm,
+                        self.dominant_flow_penetration_x,
+                        self.dominant_flow_penetration_x_norm,
+                        self.max_edge_flow_fraction,
+                        self.n_half_dissolved_grains,
+                        self.n_dominant_flow_edges,
+                        self.q_in_list,
+                    ])
+                    header = (
+                        'time x_A50 x_A50_over_L x_Q20 x_Q20_over_L '
+                        'max_abs_q_over_Qin n_A50_grains n_Q20_edges Q_in'
+                    )
+                    np.savetxt(
+                        self.dirname + '/spatial_metrics.txt',
+                        spatial_data,
+                        header=header,
+                    )
+                    is_saved = True
+                except PermissionError:
+                    pass
+
         # is_saved = False
         # while not is_saved: # prevents problems with opening text file
         #     try:
@@ -310,6 +363,197 @@ class Data():
         self.replaced.append(np.sum(vols.vol_e) / np.sum(vols.vol_max))
         self.vol_dissolved_list.append(self.vol_dissolved)
         self.vol_precipitated_list.append(self.vol_precipitated)
+
+    @staticmethod
+    def _node_x_coordinates(graph: Graph, n_nodes: int) -> np.ndarray:
+        """Return x coordinates in the ordering used by incidence matrices."""
+        pos = nx.get_node_attributes(graph, 'pos')
+        if not pos:
+            raise ValueError("graph has no node attribute 'pos'")
+
+        # The network normally uses integer labels 0, ..., n_nodes - 1.
+        if all(i in pos for i in range(n_nodes)):
+            return np.asarray([pos[i][0] for i in range(n_nodes)], dtype=float)
+
+        # Fallback to the graph's insertion order, matching the convention
+        # already used elsewhere in data_2.py.
+        nodes = list(graph.nodes())
+        if len(nodes) != n_nodes:
+            raise ValueError(
+                'graph node count does not match incidence-matrix columns'
+            )
+        return np.asarray([pos[node][0] for node in nodes], dtype=float)
+
+    @staticmethod
+    def _binary_connectivity(matrix: spr.spmatrix) -> spr.csr_matrix:
+        """Return a CSR matrix with one at every non-zero incidence entry."""
+        connectivity = matrix.copy().tocsr()
+        connectivity.data = np.ones_like(connectivity.data, dtype=float)
+        connectivity.eliminate_zeros()
+        return connectivity
+
+    @staticmethod
+    def _row_max_x(connectivity: spr.csr_matrix,
+                   node_x: np.ndarray) -> np.ndarray:
+        """Maximum x coordinate of the nodes connected to each matrix row."""
+        result = np.full(connectivity.shape[0], np.nan, dtype=float)
+        for row in range(connectivity.shape[0]):
+            start, stop = connectivity.indptr[row:row + 2]
+            node_ids = connectivity.indices[start:stop]
+            if node_ids.size:
+                result[row] = np.max(node_x[node_ids])
+        return result
+
+    def dissolution_front_pos(
+        self,
+        graph: Graph,
+        triangles: Triangles,
+        vols: Volumes,
+        dissolved_fraction: float = None,
+    ) -> tuple[float, float, int]:
+        """Return the furthest position of a sufficiently dissolved grain.
+
+        This follows the same threshold--then--maximum-position idea as
+        ``front_pos``.  Grain ``g`` is counted when
+
+            (V_A0[g] - V_A[g]) / V_A0[g] >= dissolved_fraction.
+
+        The grain position is its centroid.  The returned values are the
+        dimensional position, the position normalized to the sample length,
+        and the number of grains satisfying the threshold.
+        """
+        if dissolved_fraction is None:
+            dissolved_fraction = self.front_dissolved_fraction
+        if not 0.0 <= dissolved_fraction <= 1.0:
+            raise ValueError('dissolved_fraction must lie in [0, 1]')
+
+        triangle_nodes = self._binary_connectivity(triangles.node_incidence)
+        node_x = self._node_x_coordinates(graph, triangle_nodes.shape[1])
+        x_min = float(np.min(node_x))
+        x_max = float(np.max(node_x))
+        sample_length = x_max - x_min
+
+        n_vertices = np.diff(triangle_nodes.indptr).astype(float)
+        if np.any(n_vertices == 0):
+            raise ValueError('triangle without connected nodes encountered')
+        grain_x = np.asarray(triangle_nodes @ node_x).ravel() / n_vertices
+
+        vol_a_0 = np.asarray(vols.vol_a_0, dtype=float)
+        vol_a = np.asarray(vols.vol_a, dtype=float)
+        if grain_x.size != vol_a_0.size or vol_a.size != vol_a_0.size:
+            raise ValueError('grain coordinates and volume arrays have different sizes')
+
+        valid = vol_a_0 > 1e-14
+        fraction = np.zeros_like(vol_a_0)
+        fraction[valid] = (vol_a_0[valid] - vol_a[valid]) / vol_a_0[valid]
+        selected = valid & (fraction >= dissolved_fraction)
+        n_selected = int(np.count_nonzero(selected))
+
+        if n_selected == 0:
+            return x_min, 0.0, 0
+
+        front_x = float(np.max(grain_x[selected]))
+        front_norm = 0.0 if sample_length <= 0.0 else float(
+            np.clip((front_x - x_min) / sample_length, 0.0, 1.0)
+        )
+        return front_x, front_norm, n_selected
+
+    def dominant_flow_front_pos(
+        self,
+        graph: Graph,
+        inc: Incidence,
+        edges: Edges,
+        flow_fraction: float = None,
+    ) -> tuple[float, float, float, int, float]:
+        """Return the furthest edge carrying a prescribed share of through-flow.
+
+        An edge is selected when ``abs(q_e) >= flow_fraction * Q_in``.  The
+        denominator is the inlet flow, not ``sum(abs(q_e))`` over the network:
+        the latter counts the same through-flow repeatedly along a path.
+
+        The edge position is its furthest downstream geometric extent (the
+        maximum x coordinate of its endpoints).  This is a *dominant-flow
+        penetration* metric; the existing slice profile/participation ratio is
+        still a better measure of the overall strength of flow focusing.
+        """
+        if flow_fraction is None:
+            flow_fraction = self.focus_flow_fraction
+        if not 0.0 < flow_fraction <= 1.0:
+            raise ValueError('flow_fraction must lie in (0, 1]')
+
+        edge_nodes = self._binary_connectivity(inc.incidence)
+        node_x = self._node_x_coordinates(graph, edge_nodes.shape[1])
+        edge_x = self._row_max_x(edge_nodes, node_x)
+        x_min = float(np.min(node_x))
+        x_max = float(np.max(node_x))
+        sample_length = x_max - x_min
+
+        abs_flow = np.abs(np.asarray(edges.flow, dtype=float))
+        inlet = np.asarray(edges.inlet, dtype=float)
+        q_in = float(np.sum(inlet * abs_flow))
+        if q_in <= 1e-14:
+            return x_min, 0.0, 0.0, 0, q_in
+
+        edge_fraction = abs_flow / q_in
+        max_fraction = float(np.max(edge_fraction))
+        selected = np.isfinite(edge_x) & (edge_fraction >= flow_fraction)
+        n_selected = int(np.count_nonzero(selected))
+
+        if n_selected == 0:
+            return x_min, 0.0, max_fraction, 0, q_in
+
+        front_x = float(np.max(edge_x[selected]))
+        front_norm = 0.0 if sample_length <= 0.0 else float(
+            np.clip((front_x - x_min) / sample_length, 0.0, 1.0)
+        )
+        return front_x, front_norm, max_fraction, n_selected, q_in
+
+    def collect_spatial_metrics(
+        self,
+        graph: Graph,
+        inc: Incidence,
+        edges: Edges,
+        triangles: Triangles,
+        vols: Volumes,
+        time: float,
+    ) -> None:
+        """Collect front positions at the same cadence as ``collect_data``."""
+        x_a, x_a_norm, n_a = self.dissolution_front_pos(
+            graph,
+            triangles,
+            vols,
+        )
+        x_q, x_q_norm, max_q_fraction, n_q, q_in = \
+            self.dominant_flow_front_pos(graph, inc, edges)
+
+        self.spatial_t.append(float(time))
+        self.axial_penetration_x.append(x_a)
+        self.axial_penetration_x_norm.append(x_a_norm)
+        self.dominant_flow_penetration_x.append(x_q)
+        self.dominant_flow_penetration_x_norm.append(x_q_norm)
+        self.max_edge_flow_fraction.append(max_q_fraction)
+        self.n_half_dissolved_grains.append(n_a)
+        self.n_dominant_flow_edges.append(n_q)
+        self.q_in_list.append(q_in)
+
+    def load_spatial_metrics(self) -> None:
+        """Load ``spatial_metrics.txt`` if a simulation is resumed/analyzed."""
+        data = np.atleast_2d(
+            np.loadtxt(self.dirname + '/spatial_metrics.txt')
+        )
+        if data.shape[1] != 9:
+            raise ValueError(
+                'spatial_metrics.txt must contain the nine columns written by save_data'
+            )
+        self.spatial_t = list(data[:, 0])
+        self.axial_penetration_x = list(data[:, 1])
+        self.axial_penetration_x_norm = list(data[:, 2])
+        self.dominant_flow_penetration_x = list(data[:, 3])
+        self.dominant_flow_penetration_x_norm = list(data[:, 4])
+        self.max_edge_flow_fraction = list(data[:, 5])
+        self.n_half_dissolved_grains = list(data[:, 6])
+        self.n_dominant_flow_edges = list(data[:, 7])
+        self.q_in_list = list(data[:, 8])
 
     def check_mass_balance(self, sid, inc, edges, vols, cb, cc, cd,
                            verbose: bool = True, tol: float = None) -> dict:

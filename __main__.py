@@ -146,6 +146,7 @@ while t < tmax and i < iters and not breakthrough and not clogged:
     #     break
     #data.check_mass_balance(sid, inc, edges, vols, cb, cc, cd, verbose=False, tol=0.5)
     data.collect_data(sid, inc, edges, vols, pressure, cb, cc, cd)
+    data.collect_spatial_metrics(graph, inc, edges, triangles, vols, time=sid.old_t + sid.dt)
     if np.max(pressure) > data.pressure[0] / sid.min_perm:
         print('Network clogged.')
         clogged = True
