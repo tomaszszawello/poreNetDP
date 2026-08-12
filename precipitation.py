@@ -13,6 +13,8 @@ Notable functions
 solve_precipitation(SimInputData, Incidence, Graph, Edges, np.ndarray) \
     -> np.ndarray
     calculate substance C concentration
+solve_precipitation_nr9_vxx_d0_hindering(...)
+    concentration-aware precipitation hindering using upstream D0
 """
 
 import numpy as np
@@ -358,6 +360,471 @@ def solve_precipitation_nr9_vxx(sid, inc, graph, edges, vols, cb, cc, cd,
 
             cc_out_t = w * cc_gen_t + (1-w) * cc_res_t
             cc_out_t[mask_zero]      = cc_in_t[mask_zero]
+
+            cd_out_t = cd_in_t - ((cb_in - cb_out) + (cc_in_t - cc_out_t))
+            cd_out_t[mask_zero] = cd_in_t[mask_zero]
+
+            # >>> STOICH CAP ALSO HERE <<<
+            delta_cb_t = cb_in - cb_out              # cb is fixed, so same as base
+            over_t     = cd_out_t < 0.0
+            if np.any(over_t):
+                cd_out_t[over_t] = 0.0
+                delta_cc_new_t   = cd_in_t[over_t] - delta_cb_t[over_t]
+                cc_out_t[over_t] = cc_in_t[over_t] - delta_cc_new_t
+            # <<< END STOICH CAP >>>
+
+            F_cc_t = cc_trial * Q_in - D_T @ (abs_Q * cc_out_t)
+            F_cd_t = cd_trial * Q_in - D_T @ (abs_Q * cd_out_t)
+            F_cc_t *= (1 - in_vec)
+            F_cd_t *= (1 - in_vec)
+            F_t = np.concatenate((F_cc_t, F_cd_t))
+            phi_t = 0.5 * np.dot(F_t, F_t)
+            
+            #print(np.linalg.norm(F_t))
+            #print(np.linalg.norm(F))
+            if phi_t < phi0:           # MONOTONE-only condition
+                break
+            lams *= red
+
+        # if lams < lam_min:
+        #     print("Line search stagnation, taking small gradient step")
+        #     grad = J.T @ F
+        #     step = -grad
+        #     step_norm = np.linalg.norm(step)
+        #     if step_norm > 0:
+        #         step *= (1e-3 / step_norm)
+        #     cc += step[:N]
+        #     cd += step[N:]
+        #     cc = np.clip(cc, 0.0, sid.cb_in)
+        #     cd = np.clip(cd, 0.0, sid.cd_in)
+        #     # go to next Newton iteration
+        #     continue
+
+        # if lams < lam_min:
+        #     raise RuntimeError("Line search failed even in steepest descent")
+
+        # If the line search completely failed (λ→0), don't waste 48 more
+        # no-op iterations — restart immediately with a fresh initial guess.
+        if lams < lam_min and _n_restarts == 0:
+            _n_restarts += 1
+            print(f"Newton: line search stagnated at it={it}, restarting with fresh initial guess")
+            cc, cd = create_vector_nr(sid, graph, inc, edges, cb)
+            continue  # go straight to next iteration with fresh cc/cd
+        elif lams < lam_min:
+            phi_max = 100 * sid.it_alpha_th
+            if _best_phi < phi_max:
+                print(f"Newton: stagnated again at it={it}, returning best (phi={_best_phi:.3e})")
+                cc = np.clip(_best_cc, 0.0, sid.cb_in)
+                cd = np.clip(_best_cd, 0.0, sid.cd_in)
+                return cc, cd
+            raise RuntimeError(
+                f"Newton: second stagnation, best phi={_best_phi:.3e} >= phi_max={phi_max:.3e}"
+            )
+
+        print(f"λ={lams:.5f}   phi_t={phi_t:.3e}   sumF={F_t.sum():.3e}")
+        rel_cc = F_cc_t / np.maximum(Q_in, 1e-12)
+        rel_cd = F_cd_t / np.maximum(Q_in, 1e-12)
+        print("max rel_cc", np.max(np.abs(rel_cc)))
+        print("max rel_cd", np.max(np.abs(rel_cd)))
+
+        # delta_cd   = delta[N:]                       # from linear solve
+        # cd_target  = cd + lams * delta_cd
+        # cd_low     = 0.25 * cd
+        # cd_high    = 4.0  * cd
+        # cd_next    = np.minimum(np.maximum(cd_target, cd_low), cd_high)
+        # delta[N:]  = (cd_next - cd) / lams
+        # delta_cc   = delta[:N]                       # from linear solve
+        # cc_target  = cc + delta_cc
+        # cc_low     = 0.25 * cc
+        # cc_high    = 4.0  * cc
+        # cc_next    = np.minimum(np.maximum(cc_target, cc_low), cc_high)
+        # delta[:N]  = cc_next - cc
+        
+        cc_prev = cc.copy()
+        cd_prev = cd.copy()
+        diff_cc = np.linalg.norm(delta[:N]) #/ max(1.0, np.linalg.norm(cc))
+        diff_cd = np.linalg.norm(delta[N:]) #/ max(1.0, np.linalg.norm(cd))
+        # if diff_cc_prev - diff_cc < 1e-2:
+        #     lams /= 2
+        cc += lams * delta[:N]
+        cd += lams * delta[N:]
+        # cc = np.clip(cc, 0.0, sid.cb_in)
+        if phi_t < _best_phi:
+            _best_phi = phi_t
+            _best_cc  = cc.copy()
+            _best_cd  = cd.copy()
+        # cd = np.clip(cd, 0.0, sid.cd_in)
+        if phi_t < sid.it_alpha_th:
+            print(f"Newton converged in {it} iterations (Δcc={diff_cc:.1e}, Δcd={diff_cd:.1e})")
+            break
+        # if np.linalg.norm(cc - cc_prev) < sid.it_alpha_th and np.linalg.norm(cd - cd_prev) < sid.it_alpha_th:
+        #     print(f"Newton converged in {it} iterations (Δcc={diff_cc:.1e}, Δcd={diff_cd:.1e})")
+        #     break
+        if it == 50 or np.isnan(np.linalg.norm(F_t)):
+            print("Newton: restarting iterations")
+            cc, cd = create_vector_nr(sid, graph, inc, edges, cb)
+
+
+        # if np.sum(cc < -0.05) > 0:
+        #     print('cc < 0')
+        #     raise ValueError
+        #cc = np.clip(cc, 0, None)
+        #cd = np.clip(cd, 0, None)
+    else:
+        phi_max = 100 * sid.it_alpha_th   # 100× convergence threshold (e.g. 1.0 when thr=0.01)
+        if _best_phi < phi_max:
+            print(f"Newton max_iter reached; returning best solution (phi={_best_phi:.3e})")
+            cc = np.clip(_best_cc, 0.0, sid.cb_in)
+            cd = np.clip(_best_cd, 0.0, sid.cd_in)
+            return cc, cd
+        raise RuntimeError(
+            f"Newton failed: best phi={_best_phi:.3e} exceeds phi_max={phi_max:.3e}"
+        )
+
+    # clip outputs
+
+    cc = np.clip(cc, 0.0, sid.cb_in)
+    cd = np.clip(cd, 0.0, sid.cd_in)
+    
+        
+    return cc, cd
+
+
+def solve_precipitation_nr9_vxx_d0_hindering(sid, inc, graph, edges, vols, cb, cc, cd,
+                        tol: float = 1e-2,
+                        max_iter: int = 100,
+                        red: float = 0.5,
+                        lam_min: float = 1e-10):
+    """Newton solver with D0-dependent transverse hindering of precipitation.
+
+    This is a concentration-aware variant of :func:`solve_precipitation_nr9_vxx`.
+    The legacy pseudo-first-order precipitation coefficient is
+
+        P_old(D0) = Da * K * d * (D0 / Kp) / (1 + G * K * d),
+
+    whereas this solver uses
+
+        P(D0) = Da * K * d * (D0 / Kp)
+                / (1 + G * K * d * (D0 / Kp)).
+
+    Here ``D0`` is the upstream edge concentration of species D (``cd_in``).
+    Because D0 is still assumed constant along an individual edge, the analytic
+    single-edge solution used by ``nr9_vxx`` is retained.  The Newton Jacobian
+    is updated with the exact derivative
+
+        dP/dD0 = (Da * K * d / Kp)
+                  / (1 + G * K * d * D0 / Kp)**2.
+
+    Negative intermediate D0 values can occur during a line-search trial.  They
+    are treated as zero only when evaluating the precipitation coefficient; the
+    nodal mass-balance equations and the existing stoichiometric cap are left
+    unchanged.
+    """
+    # Newton iterations mutate cc/cd in place (e.g. `cc += lams * delta[:N]`).
+    # Copy on entry so a failed solve never corrupts the caller's arrays —
+    # callers rely on their cc/cd being untouched when this raises.
+    cc = cc.copy()
+    cd = cd.copy()
+    # ------------------------------------------------------------------
+    # ------------------------------------------------------------------
+    if np.sum(edges.alpha_b == 0) > 0:
+        print(np.sum(edges.alpha_b == 0))
+        print(np.sum(edges.alpha_b < 0))
+    # ------------------------------------------------------------------
+    # 0.  Handy aliases & basic sparse helpers
+    E, N = inc.incidence.shape
+    Inc  = inc.incidence              # ensure CSR
+    abs_Q = np.abs(edges.flow)                # |Q_e|
+
+    mask_flow  = abs_Q > 0           # flowing edges
+    mask_zero  = ~mask_flow          # q == 0
+
+    # Upstream‑selector matrix  U  (|E|×|N|, CSR, entries 0/1)
+    flow_diag = spr.diags(edges.flow)
+    U = 1 * (flow_diag @ Inc > 0)
+
+    # Downstream‑selector matrix  D
+    D = 1 * (flow_diag @ Inc < 0)
+    D_T = D.T.tocsr()   # CSR transpose: reused in residual & Jacobian
+
+    #Q_in = np.abs(inc.incidence.T) @ np.abs(edges.flow) / 2 * (1 - graph.in_vec + graph.out_vec) + graph.in_vec
+    Q_in = D_T @ abs_Q
+    Q_in = Q_in * (1 - graph.in_vec) + graph.in_vec
+
+
+    #in_vec = np.concatenate((graph.in_vec, graph.in_vec))
+    in_vec = np.copy(graph.in_vec)
+
+
+    d  = edges.diams
+    L  = edges.lens
+    q  = np.abs(edges.flow)
+    eps_q = 1e-12
+    q_safe = np.where(q > eps_q, q, 1.0)   # any nonzero dummy
+    mask_zero = q <= eps_q                              # magnitude only
+
+    B_pref = edges.alpha_b * sid.Da * d / (1.0 + sid.G * d)
+
+    if sid.Kp <= 0:
+        raise ValueError("sid.Kp must be positive")
+
+    # Concentration-aware pseudo-first-order precipitation coefficient:
+    #   P(D0) = k0 * D0 / (1 + h * D0)
+    # where h*D0 = G*K*d*(D0/Kp).
+    precip_k0 = sid.Da * sid.K * d / sid.Kp
+    precip_h  = sid.G * sid.K * d / sid.Kp
+
+    def precipitation_coefficient(cd_up):
+        """Return P(D0) and dP/dD0 for every edge."""
+        cd_rate = np.maximum(np.asarray(cd_up, dtype=float), 0.0)
+        hindering = 1.0 + precip_h * cd_rate
+        coeff = precip_k0 * cd_rate / hindering
+        derivative = precip_k0 / hindering**2
+        derivative = np.where(np.asarray(cd_up) >= 0.0, derivative, 0.0)
+        return coeff, derivative
+
+    diff_cc = 0
+
+    # Edges considered "active" for advection
+    eps_q = 1e-12
+    active = q > eps_q
+
+    # For each node: does it have any incident active edge?
+    inc_abs = np.abs(inc.incidence)
+    incident_active = (inc_abs.T @ active) > 0   # shape (N,)
+
+    # "Internal floating" nodes = not inlet, not outlet, no active edges
+    floating = (~incident_active)
+
+    if np.any(floating):
+        #print("Floating nodes:", np.where(floating)[0])
+        # Treat them as pseudo-Dirichlet: fix cc, cd = something
+        cc[floating] = 0.0       # or initial guess, or neighbor's value
+        cd[floating] = 0.0
+        in_vec[floating] = 1
+
+    in_vec_conc = np.concatenate([in_vec, in_vec])
+
+    # Precompute fixed diagonal matrices as CSR (avoids dia→CSR conversion each
+    # Newton iteration when used in arithmetic with other CSR matrices)
+    Q_in_diag    = spr.diags(Q_in).tocsr()
+    in_vec_d_not = spr.diags(1.0 - in_vec_conc).tocsr()
+    in_vec_d     = spr.diags(in_vec_conc).tocsr()
+    U_csr        = U.tocsr()  # ensure CSR for efficient .multiply()
+    _n_restarts  = 0          # limit restarts to avoid infinite loops
+    _best_phi    = np.inf
+    _best_cc     = cc.copy()
+    _best_cd     = cd.copy()
+
+    def safe_exp(x):
+        if np.max(x) > 700:
+            print('large exp!')
+        return np.exp(np.clip(x, -700.0, 700.0))
+
+    for it in range(1, max_iter + 1):
+
+        cb_in  = U_csr @ cb
+        cb_out = D @ cb
+        cc_in  = U_csr @ cc
+        cd_in  = U_csr @ cd
+
+
+        B   = B_pref / q_safe
+        eB  = safe_exp(-np.abs(B * L))
+
+        P, dP_dcd = precipitation_coefficient(cd_in)
+
+        # Stable analytic edge solution.  With
+        #   r = B_pref,  s = alpha_c * P,  x = L / |q|,
+        # the C outlet concentration is
+        #   C1 = C0 exp(-s x) + A_e [exp(-r x)-exp(-s x)]/(s-r).
+        # The quotient is evaluated from its Taylor limit near s=r.  This is
+        # important here because the D0-dependent coefficient can hit the
+        # resonant condition s=r at common inlet concentrations.
+        x_edge = L / q_safe
+        s_rate = edges.alpha_c * P
+        ds_dcd = edges.alpha_c * dP_dcd
+        g      = safe_exp(-np.abs(s_rate * x_edge))
+        den    = s_rate - B_pref
+
+        A_e = edges.alpha_b * sid.Da * d * cb_in / (1.0 + sid.G * d)
+
+        y = den * x_edge
+        near_resonance = np.abs(y) < 1e-6
+        phi = np.empty_like(den)
+        phi_prime = np.empty_like(den)
+
+        regular = ~near_resonance
+        phi[regular] = (eB[regular] - g[regular]) / den[regular]
+        phi_prime[regular] = (
+            x_edge[regular] * g[regular] * den[regular]
+            - (eB[regular] - g[regular])
+        ) / den[regular]**2
+
+        yr = y[near_resonance]
+        xr = x_edge[near_resonance]
+        er = eB[near_resonance]
+        # phi = eB*x*(1-y/2+y^2/6-y^3/24+y^4/120+...)
+        phi[near_resonance] = er * xr * (
+            1.0 - 0.5*yr + yr**2/6.0 - yr**3/24.0 + yr**4/120.0
+        )
+        # d(phi)/d(s-r) = eB*x^2*(-1/2+y/3-y^2/8+y^3/30-y^4/144+...)
+        phi_prime[near_resonance] = er * xr**2 * (
+            -0.5 + yr/3.0 - yr**2/8.0 + yr**3/30.0 - yr**4/144.0
+        )
+
+        cc_out = cc_in * g + A_e * phi
+        dccout_dccu = g
+        dccout_dcd = (
+            -cc_in * x_edge * g + A_e * phi_prime
+        ) * ds_dcd
+
+        cc_out = np.asarray(np.ma.fix_invalid(cc_out, fill_value=0.0))
+        dccout_dcd = np.asarray(np.ma.fix_invalid(dccout_dcd, fill_value=0.0))
+        cc_out[mask_zero] = cc_in[mask_zero]
+
+        cd_out = cd_in - ((cb_in - cb_out) + (cc_in - cc_out))
+        cd_out[mask_zero]      = cd_in[mask_zero]
+        dcdout_dccu = -1.0 + dccout_dccu
+        dcdout_dcd  =  1.0 + dccout_dcd      # *** fixed sign ***
+
+
+        dccout_dccu[mask_zero] = 1.0
+        dccout_dcd[mask_zero]  = 0.0
+        dcdout_dccu[mask_zero] = 0.0  # since cd_out = cd_in - (cc_in - cc_out), but cc_out = cc_in
+        dcdout_dcd[mask_zero]  = 1.0
+
+        delta_cb = cb_in - cb_out
+        over = cd_out < 0.0
+        if np.any(over):
+            cd_out[over] = 0.0
+
+            delta_cc_new = cd_in[over] - delta_cb[over]
+            cc_out[over] = cc_in[over] - delta_cc_new  # = cc_in - cd_in + delta_cb
+
+            # Derivative model in capped regime (capacity-limited)
+            # cc_out = cc_in - cd_in + delta_cb
+            dccout_dccu[over] = 1.0   # ∂cc_out/∂cc_in = 1
+            dccout_dcd[over]  = -1.0  # ∂cc_out/∂cd_in = -1
+
+            # cd_out is clamped to 0; no dependence on upstream concentrations
+            dcdout_dccu[over] = 0.0
+            dcdout_dcd[over]  = 0.0
+
+
+        # ---- 4. residual vector --------------------------------------
+        F_cc = cc * Q_in - D_T @ (abs_Q * cc_out)
+        F_cd = cd * Q_in - D_T @ (abs_Q * cd_out)
+        F_cc *= (1 - in_vec)
+        F_cd *= (1 - in_vec)
+        F = np.concatenate((F_cc, F_cd))
+
+        # Early exit: skip J build + gssv when input is already machine-converged
+        # (e.g. reconciliation NR called with cc/cd that were just converged).
+        # Use a tight threshold (1e-20) to avoid accepting a loose warm-start.
+        phi_pre = 0.5 * np.dot(F, F)
+        if phi_pre < 1e-20:
+            print(f"Newton converged in {it-1} iterations (phi={phi_pre:.3e})")
+            break
+
+        # ---- 5. Jacobian blocks (D_T @ U_csr.multiply avoids 4 diag creations)
+        J_cc_cc_0 = D_T @ U_csr.multiply((abs_Q * dccout_dccu).reshape(-1, 1))
+        J_cc_cd_0 = D_T @ U_csr.multiply((abs_Q * dccout_dcd).reshape(-1, 1))
+        J_cd_cc_0 = D_T @ U_csr.multiply((abs_Q * dcdout_dccu).reshape(-1, 1))
+        J_cd_cd_0 = D_T @ U_csr.multiply((abs_Q * dcdout_dcd).reshape(-1, 1))
+
+        J_cc_cc = Q_in_diag - J_cc_cc_0
+        J_cc_cd =           - J_cc_cd_0
+        J_cd_cc =           - J_cd_cc_0
+        J_cd_cd = Q_in_diag - J_cd_cd_0
+
+
+        J = spr.vstack((spr.hstack((J_cc_cc, J_cc_cd)),
+                        spr.hstack((J_cd_cc, J_cd_cd))))
+
+        J = in_vec_d_not @ J + in_vec_d
+        J_diag = J.diagonal()
+        zero_diag = J_diag == 0
+        if np.any(zero_diag):
+            J += spr.diags(zero_diag.astype(float)).tocsr()
+        F *= ~zero_diag
+        #J = spr.diags(1 - 1 * (F == 0)) @ J + spr.diags(1 * (F == 0))
+
+        # ---- 6. Newton step ------------------------------------------
+        delta = solve_equation(J, -F)
+        g     = J.T @ F
+
+        if np.dot(g, delta) >= 0:
+            # Levenberg
+            mu = 1e-4 * spla.norm(J, np.inf)
+            delta = solve_equation(J.T @ J + mu*spr.diags(np.ones(2 * sid.nsq)), -g)
+            if np.dot(g, delta) >= 0:
+                # Gradient
+                delta = -g
+
+        phi0 = 0.5 * np.dot(F, F)
+        dphi0 = np.dot(g, delta)
+
+        delta_cc = delta[:N]
+        delta_cd = delta[N:]
+
+        # tolerance for considering "at the bound"
+        bound_tol = 1e-10
+
+        # active at lower bound for cc: cc == 0 and step wants to go more negative
+        active_cc_low  = (cc <= 0.0 + bound_tol)      & (delta_cc < 0.0)
+        # active at upper bound for cc
+        active_cc_high = (cc >= sid.cb_in - bound_tol) & (delta_cc > 0.0)
+
+        # same for cd
+        active_cd_low  = (cd <= 0.0 + bound_tol)      & (delta_cd < 0.0)
+        active_cd_high = (cd >= sid.cd_in - bound_tol) & (delta_cd > 0.0)
+
+        # freeze those components
+        delta_cc[active_cc_low | active_cc_high] = 0.0
+        delta_cd[active_cd_low | active_cd_high] = 0.0
+
+        delta[:N]  = delta_cc
+        delta[N:]  = delta_cd
+
+        # Armijo back-tracking
+        lams = 1.0
+        rho = 1e-4
+        #phi0 = 0.5*np.dot(F, F)
+        #dphi0 = np.dot(g, delta)
+
+        while lams >= lam_min:
+            cc_trial = cc + lams * delta[:N]
+            cd_trial = cd + lams * delta[N:]
+
+            # cc_trial = np.clip(cc_trial, 0.0, sid.cb_in)
+            # cd_trial = np.clip(cd_trial, 0.0, sid.cd_in)
+            # residual at trial point (quick re‑eval) ------------------
+            cc_in_t = U_csr @ cc_trial
+            cd_in_t = U_csr @ cd_trial
+            P_t, _ = precipitation_coefficient(cd_in_t)
+            s_rate_t = edges.alpha_c * P_t
+            den_t = s_rate_t - B_pref
+            g_t = safe_exp(-np.abs(s_rate_t * x_edge))
+
+            y_t = den_t * x_edge
+            near_t = np.abs(y_t) < 1e-6
+            phi_t_edge = np.empty_like(den_t)
+            regular_t = ~near_t
+            phi_t_edge[regular_t] = (
+                eB[regular_t] - g_t[regular_t]
+            ) / den_t[regular_t]
+
+            yt = y_t[near_t]
+            xt = x_edge[near_t]
+            et = eB[near_t]
+            phi_t_edge[near_t] = et * xt * (
+                1.0 - 0.5*yt + yt**2/6.0 - yt**3/24.0 + yt**4/120.0
+            )
+
+            cc_out_t = cc_in_t * g_t + A_e * phi_t_edge
+            cc_out_t = np.asarray(np.ma.fix_invalid(cc_out_t, fill_value=0.0))
+            cc_out_t[mask_zero] = cc_in_t[mask_zero]
 
             cd_out_t = cd_in_t - ((cb_in - cb_out) + (cc_in_t - cc_out_t))
             cd_out_t[mask_zero] = cd_in_t[mask_zero]
@@ -1447,3 +1914,316 @@ def solve_precipitation_safe(
         except RuntimeError:
             print("precipitation reconciliation NR: failed, using outer-loop cc/cd")
     return cc, cd
+
+
+def _requested_precipitation_d0_hindering(
+    sid, inc, edges, cb, cc, cd, alpha_c,
+):
+    """Return requested secondary-solid volume per edge for the D0 model.
+
+    The calculation uses the same concentration-aware pseudo-first-order
+    precipitation coefficient and the same stable single-edge analytical
+    solution as :func:`solve_precipitation_nr9_vxx_d0_hindering`.
+
+    Parameters
+    ----------
+    sid, inc, edges
+        Standard simulation/network objects.
+    cb, cc, cd : ndarray
+        Converged nodal concentrations.
+    alpha_c : ndarray
+        Edge precipitation-availability factors used in the transport solve.
+
+    Returns
+    -------
+    ndarray
+        Requested precipitated solid volume on every edge over ``sid.dt``.
+
+    Notes
+    -----
+    For an edge, stoichiometry gives the amount of D consumed as
+
+        Delta D = (B_0 - B_1) + (C_0 - C_1).
+
+    This avoids duplicating the older closed-form volume expression, which was
+    derived for the legacy, concentration-independent hindering denominator.
+    The demand is capped by the available upstream D concentration, exactly as
+    in the nonlinear transport solver.
+    """
+    if sid.Kp <= 0:
+        raise ValueError("sid.Kp must be positive")
+
+    d = np.asarray(edges.diams, dtype=float)
+    length = np.asarray(edges.lens, dtype=float)
+    abs_q = np.abs(np.asarray(edges.flow, dtype=float))
+    active = abs_q > 1e-12
+    q_safe = np.where(active, abs_q, 1.0)
+
+    # Upstream-selector matrix: one upstream node per flowing edge.
+    upstream = (spr.diags(edges.flow) @ inc.incidence > 0).astype(float).tocsr()
+    cb_in = np.asarray(upstream @ cb, dtype=float)
+    cc_in = np.asarray(upstream @ cc, dtype=float)
+    cd_in = np.asarray(upstream @ cd, dtype=float)
+    cd_rate = np.maximum(cd_in, 0.0)
+
+    # Dissolution coefficient and B outlet.
+    b_rate = edges.alpha_b * sid.Da * d / (1.0 + sid.G * d)
+    residence = length / q_safe
+
+    def safe_exp(exponent):
+        return np.exp(np.clip(exponent, -700.0, 700.0))
+
+    exp_b = safe_exp(-np.abs(b_rate * residence))
+    cb_out = cb_in * exp_b
+
+    # Concentration-aware precipitation coefficient:
+    # P(D0) = Da*K*d*(D0/Kp) / [1 + G*K*d*(D0/Kp)].
+    d0_over_kp = cd_rate / sid.Kp
+    hindering = 1.0 + sid.G * sid.K * d * d0_over_kp
+    p_rate = sid.Da * sid.K * d * d0_over_kp / hindering
+    sink_rate = np.asarray(alpha_c, dtype=float) * p_rate
+    exp_p = safe_exp(-np.abs(sink_rate * residence))
+
+    # Stable evaluation of
+    #   C1 = C0 exp(-s x) + A [exp(-r x)-exp(-s x)]/(s-r),
+    # including its finite limit at s == r.
+    denominator = sink_rate - b_rate
+    y = denominator * residence
+    near_resonance = np.abs(y) < 1e-6
+
+    quotient = np.empty_like(denominator)
+    regular = ~near_resonance
+    quotient[regular] = (
+        exp_b[regular] - exp_p[regular]
+    ) / denominator[regular]
+
+    yr = y[near_resonance]
+    xr = residence[near_resonance]
+    er = exp_b[near_resonance]
+    quotient[near_resonance] = er * xr * (
+        1.0
+        - 0.5 * yr
+        + yr**2 / 6.0
+        - yr**3 / 24.0
+        + yr**4 / 120.0
+    )
+
+    source_amplitude = b_rate * cb_in
+    cc_out = cc_in * exp_p + source_amplitude * quotient
+
+    cb_out = np.where(np.isfinite(cb_out), cb_out, cb_in)
+    cc_out = np.where(np.isfinite(cc_out), cc_out, cc_in)
+
+    # The transport solver applies the same finite-D cap when its unconstrained
+    # edge solution would require cd_out < 0.
+    d_consumed = (cb_in - cb_out) + (cc_in - cc_out)
+    d_consumed = np.minimum(np.maximum(d_consumed, 0.0), cd_rate)
+    d_consumed[~active] = 0.0
+
+    if abs(sid.Da) <= 1e-30:
+        return np.zeros_like(abs_q)
+
+    precipitate_req = (
+        abs_q * d_consumed * sid.Gamma / sid.Da * sid.dt
+    )
+    return np.asarray(
+        np.ma.fix_invalid(precipitate_req, fill_value=0.0), dtype=float
+    )
+
+
+def solve_precipitation_safe_d0(
+    sid, inc, graph, edges, vols, cb, cc, cd,
+    max_alpha_iter: int = 1,
+    tol_alpha: float = 1e-3,
+):
+    """Safe precipitation wrapper for the D0-dependent hindering solver.
+
+    This is the concentration-aware counterpart of
+    :func:`solve_precipitation_safe`.  It updates ``edges.alpha_c`` from the
+    pore volume available in adjacent triangles, solves transport with
+    :func:`solve_precipitation_nr9_vxx_d0_hindering`, and limits the requested
+    precipitation so that no triangle is overfilled.
+
+    The legacy ``solve_precipitation_safe`` function is left unchanged.
+
+    Parameters
+    ----------
+    max_alpha_iter : int, optional
+        Maximum number of outer availability-factor iterations.  Must be at
+        least one.
+    tol_alpha : float, optional
+        Infinity-norm tolerance for convergence of ``alpha_c``.
+
+    Returns
+    -------
+    cc, cd : ndarray
+        Converged nodal concentrations of C and D.
+    """
+    if max_alpha_iter < 1:
+        raise ValueError("max_alpha_iter must be at least 1")
+
+    triangles_incidence = vols.triangles
+    edges_tri = np.maximum(edges.triangles, 1.0)
+    tri_rows, tri_cols = triangles_incidence.nonzero()
+
+    # Available pore volume at the beginning of this geometry-update step.
+    available = vols.vol_max - vols.vol_a - vols.vol_e
+
+    # Start from the physically admissible binary state.  This also lets an
+    # edge recover when dissolution has opened pore space since the last step.
+    alpha_c_binary = (
+        triangles_incidence @ (1.0 * (available > 0))
+    ) / edges_tri
+    alpha_c_binary = np.clip(
+        np.asarray(
+            np.ma.fix_invalid(alpha_c_binary, fill_value=0.0), dtype=float
+        ),
+        0.0,
+        1.0,
+    )
+
+    # If the abrupt binary update makes the nonlinear solve fail, retry once
+    # from the previous edge availability, clipped by newly blocked triangles.
+    alpha_c_warm = np.minimum(edges.alpha_c, alpha_c_binary)
+
+    cc_best = cc.copy()
+    cd_best = cd.copy()
+    alpha_c_best = edges.alpha_c.copy()
+
+    alpha_c = alpha_c_binary.copy()
+    diff_alpha = np.inf
+
+    for it_alpha in range(max_alpha_iter):
+        alpha_prev = alpha_c.copy()
+        edges.alpha_c = alpha_c
+
+        if it_alpha == 0:
+            cc_init, cd_init = cc, cd
+        else:
+            # ``create_vector_nr`` is used only as an initial guess.  The final
+            # equations are always evaluated with the D0-dependent solver.
+            cc_init, cd_init = create_vector_nr(sid, graph, inc, edges, cb)
+
+        try:
+            cc_new, cd_new = solve_precipitation_nr9_vxx_d0_hindering(
+                sid, inc, graph, edges, vols, cb, cc_init, cd_init
+            )
+
+        except RuntimeError:
+            if it_alpha == 0:
+                print(
+                    "precipitation D0 alpha_c iter 0: NR failed with binary "
+                    f"alpha_c (n_blocked={int(np.sum(alpha_c == 0))}); "
+                    "retrying with warm-start alpha_c"
+                )
+                alpha_c = alpha_c_warm.copy()
+                edges.alpha_c = alpha_c
+                cc_init2, cd_init2 = create_vector_nr(
+                    sid, graph, inc, edges, cb
+                )
+                try:
+                    cc_new, cd_new = (
+                        solve_precipitation_nr9_vxx_d0_hindering(
+                            sid,
+                            inc,
+                            graph,
+                            edges,
+                            vols,
+                            cb,
+                            cc_init2,
+                            cd_init2,
+                        )
+                    )
+                except RuntimeError:
+                    print(
+                        "precipitation D0 alpha_c iter 0: NR failed with "
+                        "warm-start alpha_c too; keeping previous result "
+                        f"(n_blocked_prev={int(np.sum(alpha_c_best == 0))})"
+                    )
+                    edges.alpha_c = alpha_c_best
+                    return cc_best, cd_best
+            else:
+                print(
+                    f"precipitation D0 alpha_c iter {it_alpha}: NR failed; "
+                    "reverting to best previous result "
+                    f"(n_blocked_best={int(np.sum(alpha_c_best == 0))})"
+                )
+                edges.alpha_c = alpha_c_best
+                return cc_best, cd_best
+
+        # The transport solve converged for the current alpha_c.
+        cc, cd = cc_new, cd_new
+        cc_best = cc.copy()
+        cd_best = cd.copy()
+        alpha_c_best = alpha_c.copy()
+
+        # Requested volume is calculated from the same stable edge solution and
+        # D0-dependent coefficient as the nonlinear transport solver.
+        precipitate_req = _requested_precipitation_d0_hindering(
+            sid, inc, edges, cb, cc, cd, alpha_c
+        )
+
+        # Distribute each edge request equally among its neighbouring triangles.
+        requested_per_triangle = triangles_incidence.T @ (
+            precipitate_req / edges_tri
+        )
+
+        volume_eps = 1e-16
+        triangle_factor = np.ones(sid.ntr)
+        requested_mask = requested_per_triangle > volume_eps
+        triangle_factor[requested_mask] = np.minimum(
+            1.0,
+            available[requested_mask]
+            / (requested_per_triangle[requested_mask] + volume_eps),
+        )
+
+        # An edge must respect the most restrictive adjacent triangle.
+        edge_factor = np.ones(sid.ne)
+        np.minimum.at(edge_factor, tri_rows, triangle_factor[tri_cols])
+        edge_factor = np.clip(edge_factor, 0.0, 1.0)
+
+        alpha_c = np.clip(alpha_c * edge_factor, 0.0, 1.0)
+        alpha_c_best = alpha_c.copy()
+
+        diff_alpha = np.linalg.norm(alpha_c - alpha_prev, ord=np.inf)
+        print(
+            f"precipitation D0 alpha_c iter {it_alpha}: "
+            f"diff={diff_alpha:.3e}  "
+            f"n_blocked={int(np.sum(alpha_c == 0))}"
+        )
+        if diff_alpha < tol_alpha:
+            break
+
+    # The final safety-factor update may have changed alpha_c after the last
+    # transport solve.  Reconcile once with the definitive value.
+    edges.alpha_c = alpha_c
+    if diff_alpha < tol_alpha:
+        return cc, cd
+
+    try:
+        cc_final, cd_final = solve_precipitation_nr9_vxx_d0_hindering(
+            sid, inc, graph, edges, vols, cb, cc, cd
+        )
+        return cc_final, cd_final
+    except RuntimeError:
+        try:
+            cc_init_final, cd_init_final = create_vector_nr(
+                sid, graph, inc, edges, cb
+            )
+            cc_final, cd_final = solve_precipitation_nr9_vxx_d0_hindering(
+                sid,
+                inc,
+                graph,
+                edges,
+                vols,
+                cb,
+                cc_init_final,
+                cd_init_final,
+            )
+            return cc_final, cd_final
+        except RuntimeError:
+            print(
+                "precipitation D0 reconciliation NR: failed, using "
+                "outer-loop cc/cd"
+            )
+            return cc, cd

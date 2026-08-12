@@ -121,14 +121,14 @@ def make_dir(sid: SimInputData) -> None:
         dirname - directory of the simulation
     """
     i = 0
-    dirname2 = sid.dirname
-    while sid.dirname == dirname2:
-        if not os.path.isdir(sid.dirname + "/" + str(i)):
-            sid.dirname = sid.dirname + "/" + str(i)
-        else:
+    while True:
+        candidate = sid.dirname + "/" + str(i)
+        try:
+            os.makedirs(candidate)   # atomic: raises FileExistsError if already taken
+            sid.dirname = candidate
+            return
+        except FileExistsError:
             i += 1
-    if not os.path.isdir(sid.dirname):
-        os.makedirs(sid.dirname)
 
 import numpy as np
 import scipy.sparse as sp

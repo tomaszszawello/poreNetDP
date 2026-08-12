@@ -80,7 +80,7 @@ while t < tmax and i < iters and not breakthrough and not clogged:
     if sid.include_precipitation:
         if t == 0 or sid.load == 1:
             cc, cd = Pi.create_vector_nr(sid, graph, inc, edges, cb)
-        cc, cd = Pi.solve_precipitation_safe(sid, inc, graph, edges, vols, cb, cc, cd)
+        cc, cd = Pi.solve_precipitation_safe_d0(sid, inc, graph, edges, vols, cb, cc, cd)
     else:
         cc, cd = np.zeros(sid.nsq), np.zeros(sid.nsq)
     if np.max(cc) == -1 and i != 0:
@@ -182,7 +182,7 @@ while t < tmax and i < iters and not breakthrough and not clogged:
 # save data from the last iteration of simulation, save the whole simulation
 # to be able to continue it later
 
-Dr.draw_triangles(sid, triangles, edges, graph, vols, f'tri_final.png')
+#Dr.draw_triangles(sid, triangles, edges, graph, vols, f'tri_final.png')
 
 if i != 1 and sid.load != 1 and not sid.debug:
     #data.check_data(edges)

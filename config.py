@@ -52,7 +52,7 @@ class SimInputData:
     #Pe = Pe_L * 2 / (np.pi * chi0 ** 2)
     Pe = Pe_L * 4 / (np.pi * chi0 ** 2)
     
-    G: float = 5.#Da * Pe / Sh * chi0 ** 2 / 4
+    G: float = 1.#Da * Pe / Sh * chi0 ** 2 / 4
     "diffusion to reaction ratio"
     Da_eff: float = float(os.environ.get('SIM_DA_EFF', 1.00)) #Da / (1 + G)
     Da = Da_eff * (1 + G)
@@ -67,7 +67,7 @@ class SimInputData:
     V_tot = (1 / chi0) ** 2 * 2 * np.sqrt(3) / (3 * np.pi)
 
     debug = False
-    K: float = 2.
+    K: float = 0.5
     "precipitation to dissolution reaction rate"
     Gamma: float = 2.01
     "precipitation to dissolution molar volume / acid capacity number"
@@ -140,7 +140,7 @@ class SimInputData:
     "minimal diameter of outlet edge for network to be dissolved"
 
     # DRAWING
-    figsize: float = 30.
+    figsize: float = 20.
     "figure size"
     qdrawconst: float = 10 / n
     "constant for improving flow drawing"
@@ -158,7 +158,7 @@ class SimInputData:
      simulation, 2 - load template network from load_name and start new \
      simulation")
     #load_name: str = 'diffusion/Pe0.00Da100.00/17'
-    load_name: str = 'new_singurindy/G5.00Daeff1.00cdin1.000/0'#/template/9'
+    load_name: str = 'new_singurindy/G1.00Daeff1.00cdin1.000/2'#/template/9'
     #load_name: str = 'new_singurindy/G5.00Daeff1.00/4'#/template/9'
     
     "name of loaded network"

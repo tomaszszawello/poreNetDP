@@ -39,10 +39,26 @@ from datetime import datetime
 REPO_DIR = os.path.dirname(os.path.abspath(__file__))
 LOG_DIR = os.path.join(REPO_DIR, 'sweep_logs')
 
-DA_EFF_VALUES = [0.2, 0.33]
-CD_IN_VALUES = [0.33]
+DA_EFF_VALUES = [0.1, 0.2, 1/3, 0.5, 2/3, 1., 2.]
+CD_IN_VALUES = [0.1, 0.2, 1/3, 0.5, 2/3, 1., 2.]
 MAX_WORKERS = 20
 "how many simulations to run at once - tune to available CPU/RAM"
+
+SKIP_COMPLETED = True
+"skip combos that already finished successfully in a previous run (checks for .done marker)"
+
+
+def _done_path(tag: str) -> str:
+    return os.path.join(LOG_DIR, f'{tag}.done')
+
+
+def _is_done(tag: str) -> bool:
+    return SKIP_COMPLETED and os.path.exists(_done_path(tag))
+
+
+def _mark_done(tag: str) -> None:
+    with open(_done_path(tag), 'w', encoding='utf-8') as f:
+        f.write(datetime.now().isoformat() + '\n')
 
 
 def run_one(da_eff: float, cd_in: float) -> tuple[float, float, int]:
@@ -75,6 +91,10 @@ def run_one(da_eff: float, cd_in: float) -> tuple[float, float, int]:
     tag = f'Daeff{da_eff:.3f}_cdin{cd_in:.3f}'
     log_path = os.path.join(LOG_DIR, f'{tag}.log')
 
+    if _is_done(tag):
+        print(f'[{tag}] SKIPPED (completed in a previous run)')
+        return da_eff, cd_in, 0
+
     with open(log_path, 'w', encoding='utf-8') as log_file:
         log_file.write(f'# started {datetime.now().isoformat()}\n')
         log_file.flush()
@@ -84,10 +104,14 @@ def run_one(da_eff: float, cd_in: float) -> tuple[float, float, int]:
             env=env,
             stdout=log_file,
             stderr=subprocess.STDOUT,
+            check=False,
         )
 
-    status = 'OK' if result.returncode == 0 else f'FAILED (exit {result.returncode})'
-    print(f'[{tag}] {status} -- log: {log_path}')
+    if result.returncode == 0:
+        _mark_done(tag)
+        print(f'[{tag}] OK -- log: {log_path}')
+    else:
+        print(f'[{tag}] FAILED (exit {result.returncode}) -- log: {log_path}')
     return da_eff, cd_in, result.returncode
 
 

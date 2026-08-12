@@ -9,6 +9,11 @@ Notable functions
 update_diameters(SimInputData, Incidence, Edges, np.ndarray, np.ndarray) \
     -> tuple[bool, float]
     update diameters, calculate timestep and check if network is dissolved
+update_diameters_d0_hindering(...)
+    drop-in geometry update for the D0-dependent precipitation model
+solve_dp_vol_d0_hindering(...)
+    edgewise dissolution/precipitation volume rates consistent with the
+    D0-dependent transport solver
 """
 
 import numpy as np
@@ -22,12 +27,22 @@ from volumes import Volumes
 from utils import keep_largest_component
 
 def update_diameters(sid: SimInputData, inc: Incidence, edges: Edges, graph: Graph, \
-    vols: Volumes, cb: np.ndarray, cc: np.ndarray, cd: np.ndarray, data) -> tuple[bool, float]:
+    vols: Volumes, cb: np.ndarray, cc: np.ndarray, cd: np.ndarray, data,
+    use_d0_hindering: bool = True) -> tuple[bool, float]:
     """ Update diameters.
 
     This function updates diameters of edges, calculates the next timestep (if
     adt is used) and checks if the network is dissolved. Based on config, we
     include either dissolution or both dissolution and precipitation.
+
+    When ``use_d0_hindering`` is true, the precipitation contribution to the
+    geometry update is reconstructed with the same concentration-dependent
+    transverse-hindering law as
+    ``solve_precipitation_safe_d0_hindering``::
+
+        P(D0) = Da*K*d*(D0/Kp) / [1 + G*K*d*(D0/Kp)].
+
+    The default is false so existing simulations retain the legacy growth law.
 
     Parameters
     -------
@@ -57,6 +72,12 @@ def update_diameters(sid: SimInputData, inc: Incidence, edges: Edges, graph: Gra
     cc : numpy ndarray (nsq)
         vector of substance C concentration
 
+    use_d0_hindering : bool, optional
+        If true, use :func:`solve_dp_vol_d0_hindering` for the coupled
+        dissolution--precipitation geometry update.  This option requires
+        ``include_volumes=True`` and should be paired with
+        ``solve_precipitation_safe_d0_hindering``.
+
     Returns
     -------
     breakthrough : bool
@@ -69,8 +90,20 @@ def update_diameters(sid: SimInputData, inc: Incidence, edges: Edges, graph: Gra
     dissolve, precipitate = 0, 0
     if sid.include_precipitation:
         if sid.include_volumes:
-            change, dissolve, precipitate = solve_dp_vol(sid, inc, edges, vols, cb, cc, cd)
+            if use_d0_hindering:
+                change, dissolve, precipitate = solve_dp_vol_d0_hindering(
+                    sid, inc, edges, vols, cb, cc, cd
+                )
+            else:
+                change, dissolve, precipitate = solve_dp_vol(
+                    sid, inc, edges, vols, cb, cc, cd
+                )
         else:
+            if use_d0_hindering:
+                raise NotImplementedError(
+                    "D0-dependent precipitation growth currently requires "
+                    "sid.include_volumes=True."
+                )
             change = solve_dp(sid, inc, edges, cb, cc)
     else:
         if sid.include_volumes:
@@ -186,6 +219,37 @@ def update_diameters(sid: SimInputData, inc: Incidence, edges: Edges, graph: Gra
 
     
     return breakthrough, dt_next
+
+
+def update_diameters_d0_hindering(
+    sid: SimInputData,
+    inc: Incidence,
+    edges: Edges,
+    graph: Graph,
+    vols: Volumes,
+    cb: np.ndarray,
+    cc: np.ndarray,
+    cd: np.ndarray,
+    data,
+) -> tuple[bool, float]:
+    """Update diameters with the D0-dependent precipitation growth law.
+
+    This convenience wrapper keeps the legacy :func:`update_diameters`
+    behavior unchanged while providing a drop-in counterpart for simulations
+    that use ``solve_precipitation_safe_d0_hindering``.
+    """
+    return update_diameters(
+        sid,
+        inc,
+        edges,
+        graph,
+        vols,
+        cb,
+        cc,
+        cd,
+        data,
+        use_d0_hindering=True,
+    )
 
 def solve_d(sid: SimInputData, inc: Incidence, edges: Edges, cb: np.ndarray) \
     -> np.ndarray:
@@ -527,6 +591,149 @@ def solve_dp_vol(sid: SimInputData, inc: Incidence, edges: Edges, vols: Volumes,
     change = growth2 - shrink_cc2 - shrink_cb2
     # Return alpha-scaled volumes consistent with change (no abs needed — both terms ≥ 0).
     return change, growth2, shrink_cc2 + shrink_cb2
+
+
+def solve_dp_vol_d0_hindering(
+    sid: SimInputData,
+    inc: Incidence,
+    edges: Edges,
+    vols: Volumes,
+    cb: np.ndarray,
+    cc: np.ndarray,
+    cd: np.ndarray,
+) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+    r"""Update geometry using D0-dependent precipitation hindering.
+
+    This is the growth counterpart of
+    ``solve_precipitation_nr9_vxx_d0_hindering`` and
+    ``solve_precipitation_safe_d0_hindering``.  The upstream concentration of
+    species D is treated as constant on each edge and enters both the
+    pseudo-first-order precipitation rate and its transverse mass-transfer
+    correction,
+
+    .. math::
+
+        P(D_0) = \frac{\mathrm{Da}\,K\,d\,(D_0/K_p)}
+                      {1 + G K d (D_0/K_p)}.
+
+    The edge outlet concentrations are reconstructed with the same analytical
+    solution and the same finite-D cap as the nonlinear transport solver.  The
+    precipitated solid-volume rate is then obtained from the stoichiometric
+    consumption of D,
+
+    .. math::
+
+        \dot V_E = |q|\,\Delta D\,\Gamma/\mathrm{Da}.
+
+    Parameters are the same as for :func:`solve_dp_vol`.  ``vols`` is retained
+    in the signature for API compatibility; the availability factors already
+    stored in ``edges.alpha_b`` and ``edges.alpha_c`` are used directly.
+
+    Returns
+    -------
+    change : ndarray
+        Signed change rate of ``d^2 L`` on every edge.  Positive values denote
+        net dissolution and negative values net precipitation.
+    dissolve : ndarray
+        Dissolved-primary solid-volume rate on every edge.
+    precipitate : ndarray
+        Precipitated-secondary solid-volume rate on every edge, including the
+        molar-volume factor ``Gamma``.
+    """
+    del vols  # availability is represented by edges.alpha_b/alpha_c here
+
+    if sid.Kp <= 0:
+        raise ValueError("sid.Kp must be positive")
+
+    da = float(sid.Da)
+    if abs(da) <= 1e-30:
+        zeros = np.zeros_like(np.asarray(edges.flow, dtype=float))
+        return zeros.copy(), zeros.copy(), zeros.copy()
+
+    d = np.asarray(edges.diams, dtype=float)
+    length = np.asarray(edges.lens, dtype=float)
+    abs_q = np.abs(np.asarray(edges.flow, dtype=float))
+    active = abs_q > 1e-12
+    q_safe = np.where(active, abs_q, 1.0)
+
+    # One upstream node per flowing edge.  This is identical to the selector
+    # used by the concentration solver and the safe availability wrapper.
+    upstream = (
+        spr.diags(edges.flow) @ inc.incidence > 0
+    ).astype(float).tocsr()
+    cb_in = np.asarray(upstream @ cb, dtype=float).ravel()
+    cc_in = np.asarray(upstream @ cc, dtype=float).ravel()
+    cd_in = np.asarray(upstream @ cd, dtype=float).ravel()
+    cd_rate = np.maximum(cd_in, 0.0)
+
+    residence = length / q_safe
+
+    def safe_exp(exponent: np.ndarray) -> np.ndarray:
+        return np.exp(np.clip(exponent, -700.0, 700.0))
+
+    # Alpha_b-scaled dissolution, consistent with the B transport equation.
+    b_rate = edges.alpha_b * da * d / (1.0 + sid.G * d)
+    exp_b = safe_exp(-np.abs(b_rate * residence))
+    cb_out = cb_in * exp_b
+
+    # Concentration-aware precipitation coefficient and alpha_c-scaled sink.
+    d0_over_kp = cd_rate / sid.Kp
+    hindering = 1.0 + sid.G * sid.K * d * d0_over_kp
+    p_rate = da * sid.K * d * d0_over_kp / hindering
+    sink_rate = np.asarray(edges.alpha_c, dtype=float) * p_rate
+    exp_p = safe_exp(-np.abs(sink_rate * residence))
+
+    # Stable evaluation of
+    #   C1 = C0 exp(-s x) + A [exp(-r x)-exp(-s x)]/(s-r),
+    # including the finite limit when s -> r.  This mirrors the implementation
+    # in the D0-dependent Newton solver and safe wrapper.
+    denominator = sink_rate - b_rate
+    y = denominator * residence
+    near_resonance = np.abs(y) < 1e-6
+
+    quotient = np.empty_like(denominator)
+    regular = ~near_resonance
+    quotient[regular] = (
+        exp_b[regular] - exp_p[regular]
+    ) / denominator[regular]
+
+    yr = y[near_resonance]
+    xr = residence[near_resonance]
+    er = exp_b[near_resonance]
+    quotient[near_resonance] = er * xr * (
+        1.0
+        - 0.5 * yr
+        + yr**2 / 6.0
+        - yr**3 / 24.0
+        + yr**4 / 120.0
+    )
+
+    source_amplitude = b_rate * cb_in
+    cc_out = cc_in * exp_p + source_amplitude * quotient
+
+    cb_out = np.where(np.isfinite(cb_out), cb_out, cb_in)
+    cc_out = np.where(np.isfinite(cc_out), cc_out, cc_in)
+
+    # Stoichiometric D consumption.  The cap is the same one used in the
+    # nonlinear edge solver when the unconstrained solution would give D1 < 0.
+    d_consumed = (cb_in - cb_out) + (cc_in - cc_out)
+    d_consumed = np.minimum(np.maximum(d_consumed, 0.0), cd_rate)
+
+    dissolve = abs_q * np.maximum(cb_in - cb_out, 0.0) / da
+    precipitate = abs_q * d_consumed * sid.Gamma / da
+
+    dissolve[~active] = 0.0
+    precipitate[~active] = 0.0
+
+    dissolve = np.asarray(
+        np.ma.fix_invalid(dissolve, fill_value=0.0), dtype=float
+    )
+    precipitate = np.asarray(
+        np.ma.fix_invalid(precipitate, fill_value=0.0), dtype=float
+    )
+    change = dissolve - precipitate
+
+    return change, dissolve, precipitate
 
 def solve_dp_kp(sid: SimInputData, inc: Incidence, edges: Edges, cb: np.ndarray, \
     cc: np.ndarray, cd: np.ndarray) -> np.ndarray:
