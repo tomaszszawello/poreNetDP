@@ -69,15 +69,22 @@ for sample in range(0, 30):
         if i % sid.collect_every == 0:
             data.collect(sid, graph, inc, edges, pressure)
         # calculate slice channelization
+        # compare against the checkpoint value directly (with a tiny tolerance
+        # for float error) rather than via dissolved_v // sid.track_every: for
+        # some track_every values (eg. 0.1) that floor division is fragile
+        # right at the boundary - eg. 0.5 // 0.1 == 4.0, not 5.0 - so it can
+        # miss a checkpoint that growth.update_apertures landed almost
+        # exactly on, letting the following (uncapped) step overshoot the
+        # next one instead
+        next_checkpoint = (iterator_dissolved + 1) * sid.track_every
         if t == 0:
             print('0 save')
             #data.check_init_slice_channelization(graph, inc, edges)
             #data.check_slice_channelization(graph, inc, edges, dissolved_v)
             graph_real.dump_json_graph(sid, edges)
-        # elif sid.old_t // sid.track_every != (sid.old_t + sid.dt) \
-        #     // sid.track_every:
-        elif dissolved_v // sid.track_every > iterator_dissolved:
+        elif dissolved_v >= next_checkpoint - 1e-9:
             iterator_dissolved += 1
+            next_checkpoint = (iterator_dissolved + 1) * sid.track_every
             if iterator_dissolved in sid.track_list:
                 #data.check_slice_channelization(graph, inc, edges, dissolved_v)
                 graph_real.dump_json_graph(sid, edges)
@@ -88,7 +95,8 @@ for sample in range(0, 30):
             # graph_real.dump_json_graph(sid, edges)
         # grow apertures and update them in edges, check if network dissolved,
         # find new timestep
-        breakthrough, dt = Gr.update_apertures(sid, inc, edges, concentration)
+        breakthrough, dt = Gr.update_apertures(sid, inc, edges, concentration, vol_init, \
+            next_checkpoint)
         i, t = update_iterators(sid, i, t, dt)
         dissolved_v = (np.sum(edges.apertures * edges.fracture_lens * edges.lens) - vol_init) / vol_init
         sid.dissolved_v = dissolved_v

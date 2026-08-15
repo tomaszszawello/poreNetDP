@@ -44,8 +44,8 @@ class Graph(nx.graph.Graph):
         """Create an instance of Graph from a JSON file."""
         with open(filename, 'r') as f:
             data = json.load(f)
-        #temp_graph = json_graph.node_link_graph(data, edges="links")
-        temp_graph = json_graph.node_link_graph(data, edges="edges")
+        temp_graph = json_graph.node_link_graph(data, edges="links")
+        #temp_graph = json_graph.node_link_graph(data, edges="edges")
 
         # Initialize an instance of the subclass
         graph = cls()

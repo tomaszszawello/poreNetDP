@@ -1,3 +1,6 @@
+import os
+import re
+
 from networkx.readwrite import json_graph
 import json
 import networkx as nx
@@ -635,18 +638,70 @@ def find_flow2(graph, incidence, b0, fracture_lens, lens, inlet, name):
 #     np.savetxt(dirname + 'c_tracks_num.txt', c_tracking_list)
 #     np.savetxt(dirname + 'pl_tracks_num.txt', pl_tracking_list)
 
-import os
-n_parts = 100000
-np.random.seed(1234)
-seeds = np.random.randint(0, n_parts, size = n_parts)
-G = 5.
-Da = 0.0002
-dirname = f'oman_dfn_v3/G5.0000Daeff0.0002/1/'
-network = "network_0.10"
-name = dirname + network + ".json"
-graph, incidence, fracture_lens, b0, l0, lens, inlet = load_graph(name)
-apertures, pressure, flow = find_flow(graph, incidence, b0, fracture_lens, lens, inlet, name)
-tracking, c_tracking, path_lens = track(graph, incidence, inlet, flow, fracture_lens, lens, apertures, pressure, G, Da, n_parts, seeds)
-np.savetxt(dirname + network + '_tracking.txt', tracking)
-np.savetxt(dirname + network + '_c_tracking.txt', c_tracking)
-np.savetxt(dirname + network + '_pl_tracking.txt', path_lens)
+def parse_g_da_from_dirname(dirname: str) -> tuple[float, float]:
+    """ Recover (G, Da) from a directory path produced by config.py's
+    `dirname` (which embeds 'G{G}Daeff{Da_eff}'), using the same
+    Da = Da_eff * (1 + G) relation config.py uses to derive Da from Da_eff.
+    """
+    match = re.search(r'G([0-9.]+)Daeff([0-9.]+)', dirname)
+    if match is None:
+        raise ValueError(
+            f"Couldn't find a 'G<G>Daeff<Da_eff>' segment in dirname {dirname!r} "
+            "to infer G/Da - pass TRACK_G/TRACK_DA explicitly instead.")
+    g = float(match.group(1))
+    da_eff = float(match.group(2))
+    return g, da_eff * (1 + g)
+
+
+def process_directory(dirname: str, G: float, Da: float, n_parts: int = 100000,
+        seed: int = 1234, skip_existing: bool = True) -> None:
+    """ Run particle tracking for every network_*.json snapshot in `dirname`.
+
+    All snapshots in a directory come from the same dissolution run, so the
+    graph topology (and the b0 used to normalize apertures) is loaded once
+    from the earliest snapshot and reused - only apertures/pressure/flow are
+    recomputed per snapshot - matching how these were computed in the
+    original notebook-style tracking script this function replaces.
+    """
+    networks = sorted(
+        f[:-len('.json')] for f in os.listdir(dirname)
+        if f.startswith('network_') and f.endswith('.json'))
+    if not networks:
+        print(f'[{dirname}] no network_*.json files found, skipping')
+        return
+
+    np.random.seed(seed)
+    seeds = np.random.randint(0, n_parts, size=n_parts)
+
+    graph, incidence, fracture_lens, b0, l0, lens, inlet = load_graph(
+        dirname + networks[0] + '.json')
+    for network in networks:
+        out_prefix = dirname + network
+        if skip_existing and os.path.exists(out_prefix + '_tracking.txt'):
+            print(f'[{dirname}{network}] SKIPPED (already tracked)')
+            continue
+        name = dirname + network + '.json'
+        apertures, pressure, flow = find_flow(
+            graph, incidence, b0, fracture_lens, lens, inlet, name)
+        tracking, c_tracking, path_lens = track(
+            graph, incidence, inlet, flow, fracture_lens, lens, apertures,
+            pressure, G, Da, n_parts, seeds)
+        np.savetxt(out_prefix + '_tracking.txt', tracking)
+        np.savetxt(out_prefix + '_c_tracking.txt', c_tracking)
+        np.savetxt(out_prefix + '_pl_tracking.txt', path_lens)
+        print(f'[{dirname}{network}] tracked {n_parts} particles')
+
+
+if __name__ == '__main__':
+    dirname = os.environ.get('TRACK_DIRNAME', 'oman_dfn_v3/G5.0000Daeff0.0002/1/')
+    if not dirname.endswith('/'):
+        dirname += '/'
+    n_parts = int(os.environ.get('TRACK_N_PARTS', '100000'))
+
+    if 'TRACK_G' in os.environ and 'TRACK_DA' in os.environ:
+        G = float(os.environ['TRACK_G'])
+        Da = float(os.environ['TRACK_DA'])
+    else:
+        G, Da = parse_g_da_from_dirname(dirname)
+
+    process_directory(dirname, G, Da, n_parts=n_parts)

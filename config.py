@@ -3,9 +3,14 @@
 This module contains all parameters set before the simulation. Class
 SimInputData is used in nearly all functions. Most of the parameters (apart
 from VARIOUS section) are set by the user before starting the simulation.
-Most notable parameters are: iters/tmax - simulation length, Da_eff, G - 
+Most notable parameters are: iters/tmax - simulation length, Da_eff, G -
 dissolution parameters.
+
+load_name, Da_eff and G can be overridden via the SIM_LOAD_NAME, SIM_DA_EFF
+and SIM_G environment variables (used by run_sweep.py to run parameter
+sweeps in separate subprocesses - see its module docstring for why).
 """
+import os
 
 
 class SimInputData:
@@ -20,12 +25,12 @@ class SimInputData:
     "frequency (in iterations) of plotting the results"
     collect_every: int = 10
     "frequency (in iterations) of collecting data"
-    track_every: int = 0.01
+    track_every: int = 0.1
     "frequency (in time) of performing tracking and slice check"
     #load_name: str = 'samples/carbonate_x01'
-    load_name: str = 'oman_dfn_v3'
+    load_name: str = os.environ.get('SIM_LOAD_NAME', 'oman_dfn_v3')
     "name of loaded network"
-    dissolved_v_max = 0.1
+    dissolved_v_max = 1.
     track_list = [1, 2, 5, 10]
     dissolved_v = 0
 
@@ -33,9 +38,9 @@ class SimInputData:
     flow_focusing_profile = True
     aperture_focusing_profile = True
     # DISSOLUTION & PRECIPITATION
-    Da_eff: float = 0.0002
+    Da_eff: float = float(os.environ.get('SIM_DA_EFF', 0.0002))
     "effective Damkohler number"
-    G: float = 5
+    G: float = float(os.environ.get('SIM_G', 5))
     "diffusion to reaction ratio"
     Da: float = Da_eff * (1 + G)
     "Damkohler number"
