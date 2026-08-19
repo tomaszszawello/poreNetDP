@@ -17,21 +17,21 @@ class SimInputData:
     # GENERAL
     n: int = 100
     "network size"
-    iters: int = 100#0000
+    iters: int = 1000000
     "maximum number of iterations"
     tmax: float = 100000.
     "maximum time"
-    dissolved_v_max: float = 10
+    dissolved_v_max: float = 60
     "maximum dissolved pore volume"
     plot_every: int = 1
     "frequency of plotting the results"
-    track_every: int = 1
+    track_every: int = 6
     "frequency of checking channelization"
     track_list = [1, 2, 5, 10]
     "times of checking channelization"
 
     # DISSOLUTION & PRECIPITATION
-    Da_eff: float = 0.04
+    Da_eff: float = 0.2
     "effective Damkohler number"
     G: float = 5.0
     "diffusion to reaction ratio"
@@ -51,6 +51,30 @@ class SimInputData:
     "include precipitation"
     include_merging: bool = False
     "include pore merging"
+
+    # FLOW MODEL
+    include_dw: bool = True
+    ("use the Darcy-Weisbach relation (Churchill friction factor) for the \
+     conductivity of edges instead of Hagen-Poiseuille; makes the pressure \
+     problem nonlinear")
+    Re0: float = 100000.
+    ("Reynolds number of an edge with the characteristic diameter d0 carrying \
+     the characteristic flow q0, Re0 = 4 rho q0 / (pi d0 mu); the Reynolds \
+     number of an edge is Re = Re0 q / d (Re0 = 0 recovers Hagen-Poiseuille)")
+    roughness: float = 0.
+    "wall roughness relative to the characteristic diameter d0"
+    dw_rtol: float = 1e-6
+    "relative tolerance of the nonlinear (Darcy-Weisbach) pressure solve"
+    dw_max_iter: int = 100
+    "maximum number of iterations of the nonlinear pressure solve"
+    dw_relax: float = 1.
+    ("relaxation factor of the conductivity update (applied to its logarithm); \
+     values slightly above 1 (~1.5) speed up the first, cold solve, values \
+     below 1 stabilize it, values above 2 usually diverge")
+    dw_re_iter: int = 50
+    "maximum number of iterations of the per-edge Reynolds number root find"
+    dw_verbose: bool = False
+    "print the convergence of the nonlinear pressure solve"
 
     # INITIAL CONDITIONS
     qin: float = 1.
@@ -73,7 +97,7 @@ class SimInputData:
     noise: str = 'file_lognormal_k'
     ("type of noise in diameters distribution: 'gaussian', 'lognormal', \
     'klognormal', 'file_lognormal_d', 'file_lognormal_k'")
-    noise_filename: str = 'samples/n100l100r1_01.dat'
+    noise_filename: str = 'samples/n100l10r1_01.dat'
     "name of file with initial diameters if noise == file_"
     d0: float = 1.
     "initial dimensionless mean diameter"
@@ -99,12 +123,12 @@ class SimInputData:
     "threshold for drawing of diameters"
 
     # INITIALIZATION
-    load: int = 0
+    load: int = 2
     ("type of loading: 0 - build new network based on config and start new \
      simulation, 1 - load previous network from load_name and continue \
      simulation, 2 - load template network from load_name and start new \
      simulation")
-    load_name: str = 'rect100/G5.00Daeff0.05/0'
+    load_name: str = 'dw/G1.00Daeff0.20/8'
     "name of loaded network"
 
     # GEOMETRY
@@ -120,6 +144,9 @@ class SimInputData:
         / 100 * n
     "custom outlet for 'own' geometry"
 
+    flow_bc: str = "q" # "p"
+    "flow boundary condition: constant total flow rate or constant pressure"
+
     # VARIOUS
     ne: int = 0
     "number of edges (updated later)"
@@ -133,7 +160,7 @@ class SimInputData:
     "total time of simulation"
     Q_in = 1.
     "total inlet flow (updated later)"
-    dirname: str = f'G{G:.2f}Daeff{Da_eff:.2f}'
+    dirname: str = f'dw/G{G:.2f}Daeff{Da_eff:.2f}'
     "directory of simulation"
     initial_merging: int = 5
     "number of initial merging iterations"

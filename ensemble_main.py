@@ -30,7 +30,7 @@ for sample in range(20, 21):
     # initialize simulation data from config
     sid = SimInputData()
     #sid = deepcopy(sid2)
-    sid.noise_filename = f'samples/n100l100r1_{sample:02}.dat'
+    sid.noise_filename = f'samples/n100l10r1_{sample:02}.dat'
     sid.dirname = f'G{sid.G:.5f}Daeff{sid.Da_eff:.5f}/n100l10r1_{sample:02}'
     os.makedirs(f'G{sid.G:.5f}Daeff{sid.Da_eff:.5f}/n100l10r1_{sample:02}')
     sid.old_t = 0

@@ -43,7 +43,7 @@ while t < tmax and i < iters and data.dissolved_v < sid.dissolved_v_max:
     print((f'Iter {i + 1}/{iters} Time {t:.2f}/{tmax:.2f} \
         Dissolved {data.dissolved_v:.2f}/{sid.dissolved_v_max:.2f}'))
     # initialize vectors
-    pressure_b = Pr.create_vector(sid, graph)
+    pressure_b = Pr.create_vector(graph)
     cb_b = Di.create_vector(sid, graph)
     # find pressure and update flow in edges
     print ('Solving pressure')
@@ -59,6 +59,7 @@ while t < tmax and i < iters and data.dissolved_v < sid.dissolved_v_max:
         data.check_data(edges)
         data.check_init_slice_channelization(graph, inc, edges)
         data.check_slice_channelization(graph, inc, edges, t)
+        data.collect_re_pdf(edges, t)
         Dr.draw_flow(sid, graph, edges, f'q_{data.dissolved_v:.2f}.jpg', 'q')
         Dr.draw_flow(sid, graph, edges, f'd_{data.dissolved_v:.2f}.jpg', 'd')
         save_VTK(sid, graph, edges, pressure, cb, \
@@ -70,11 +71,14 @@ while t < tmax and i < iters and data.dissolved_v < sid.dissolved_v_max:
             if iterator_dissolved in sid.track_list:
                 Dr.draw_flow(sid, graph, edges, \
                     f'q_{data.dissolved_v:.2f}.jpg', 'q')
+                Dr.draw_flow(sid, graph, edges, \
+                    f'd_{data.dissolved_v:.2f}.jpg', 'd')
                 save_VTK(sid, graph, edges, pressure, cb, \
                     f'network_{data.dissolved_v:.2f}.vtk')
                 data.check_data(edges)
                 data.check_slice_channelization(graph, inc, edges, \
                     data.dissolved_v)
+                data.collect_re_pdf(edges, data.dissolved_v)
     # grow/shrink diameters and update them in edges, update volumes with
     # dissolved/precipitated values, check if network dissolved, find new
     # timestep
@@ -93,11 +97,17 @@ while t < tmax and i < iters and data.dissolved_v < sid.dissolved_v_max:
 if i != 1 and sid.load != 1:
     data.check_data(edges)
     data.check_slice_channelization(graph, inc, edges, data.dissolved_v)
+    data.collect_re_pdf(edges, data.dissolved_v)
+    data.plot_re_pdf()
     #data.plot_slice_channelization_v2(sid, graph)
-    Dr.draw_flow_profile(sid, graph, edges, data, \
-        f'focusing_q_{data.dissolved_v:.2f}.jpg', 'q')
-    Dr.draw_diams_profile(sid, graph, edges, data, \
-        f'focusing_d_{data.dissolved_v:.2f}.jpg', 'd')
+    # Dr.draw_flow_profile(sid, graph, edges, data, \
+    #     f'focusing_q_{data.dissolved_v:.2f}.jpg', 'q')
+    Dr.draw_flow(sid, graph, edges, \
+                    f'd_{data.dissolved_v:.2f}.jpg', 'd')
+    Dr.draw_flow(sid, graph, edges, \
+        f'q_{data.dissolved_v:.2f}.jpg', 'q')
+    # Dr.draw_diams_profile(sid, graph, edges, data, \
+    #     f'focusing_d_{data.dissolved_v:.2f}.jpg', 'd')
     save_VTK(sid, graph, edges, pressure, cb, \
         f'network_{data.dissolved_v:.2f}.vtk')
     Sv.save('/save.dill', sid, graph, inc, edges)

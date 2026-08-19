@@ -109,8 +109,8 @@ def draw_flow(sid: SimInputData, graph: Graph, edges: Edges, \
     nx.draw_networkx_edges(graph, pos, edges.edge_list, edge_color = 'k', \
         width = draw_const * np.array(qs), hide_ticks = False)
     plt.subplots_adjust(wspace=0, hspace=0)
-    plt.savefig(sid.dirname + "/" + name, bbox_inches="tight", dpi = 600)
-    plt.savefig(sid.dirname + "/2" + name, bbox_inches="tight", dpi = 300)
+    plt.savefig(sid.dirname + "/" + name, bbox_inches="tight", dpi = 300)
+    #plt.savefig(sid.dirname + "/2" + name, bbox_inches="tight", dpi = 300)
     plt.close()
 
 def draw_flow_profile(sid: SimInputData, graph: Graph, edges: Edges, \

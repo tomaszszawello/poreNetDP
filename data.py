@@ -67,6 +67,11 @@ class Data():
     "channelization for slices through the whole system in a given time"
     slice_times: list = []
     "list of times of checking slice channelization"
+    re_pdfs: list = []
+    re_pdf_bins: list = []
+    "PDFs of edge Reynolds numbers, collected together with slice channelization"
+    re_pdf_labels: list = []
+    "labels (times) corresponding to the collected Reynolds number PDFs"
 
     def __init__(self, sid: SimInputData, edges: Edges):
         self.dirname = sid.dirname
@@ -343,6 +348,58 @@ class Data():
         self.slices_s.append(surface_tab)
         self.slices_angle.append(channels_angle_tab)
         self.slice_times.append("{0}".format(str(round(time, 1) if time % 1 else int(time))))
+
+    def collect_re_pdf(self, edges: Edges, time: float, n_bins: int = 50) -> None:
+        """ Collect the probability density function of edge Reynolds numbers.
+
+        This function bins the Reynolds numbers of all active (non-zero flow)
+        edges into a log-spaced histogram, normalized to a PDF (integral 1),
+        and stores it together with a label for the current time, so that all
+        collected PDFs can later be plotted together with plot_re_pdf.
+
+        Parameters
+        -------
+        edges : Edges class object
+            all edges in network and their parameters
+            re - Reynolds number of edges
+
+        time : float
+            current time/dissolved volume, used as a label for the PDF
+        """
+        re = np.abs(edges.re[edges.re != 0])
+        if re.size == 0:
+            print('Warning: no edges with non-zero Reynolds number, ' \
+                'skipping Reynolds number PDF collection.')
+            return
+        bins = np.logspace(np.log10(np.min(re)), np.log10(np.max(re)), \
+            n_bins + 1)
+        pdf, bin_edges = np.histogram(re, bins = bins, density = True)
+        bin_centers = bin_edges[:-1] + 0.5 * np.diff(bin_edges)
+        self.re_pdfs.append(pdf)
+        self.re_pdf_bins.append(bin_centers)
+        self.re_pdf_labels.append("{0}".format(str(round(time, 1) \
+            if time % 1 else int(time))))
+
+    def plot_re_pdf(self) -> None:
+        """ Plot all collected edge Reynolds number PDFs together.
+
+        This function plots, on a single log-log figure, all Reynolds number
+        PDFs collected so far via collect_re_pdf, each labeled with the time
+        at which it was collected.
+        """
+        if not self.re_pdfs:
+            return
+        plt.figure(figsize = (10, 10))
+        for bin_centers, pdf, label in \
+            zip(self.re_pdf_bins, self.re_pdfs, self.re_pdf_labels):
+            plt.plot(bin_centers, pdf, 'o', label = label)
+        plt.xscale('log')
+        plt.yscale('log')
+        plt.xlabel('Re')
+        plt.ylabel('PDF')
+        plt.legend(loc='center left', bbox_to_anchor=(1, 0.5))
+        plt.savefig(self.dirname + '/re_pdf.png', bbox_inches="tight")
+        plt.close()
 
     def plot_slice_channelization(self, graph: Graph) -> None:
         """ Plots slice data from text file.
